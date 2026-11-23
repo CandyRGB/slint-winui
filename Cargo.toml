@@ -3,6 +3,7 @@ name = "slint-winui"
 version = "0.1.0"
 edition = "2024"
 description = "Reusable WinUI-inspired components for Slint"
+license = "MIT"
 publish = false
 
 [features]
