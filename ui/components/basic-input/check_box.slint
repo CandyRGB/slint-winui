@@ -1,0 +1,146 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual, ButtonInput } from "button_input.slint";
+import { CheckStateBehavior, ToggleButtonState } from "check_state.slint";
+
+export { ToggleButtonState }
+
+export component CheckBox inherits Rectangle {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <bool> enabled: true;
+    in property <bool> is-three-state;
+    in property <bool> rtl;
+    in property <bool> animations-enabled: true;
+    in property <color> accent: Palette.accent-background;
+    in-out property <ToggleButtonState> check-state <=> state-behavior.state;
+    out property <bool> has-focus: input.has-focus;
+    out property <color> foreground: root.enabled ? (root.dark ? white : #000000e4)
+        : (root.dark ? #ffffff5e : #0000005c);
+
+    callback checked();
+    callback unchecked();
+    callback indeterminate();
+    callback clicked();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> marked: root.check-state != ToggleButtonState.unchecked;
+    private property <bool> mixed: root.check-state == ToggleButtonState.indeterminate;
+    private property <float> check-reveal: root.check-state == ToggleButtonState.checked ? 1 : 0;
+    private property <color> accent-fill: root.accent.with-alpha(input.pressed ? 0.8 : input.has-hover ? 0.9 : 1);
+    private property <color> disabled-stroke: root.dark ? #ffffff29 : #00000037;
+    private property <color> mark-color: root.dark ? (input.pressed || !root.enabled ? #00000080 : black)
+        : (input.pressed && root.enabled ? #ffffffb3 : white);
+
+    border-radius: 4px;
+    min-width: max(120px, 28px + label.min-width);
+    min-height: max(32px, 6px + label.min-height);
+    preferred-width: round(max(120px, 28px + label.preferred-width) / 2px) * 2px;
+    preferred-height: round(max(32px, 6px + label.preferred-height) / 2px) * 2px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: input;
+
+    accessible-role: checkbox;
+    accessible-checkable: true;
+    accessible-checked: root.check-state == ToggleButtonState.checked;
+    accessible-enabled: root.enabled;
+    accessible-label: root.accessible-name;
+    accessible-description: root.mixed ? @tr("Indeterminate") : "";
+    accessible-action-default => { root.activate(); }
+
+    animate check-reveal {
+        duration: !root.animations-enabled || root.mixed ? 0ms : root.marked ? 316ms : 66ms;
+        easing: ease-in-out;
+    }
+
+    function activate() {
+        if root.enabled && root.visible {
+            state-behavior.advance();
+            root.clicked();
+        }
+    }
+
+    state-behavior := CheckStateBehavior {
+        is-three-state: root.is-three-state;
+        checked => { root.checked(); }
+        unchecked => { root.unchecked(); }
+        indeterminate => { root.indeterminate(); }
+    }
+
+    indicator := Rectangle {
+        width: 20px;
+        height: 20px;
+        x: root.rtl ? root.width - self.width : 0px;
+        y: round((root.height - self.height) / 4px) * 2px;
+        border-width: 1px;
+        border-radius: root.border-radius;
+        border-color: !root.enabled || (!root.marked && input.pressed) ? root.disabled-stroke
+            : root.marked ? root.accent-fill : root.dark ? #ffffff99 : #00000072;
+        background: root.marked ? (root.enabled ? root.accent-fill : root.disabled-stroke)
+            : !root.enabled ? transparent : input.pressed ? (root.dark ? #ffffff12 : #00000018)
+            : input.has-hover ? (root.dark ? #ffffff0a : #0000000f) : (root.dark ? #0000001a : #00000006);
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * root.check-reveal;
+            height: parent.height;
+            clip: true;
+            visible: !root.mixed && root.check-reveal > 0;
+
+            Image {
+                x: 0px;
+                y: 0px;
+                width: indicator.width;
+                height: indicator.height;
+                source: @image-url("../../icons/checkbox_checkmark.svg");
+                colorize: root.mark-color;
+                accessible-role: none;
+            }
+        }
+        if root.mixed: Image {
+            source: @image-url("../../icons/checkbox_indeterminate.svg");
+            colorize: root.mark-color;
+            accessible-role: none;
+        }
+    }
+
+    label := VerticalLayout {
+        x: root.rtl ? 0px : 28px;
+        y: 6px;
+        width: max(0px, root.width - 28px);
+        height: max(0px, root.height - 6px);
+        alignment: start;
+
+        if root.text != "": Text {
+            text: root.text;
+            font-family: "Segoe UI Variable Text";
+            font-size: 14px;
+            color: root.foreground;
+            wrap: word-wrap;
+            horizontal-alignment: root.rtl ? right : left;
+            accessible-role: none;
+        }
+        @children
+    }
+
+    input := ButtonInput {
+        enabled: root.enabled && root.visible;
+        accepts-return: false;
+        clicked => { root.activate(); }
+        unhandled-key-pressed(event) => {
+            if !root.is-three-state && (event.text == "+" || event.text == "-") {
+                state-behavior.set-state(event.text == "+" ? ToggleButtonState.checked : ToggleButtonState.unchecked);
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if root.enabled && input.keyboard-focused: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+        control-radius: root.border-radius;
+        horizontal-margin: 8px;
+    }
+}

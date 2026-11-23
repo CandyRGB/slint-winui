@@ -1,0 +1,167 @@
+export struct BorderInsets { left: length, top: length, right: length, bottom: length }
+export struct BorderRadii { top-left: length, top-right: length, bottom-right: length, bottom-left: length }
+export enum BorderBackgroundSizing { inner-border-edge, outer-border-edge }
+
+global BorderGeometry {
+    pure function radius(radius: length, thickness: length, outer: bool) -> float {
+        return radius <= 0px ? 0 : max(0px, radius + (outer ? thickness : -thickness) / 2) / 1px;
+    }
+
+    pure function edge-scale(first: float, last: float, extent: float) -> float {
+        return first + last > extent ? extent / (first + last) : 1;
+    }
+
+    public pure function contour(
+        x: length, y: length, width: length, height: length,
+        radii: BorderRadii, thickness: BorderInsets, outer: bool,
+    ) -> string {
+        if (width <= 0px || height <= 0px) {
+            return "";
+        }
+        let w = width / 1px;
+        let h = height / 1px;
+        let left = x / 1px;
+        let top = y / 1px;
+        let right = left + w;
+        let bottom = top + h;
+        let tl-x = self.radius(radii.top-left, thickness.left, outer);
+        let tl-y = self.radius(radii.top-left, thickness.top, outer);
+        let tr-x = self.radius(radii.top-right, thickness.right, outer);
+        let tr-y = self.radius(radii.top-right, thickness.top, outer);
+        let br-x = self.radius(radii.bottom-right, thickness.right, outer);
+        let br-y = self.radius(radii.bottom-right, thickness.bottom, outer);
+        let bl-x = self.radius(radii.bottom-left, thickness.left, outer);
+        let bl-y = self.radius(radii.bottom-left, thickness.bottom, outer);
+        let top-scale = self.edge-scale(tl-x, tr-x, w);
+        let right-scale = self.edge-scale(tr-y, br-y, h);
+        let bottom-scale = self.edge-scale(bl-x, br-x, w);
+        let left-scale = self.edge-scale(tl-y, bl-y, h);
+        if (!outer) {
+            // Reverse the inner contour so the stroke is hollow under nonzero winding.
+            return "M " + (left + tl-x * top-scale) + " " + top
+                + self.arc(tl-x * top-scale, tl-y * left-scale, left, top + tl-y * left-scale, 0)
+                + " V " + (bottom - bl-y * left-scale)
+                + self.arc(bl-x * bottom-scale, bl-y * left-scale, left + bl-x * bottom-scale, bottom, 0)
+                + " H " + (right - br-x * bottom-scale)
+                + self.arc(br-x * bottom-scale, br-y * right-scale, right, bottom - br-y * right-scale, 0)
+                + " V " + (top + tr-y * right-scale)
+                + self.arc(tr-x * top-scale, tr-y * right-scale, right - tr-x * top-scale, top, 0)
+                + " Z";
+        }
+        return "M " + (left + tl-x * top-scale) + " " + top
+            + " H " + (right - tr-x * top-scale)
+            + self.arc(tr-x * top-scale, tr-y * right-scale, right, top + tr-y * right-scale, 1)
+            + " V " + (bottom - br-y * right-scale)
+            + self.arc(br-x * bottom-scale, br-y * right-scale, right - br-x * bottom-scale, bottom, 1)
+            + " H " + (left + bl-x * bottom-scale)
+            + self.arc(bl-x * bottom-scale, bl-y * left-scale, left, bottom - bl-y * left-scale, 1)
+            + " V " + (top + tl-y * left-scale)
+            + self.arc(tl-x * top-scale, tl-y * left-scale, left + tl-x * top-scale, top, 1)
+            + " Z";
+    }
+
+    pure function arc(rx: float, ry: float, x: float, y: float, sweep: int) -> string {
+        return rx <= 0 || ry <= 0 ? " L " + x + " " + y : " A " + rx + " " + ry + " 0 0 " + sweep + " " + x + " " + y;
+    }
+}
+
+export component Border inherits Rectangle {
+    in property <brush> background-brush;
+    in property <brush> border-brush;
+    in property <BorderInsets> thickness;
+    in property <BorderInsets> content-padding;
+    in property <BorderRadii> corner-radii;
+    in property <BorderBackgroundSizing> background-sizing: BorderBackgroundSizing.inner-border-edge;
+    in property <bool> rtl;
+
+    private property <BorderInsets> edges: {
+        left: max(0px, root.rtl ? root.thickness.right : root.thickness.left),
+        right: max(0px, root.rtl ? root.thickness.left : root.thickness.right),
+        top: max(0px, root.thickness.top),
+        bottom: max(0px, root.thickness.bottom),
+    };
+    private property <BorderRadii> corners: root.rtl ? {
+        top-left: root.corner-radii.top-right,
+        top-right: root.corner-radii.top-left,
+        bottom-left: root.corner-radii.bottom-right,
+        bottom-right: root.corner-radii.bottom-left,
+    } : root.corner-radii;
+    private property <bool> rounded: max(max(root.corners.top-left, root.corners.top-right),
+        max(root.corners.bottom-left, root.corners.bottom-right)) > 0px;
+    private property <bool> outer-background: root.background-sizing == BorderBackgroundSizing.outer-border-edge;
+    out property <length> content-x: root.edges.left + (root.rtl ? root.content-padding.right : root.content-padding.left);
+    out property <length> content-y: root.edges.top + root.content-padding.top;
+    private property <length> horizontal-insets: root.edges.left + root.edges.right + root.content-padding.left + root.content-padding.right;
+    private property <length> vertical-insets: root.edges.top + root.edges.bottom + root.content-padding.top + root.content-padding.bottom;
+    out property <length> content-width: max(0px, root.width - root.horizontal-insets);
+    out property <length> content-height: max(0px, root.height - root.vertical-insets);
+    private property <string> outer-path: BorderGeometry.contour(
+        0px, 0px, root.width, root.height, root.corners, root.edges, true);
+    private property <string> inner-path: BorderGeometry.contour(
+        root.edges.left, root.edges.top, root.width - root.edges.left - root.edges.right,
+        root.height - root.edges.top - root.edges.bottom, root.corners, root.edges, false);
+
+    preferred-width: round(max(0px, content.preferred-width + root.horizontal-insets) / 2px) * 2px;
+    preferred-height: round(max(0px, content.preferred-height + root.vertical-insets) / 2px) * 2px;
+    accessible-role: none;
+
+    if root.rounded: Rectangle {
+        x: 0px; y: 0px;
+        width: root.width; height: root.height;
+        clip: true;
+        Path {
+            x: 0px; y: 0px;
+            width: root.width; height: root.height;
+            viewbox-width: root.width / 1px; viewbox-height: root.height / 1px;
+            commands: root.outer-background ? root.outer-path : root.inner-path;
+            fill: root.background-brush;
+        }
+        if root.edges.left + root.edges.right + root.edges.top + root.edges.bottom > 0px: Path {
+            x: 0px; y: 0px;
+            width: root.width; height: root.height;
+            viewbox-width: root.width / 1px; viewbox-height: root.height / 1px;
+            commands: root.outer-path + " " + root.inner-path;
+            fill: root.border-brush;
+        }
+    }
+    if !root.rounded: Rectangle {
+        property <length> left-end: min(root.width, root.edges.left);
+        property <length> top-end: min(root.height, root.edges.top);
+        property <length> right-start: max(left-end, root.width - root.edges.right);
+        property <length> bottom-start: max(top-end, root.height - root.edges.bottom);
+
+        x: 0px; y: 0px;
+        width: root.width; height: root.height;
+        background: root.outer-background ? root.background-brush : transparent;
+        Rectangle {
+            x: 0px; y: 0px;
+            width: parent.width; height: parent.top-end;
+            background: root.border-brush;
+        }
+        Rectangle {
+            x: 0px; y: parent.bottom-start;
+            width: parent.width; height: parent.height - self.y;
+            background: root.border-brush;
+        }
+        Rectangle {
+            x: 0px; y: parent.top-end;
+            width: parent.left-end; height: parent.bottom-start - self.y;
+            background: root.border-brush;
+        }
+        Rectangle {
+            x: parent.right-start; y: parent.top-end;
+            width: parent.width - self.x; height: parent.bottom-start - self.y;
+            background: root.border-brush;
+        }
+        if !root.outer-background: Rectangle {
+            x: parent.left-end; y: parent.top-end;
+            width: parent.right-start - self.x; height: parent.bottom-start - self.y;
+            background: root.background-brush;
+        }
+    }
+    content := VerticalLayout {
+        x: root.content-x; y: root.content-y;
+        width: root.content-width; height: root.content-height;
+        @children
+    }
+}

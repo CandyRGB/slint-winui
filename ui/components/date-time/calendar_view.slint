@@ -1,0 +1,444 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "../basic-input/button_input.slint";
+
+export enum CalendarViewDisplayMode { month, year, decade }
+export enum CalendarViewSelectionMode { none, single, multiple }
+
+export struct CalendarViewDayName { text: string, name: string }
+export struct CalendarViewCell {
+    date: int,
+    text: string,
+    name: string,
+    group: string,
+    in-scope: bool,
+    available: bool,
+    today: bool,
+}
+
+export struct CalendarViewOptions {
+    date: int,
+    today: int,
+    min-date: int,
+    max-date: int,
+    language: string,
+    calendar-identifier: string,
+    mode: CalendarViewDisplayMode,
+    first-day-of-week: int,
+    columns: int,
+    rows: int,
+}
+
+export struct CalendarViewPage {
+    title: string,
+    date: int,
+    first: int,
+    last: int,
+    minimum: int,
+    maximum: int,
+    focused: int,
+    previous: bool,
+    next: bool,
+    weekdays: [CalendarViewDayName],
+    cells: [CalendarViewCell],
+}
+
+export struct CalendarViewSelectionChange { added: [int], removed: [int] }
+export struct CalendarDateText { date: int, text: string }
+
+export global CalendarViewBehavior {
+    in property <bool> ready;
+    pure callback page(CalendarViewOptions) -> CalendarViewPage;
+    pure callback date-step(CalendarViewOptions, int, bool) -> int;
+    pure callback date-text(CalendarViewOptions, string) -> CalendarDateText;
+    pure callback selection([int], [int], CalendarViewSelectionMode, int, int, int) -> [int];
+    pure callback selection-change([int], [int]) -> CalendarViewSelectionChange;
+}
+
+component CalendarHeaderButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> enabled;
+    in property <bool> rtl;
+    callback clicked();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> ink: !root.enabled ? (root.dark ? #ffffff5d : #0000005d)
+        : input.pressed ? (root.dark ? #ffffffc5 : #0000009e) : (root.dark ? white : #1a1a1a);
+
+    border-radius: 4px;
+    background: !root.enabled ? transparent : input.pressed ? (root.dark ? #ffffff0a : #00000006)
+        : input.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    forward-focus: input;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+
+    if root.icon.width == 0: Text {
+        x: 8px;
+        width: parent.width - 16px;
+        font-family: "Segoe UI";
+        font-size: 14px;
+        font-weight: 600;
+        color: root.ink;
+        horizontal-alignment: root.rtl ? right : left;
+        vertical-alignment: center;
+        overflow: elide;
+        text: root.label;
+        accessible-role: none;
+    }
+    if root.icon.width > 0: Image {
+        width: 8px;
+        height: 8px;
+        source: root.icon;
+        colorize: root.ink;
+        accessible-role: none;
+    }
+    input := ButtonInput {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+    if input.keyboard-focused: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+    }
+}
+
+component CalendarCellSurface inherits Rectangle {
+    in property <CalendarViewCell> cell;
+    in property <bool> enabled;
+    in property <bool> month;
+    in property <bool> selectable;
+    in property <bool> selected;
+    in property <bool> blackout;
+    in property <bool> today;
+    in property <bool> otherwise-scope;
+    in property <bool> group-label-visible;
+    in property <bool> focused;
+    in property <color> accent;
+    in property <color> selection-ink;
+    in property <int> index;
+    in property <int> count;
+    callback activated();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> accent-text: root.dark ? black : white;
+    private property <color> ink: !root.enabled ? (root.dark ? #ffffff5d : #0000005d)
+        : root.today ? root.accent-text
+        : root.selected ? root.selection-ink
+        : hit.pressed || (root.otherwise-scope && !hit.has-hover) ? (root.dark ? #ffffffc5 : #0000009e)
+        : (root.dark ? white : #1a1a1a);
+
+    border-radius: max(self.width, self.height) / 2;
+    border-width: root.selected || root.focused ? 2px : 0px;
+    border-color: root.selected && !root.enabled ? (root.dark ? #ffffff28 : #00000037)
+        : root.today && root.focused ? (root.dark ? white : #1a1a1a)
+        : root.selected && hit.pressed ? (root.dark ? #ffffff15 : #00000015)
+        : hit.has-hover || root.focused ? root.accent.with-alpha(0.9) : root.accent;
+    background: root.today ? (!root.enabled ? (root.dark ? #ffffff28 : #00000037)
+            : hit.pressed || root.blackout ? root.accent.with-alpha(0.8)
+            : hit.has-hover ? root.accent.with-alpha(0.9) : root.accent)
+        : !root.enabled ? transparent : hit.pressed ? (root.dark ? #ffffff0a : #00000006)
+        : hit.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+
+    accessible-role: list-item;
+    accessible-label: root.cell.name;
+    accessible-description: root.blackout ? @tr("Unavailable") : root.today ? @tr("Today") : "";
+    accessible-enabled: root.enabled;
+    accessible-item-index: root.index;
+    accessible-item-count: root.count;
+    accessible-item-selectable: root.selectable;
+    accessible-item-selected: root.selected;
+    accessible-action-default => { if root.enabled { root.activated(); } }
+
+    if root.today && root.selected: Rectangle {
+        x: 2px; y: 2px;
+        width: max(0px, parent.width - 4px);
+        height: max(0px, parent.height - 4px);
+        border-radius: max(self.width, self.height) / 2;
+        border-width: 2px;
+        border-color: root.accent-text;
+    }
+    Text {
+        width: parent.width;
+        height: parent.height;
+        font-family: "Segoe UI";
+        font-size: 14px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        color: root.ink;
+        text: root.cell.text;
+        accessible-role: none;
+    }
+    if root.group-label-visible && root.cell.group != "": Text {
+        y: root.month ? 2px : 6px;
+        width: parent.width;
+        height: 12px;
+        font-family: "Segoe UI";
+        font-size: 8px;
+        horizontal-alignment: center;
+        color: root.ink;
+        text: root.cell.group;
+        accessible-role: none;
+    }
+    if root.blackout: Rectangle {
+        width: 20px;
+        height: 1px;
+        background: root.ink;
+    }
+    hit := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.activated(); }
+    }
+}
+
+export component CalendarView inherits Rectangle {
+    in-out property <CalendarViewDisplayMode> display-mode: CalendarViewDisplayMode.month;
+    // Dates are civil day numbers where 0001-01-01 is 1. Zero requests a default.
+    in-out property <int> display-date;
+    in-out property <[int]> selected-dates;
+    in property <[int]> blackout-dates;
+    in property <int> today;
+    in property <int> min-date;
+    in property <int> max-date;
+    in property <string> language;
+    in property <string> calendar-identifier: "GregorianCalendar";
+    in property <int> first-day-of-week: -1;
+    in property <int> number-of-weeks-in-view: 6;
+    in property <int> year-decade-columns: 4;
+    in property <int> year-decade-rows: 4;
+    in property <CalendarViewSelectionMode> selection-mode: CalendarViewSelectionMode.single;
+    in property <bool> group-label-visible;
+    in property <bool> out-of-scope-enabled: true;
+    in property <bool> today-highlighted: true;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <color> accent: Palette.accent-background;
+    in property <color> selection-ink: Palette.accent-background;
+    in property <string> accessible-name: @tr("Calendar");
+
+    out property <int> focused-date: keyboard.has-focus ? root.active-date : 0;
+    callback selected-dates-changed([int], [int]);
+    callback date-invoked(int);
+
+    private property <bool> month: root.display-mode == CalendarViewDisplayMode.month;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <int> columns: root.month ? 7 : clamp(root.year-decade-columns, 2, 8);
+    private property <int> rows: root.month ? clamp(root.number-of-weeks-in-view, 2, 8) : clamp(root.year-decade-rows, 2, 8);
+    private property <CalendarViewOptions> options: {
+        date: root.display-date,
+        today: root.today,
+        min-date: root.min-date,
+        max-date: root.max-date,
+        language: root.language,
+        calendar-identifier: root.calendar-identifier,
+        mode: root.display-mode,
+        first-day-of-week: root.first-day-of-week,
+        columns: root.columns,
+        rows: root.rows,
+    };
+    private property <CalendarViewPage> page: CalendarViewBehavior.ready ? CalendarViewBehavior.page(root.options) : {
+        title: "", date: 0, first: 0, last: 0, minimum: 0, maximum: 0, focused: -1,
+        previous: false, next: false, weekdays: [], cells: [],
+    };
+    private property <int> active-date: root.page.focused >= 0 ? root.page.cells[root.page.focused].date : 0;
+    private property <int> effective-minimum: root.page.minimum;
+    private property <int> effective-maximum: root.page.maximum;
+    private property <bool> focus-visible;
+    private property <[int]> old-selection;
+    private property <length> pitch-x: body.width / root.columns;
+    private property <length> pitch-y: root.month ? body.height / root.rows : max(body.width / root.columns, body.height / root.rows);
+    private property <length> cell-diameter: max(2px, root.month
+        ? round((min(root.pitch-x, root.pitch-y) - 2px) / 2px) * 2px
+        : round(min(root.pitch-x, root.pitch-y) * 0.76 / 2px) * 2px);
+
+    min-width: 260px;
+    min-height: 232px;
+    preferred-width: 302px;
+    preferred-height: 98px + 42px * clamp(root.number-of-weeks-in-view, 2, 8);
+    border-width: 1px;
+    border-radius: 4px;
+    border-color: root.dark ? #ffffff18 : #0000001a;
+    background: root.dark ? #1e1e1e : #fdfdfd;
+    accessible-role: list;
+    accessible-label: root.accessible-name;
+    accessible-description: root.page.title;
+    accessible-enabled: root.enabled;
+    accessible-item-count: root.page.cells.length;
+    accessible-delegate-focus: keyboard.has-focus ? root.page.focused : -1;
+
+    function change-selection(date: int) {
+        if CalendarViewBehavior.ready {
+            root.selected-dates = CalendarViewBehavior.selection(root.selected-dates, root.blackout-dates,
+                root.selection-mode, date, root.effective-minimum, root.effective-maximum);
+        }
+    }
+    init => { root.change-selection(0); }
+    changed selection-mode => { root.change-selection(0); }
+    changed blackout-dates => { root.change-selection(0); }
+    changed effective-minimum => { root.change-selection(0); }
+    changed effective-maximum => { root.change-selection(0); }
+    changed selected-dates => {
+        root.change-selection(0);
+        let change = CalendarViewBehavior.selection-change(root.old-selection, root.selected-dates);
+        root.old-selection = root.selected-dates;
+        if change.added.length != 0 || change.removed.length != 0 {
+            root.selected-dates-changed(change.added, change.removed);
+        }
+    }
+
+    public function set-display-date(date: int) { root.display-date = date; }
+    public function focus-calendar() { keyboard.focus(); }
+    public function focus-header() {
+        if root.display-mode == CalendarViewDisplayMode.decade { keyboard.focus(); }
+        else { header.focus(); }
+    }
+
+    function switch-mode(up: bool) {
+        if root.display-mode == CalendarViewDisplayMode.year {
+            root.display-mode = up ? CalendarViewDisplayMode.decade : CalendarViewDisplayMode.month;
+        } else if root.month == up {
+            root.display-mode = CalendarViewDisplayMode.year;
+        }
+    }
+
+    function step(direction: int, across-scopes: bool) {
+        root.display-date = CalendarViewBehavior.date-step(root.options, direction, across-scopes);
+    }
+
+    function invoke(cell: CalendarViewCell, keyboard-action: bool) {
+        if !root.enabled || !cell.available { return; }
+        root.focus-visible = keyboard-action;
+        root.display-date = cell.date;
+        if root.month {
+            if root.blackout-dates.index-of(cell.date) < 0 {
+                root.change-selection(cell.date);
+                root.date-invoked(cell.date);
+            }
+        } else { root.switch-mode(false); }
+        keyboard.focus();
+    }
+
+    header := CalendarHeaderButton {
+        x: root.rtl ? 84px : 8px;
+        y: 8px;
+        width: root.width - 96px;
+        height: 36px;
+        label: root.page.title;
+        rtl: root.rtl;
+        enabled: root.enabled && root.display-mode != CalendarViewDisplayMode.decade;
+        clicked => { root.switch-mode(true); }
+    }
+    CalendarHeaderButton {
+        x: root.rtl ? 48px : root.width - 82px;
+        y: 8px;
+        width: 34px;
+        height: 36px;
+        label: @tr("Previous");
+        icon: @image-url("../../icons/flip_view_arrow_up.svg");
+        enabled: root.enabled && root.page.previous;
+        clicked => { root.step(-1, true); }
+    }
+    CalendarHeaderButton {
+        x: root.rtl ? 8px : root.width - 42px;
+        y: 8px;
+        width: 34px;
+        height: 36px;
+        label: @tr("Next");
+        icon: @image-url("../../icons/flip_view_arrow_down.svg");
+        enabled: root.enabled && root.page.next;
+        clicked => { root.step(1, true); }
+    }
+    Rectangle {
+        x: 1px;
+        y: 50px;
+        width: root.width - 2px;
+        height: 1px;
+        background: root.dark ? #ffffff18 : #0000000f;
+    }
+
+    for day[i] in root.page.weekdays: Text {
+        x: body.x + (root.rtl ? 6 - i : i) * root.pitch-x;
+        y: 54px;
+        width: root.pitch-x;
+        height: 40px;
+        text: day.text;
+        font-family: "Segoe UI";
+        font-weight: 600;
+        font-size: 12px;
+        color: !root.enabled ? (root.dark ? #ffffff5d : #0000005d) : (root.dark ? white : #1a1a1a);
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-label: day.name;
+    }
+
+    body := Rectangle {
+        x: root.month ? 2px : 0px;
+        y: root.month ? 98px : 50px;
+        width: root.width - 2 * self.x;
+        height: max(0px, root.height - self.y - 1px);
+        clip: true;
+
+        TouchArea {
+            enabled: root.enabled;
+            scroll-event(event) => {
+                if event.delta-y == 0px { return reject; }
+                root.step(event.delta-y > 0px ? -1 : 1, true);
+                return accept;
+            }
+        }
+        for entry[i] in root.page.cells: CalendarCellSurface {
+            private property <int> column: Math.mod(i, root.columns);
+            x: round(((root.rtl ? root.columns - 1 - self.column : self.column) * root.pitch-x
+                + (root.pitch-x - root.cell-diameter) / 2) / 2px) * 2px;
+            y: round((floor(i / root.columns) * root.pitch-y + (root.pitch-y - root.cell-diameter) / 2) / 2px) * 2px;
+            width: root.cell-diameter;
+            height: root.cell-diameter;
+            cell: entry;
+            enabled: root.enabled && entry.available;
+            month: root.month;
+            index: i;
+            count: root.page.cells.length;
+            selectable: root.month && !self.blackout && root.selection-mode != CalendarViewSelectionMode.none;
+            selected: self.selectable && root.selected-dates.index-of(entry.date) >= 0;
+            blackout: root.month && root.blackout-dates.index-of(entry.date) >= 0;
+            today: entry.today && root.today-highlighted;
+            otherwise-scope: root.out-of-scope-enabled && !entry.in-scope;
+            group-label-visible: root.group-label-visible;
+            focused: keyboard.has-focus && root.focus-visible && i == root.page.focused;
+            accent: root.accent;
+            selection-ink: root.selection-ink;
+            activated => { root.invoke(entry, false); }
+        }
+    }
+
+    keyboard := FocusScope {
+        x: 0px; y: body.y;
+        width: 0px;
+        enabled: root.enabled;
+        focus-gained(reason) => {
+            if reason == FocusReason.tab-navigation { root.focus-visible = true; }
+        }
+        key-pressed(event) => {
+            let pressed = event.text;
+            let up = pressed == Key.UpArrow;
+            if event.modifiers.control && (up || pressed == Key.DownArrow) {
+                root.focus-visible = true;
+                root.switch-mode(up);
+                return accept;
+            }
+            if pressed == Key.Space || pressed == Key.Return {
+                if !event.repeat && root.page.focused >= 0 { root.invoke(root.page.cells[root.page.focused], true); }
+                return accept;
+            }
+            let delta = up ? -root.columns : pressed == Key.DownArrow ? root.columns
+                : pressed == Key.LeftArrow ? (root.rtl ? 1 : -1) : pressed == Key.RightArrow ? (root.rtl ? -1 : 1) : 0;
+            root.focus-visible = true;
+            if delta != 0 { root.step(delta, false); }
+            else if pressed == Key.PageUp || pressed == Key.PageDown { root.step(pressed == Key.PageUp ? -1 : 1, true); }
+            else if pressed == Key.Home || pressed == Key.End { root.display-date = pressed == Key.Home ? root.page.first : root.page.last; }
+            else { return reject; }
+            return accept;
+        }
+    }
+}

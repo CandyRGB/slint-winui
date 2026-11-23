@@ -1,0 +1,310 @@
+import { Palette } from "std-widgets.slint";
+import { FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+
+export { FlyoutRect }
+
+component FlyoutButtonBase inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> enabled: true;
+    in property <bool> has-flyout: true;
+    in property <bool> flyout-open;
+    in property <bool> split: true;
+    in property <bool> checkable;
+    in-out property <bool> checked;
+    out property <bool> has-focus: input.has-focus;
+    out property <FlyoutRect> flyout-anchor: {
+        x: root.absolute-position.x, y: root.absolute-position.y,
+        width: root.width, height: root.height,
+    };
+
+    callback clicked();
+    callback checked-changed(bool);
+    callback open-flyout(FlyoutRect);
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> selected: root.checkable && root.checked;
+    private property <bool> reported-check;
+    private property <string> held-key;
+    private property <bool> touch-pressed;
+    private property <bool> pointer-focused;
+    private property <length> secondary-width: root.split ? 36px : 0px;
+    private property <bool> shared-pressed: root.held-key != "" || root.touch-pressed
+        || (root.split && root.flyout-open);
+    private property <bool> primary-pressed: primary-touch.pressed || root.shared-pressed;
+    private property <bool> secondary-pressed: secondary-touch.pressed || root.shared-pressed;
+    private property <color> stroke: root.dark ? #ffffff12 : #0000000f;
+    private property <brush> elevation-stroke: root.dark
+        ? @linear-gradient(180deg, #ffffff17 0%, #ffffff12 100%)
+        : @linear-gradient(180deg, #0000000f 90%, #00000029 100%);
+    private property <brush> accent-stroke: root.dark
+        ? @linear-gradient(180deg, #ffffff14 90%, #00000024 100%)
+        : @linear-gradient(180deg, #ffffff14 90%, #00000066 100%);
+
+    min-width: max(36px, body.min-width) + root.secondary-width;
+    preferred-width: round((max(36px, body.preferred-width) + root.secondary-width) / 2px) * 2px;
+    min-height: max(32px, body.min-height);
+    preferred-height: round(max(32px, body.preferred-height) / 2px) * 2px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: input;
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-checkable: root.checkable;
+    accessible-checked: root.checked;
+    accessible-expandable: root.has-flyout;
+    accessible-expanded: root.flyout-open;
+    accessible-action-default => { root.activate-primary(); }
+    accessible-action-expand => { root.request-flyout(); }
+
+    init => { root.reported-check = root.checked; }
+    changed checked => { root.notify-checked(); }
+
+    function notify-checked() {
+        if (root.reported-check != root.checked) {
+            root.reported-check = root.checked;
+            if (root.checkable) {
+                root.checked-changed(root.checked);
+            }
+        }
+    }
+
+    function request-flyout() {
+        if (root.enabled && root.has-flyout && !root.flyout-open) {
+            input.focus();
+            root.open-flyout(root.flyout-anchor);
+        }
+    }
+
+    function activate-primary() {
+        if (root.enabled) {
+            if (root.checkable) {
+                root.checked = !root.checked;
+                root.notify-checked();
+            }
+            root.clicked();
+            if (!root.split) {
+                root.request-flyout();
+            }
+        }
+    }
+
+    pure function fill(pressed: bool, hovered: bool) -> brush {
+        if (!root.enabled) {
+            return root.split ? transparent : (root.dark ? #ffffff0a : #f9f9f94d);
+        }
+        if (root.selected) {
+            return Palette.accent-background.with-alpha(pressed ? 0.8 : hovered ? 0.9 : 1);
+        }
+        if (pressed) {
+            return root.dark ? #ffffff08 : #f9f9f94d;
+        }
+        if (hovered) {
+            return root.dark ? #ffffff14 : #f9f9f980;
+        }
+        return Palette.control-background;
+    }
+
+    pure function foreground(pressed: bool, chevron: bool) -> color {
+        if (!root.enabled) {
+            return Palette.foreground.with-alpha(0.36);
+        }
+        if (root.selected) {
+            return pressed ? Palette.accent-foreground.with-alpha(root.dark ? 0.5 : 0.7) : Palette.accent-foreground;
+        }
+        return chevron && pressed ? (root.dark ? #ffffff8a : #00000073)
+            : chevron || pressed ? (root.dark ? #ffffffc9 : #00000099)
+            : Palette.foreground;
+    }
+
+    primary := Rectangle {
+        x: 0px;
+        y: 0px;
+        width: max(0px, parent.width - root.secondary-width);
+        height: parent.height;
+        border-top-left-radius: 4px;
+        border-bottom-left-radius: 4px;
+        border-top-right-radius: root.split ? 0px : 4px;
+        border-bottom-right-radius: root.split ? 0px : 4px;
+        background: root.fill(root.primary-pressed, primary-touch.has-hover);
+
+        body := HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-top: 6px;
+            padding-bottom: root.split ? 8px : 6px;
+            spacing: 8px;
+            alignment: center;
+
+            if root.icon.width > 0 && root.icon.height > 0 : Image {
+                source: root.icon;
+                width: 16px;
+                height: 16px;
+                colorize: root.foreground(root.primary-pressed, false);
+                accessible-role: none;
+            }
+            if root.text != "" : Text {
+                text: root.text;
+                font-size: 14px;
+                color: root.foreground(root.primary-pressed, false);
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+                accessible-role: none;
+            }
+            @children
+            if !root.split : Rectangle {
+                width: 12px;
+                Image {
+                    width: 12px;
+                    height: 12px;
+                    source: @image-url("../../icons/chevron_down_16_regular.svg");
+                    colorize: root.foreground(root.primary-pressed || primary-touch.has-hover, true);
+                    accessible-role: none;
+                }
+            }
+        }
+
+        primary-touch := TouchArea {
+            enabled: root.enabled;
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                    root.touch-pressed = event.touch-finger-id != 0;
+                    root.pointer-focused = true;
+                    input.focus();
+                }
+                if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
+                    root.touch-pressed = false;
+                }
+            }
+            clicked => { root.activate-primary(); }
+        }
+
+        // AccessKit treats an expandable node as non-invocable. Expose its distinct command separately.
+        if root.split && !root.checkable : Rectangle {
+            accessible-role: button;
+            accessible-label: @tr("Run {}", root.accessible-label);
+            accessible-enabled: root.enabled;
+            accessible-action-default => { root.activate-primary(); }
+        }
+    }
+
+    Rectangle {
+        visible: root.split;
+        x: primary.width;
+        y: 0px;
+        width: root.secondary-width;
+        height: parent.height;
+        border-top-right-radius: 4px;
+        border-bottom-right-radius: 4px;
+        background: root.fill(root.secondary-pressed, secondary-touch.has-hover);
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: 1px;
+            height: parent.height;
+            background: root.enabled && root.selected ? Palette.accent-foreground.with-alpha(0.20) : root.stroke;
+        }
+
+        Image {
+            width: 12px;
+            height: 12px;
+            source: @image-url("../../icons/chevron_down_16_regular.svg");
+            colorize: root.foreground(root.secondary-pressed, !secondary-touch.has-hover);
+            accessible-role: none;
+        }
+
+        secondary-touch := TouchArea {
+            enabled: root.enabled && root.has-flyout && root.split;
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                    root.touch-pressed = event.touch-finger-id != 0;
+                    root.pointer-focused = true;
+                    input.focus();
+                }
+                if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
+                    root.touch-pressed = false;
+                }
+            }
+            clicked => { root.request-flyout(); }
+        }
+    }
+
+    Rectangle {
+        border-radius: 4px;
+        border-width: 1px;
+        border-color: root.enabled && root.selected ? (root.shared-pressed ? transparent : root.accent-stroke)
+            : !root.enabled || root.primary-pressed || root.secondary-pressed ? root.stroke : root.elevation-stroke;
+    }
+
+    if root.has-focus && !root.pointer-focused && !root.flyout-open : Rectangle {
+        x: -2px;
+        y: -2px;
+        width: parent.width + 4px;
+        height: parent.height + 4px;
+        border-radius: 6px;
+        border-width: 2px;
+        border-color: Palette.foreground;
+
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Palette.background;
+        }
+    }
+
+    input := FocusScope {
+        width: 0px;
+        height: 0px;
+        enabled: root.enabled;
+        focus-on-click: false;
+        focus-gained(reason) => {
+            if (reason == FocusReason.tab-navigation) {
+                root.pointer-focused = false;
+            }
+        }
+        focus-lost(reason) => { root.held-key = ""; }
+        key-pressed(event) => {
+            root.pointer-focused = false;
+            if (event.text == Key.Space || event.text == Key.Return) {
+                if (!event.repeat) {
+                    root.held-key = event.text;
+                }
+                return accept;
+            }
+            if (root.split && (event.text == Key.F4 || (event.text == Key.DownArrow && event.modifiers.alt))) {
+                return accept;
+            }
+            return reject;
+        }
+        key-released(event) => {
+            if (event.text == root.held-key) {
+                root.held-key = "";
+                root.activate-primary();
+                return accept;
+            }
+            if (root.split && (event.text == Key.F4 || (event.text == Key.DownArrow && event.modifiers.alt))) {
+                root.request-flyout();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component DropDownButton inherits FlyoutButtonBase {
+    split: false;
+}
+
+export component SplitButton inherits FlyoutButtonBase { }
+
+export component ToggleSplitButton inherits FlyoutButtonBase {
+    checkable: true;
+}

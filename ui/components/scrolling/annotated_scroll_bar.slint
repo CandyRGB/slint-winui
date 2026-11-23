@@ -1,0 +1,295 @@
+import { Palette } from "std-widgets.slint";
+import { RepeatButtonInput } from "../basic-input/repeat_button.slint";
+import { FlyoutLayout, FlyoutPlacement, FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+
+export enum AnnotatedScrollBarScrollingKind { click, drag, increment-button, decrement-button }
+export struct AnnotatedScrollBarLabel { text: string, offset: length }
+export struct AnnotatedScrollBarMarker { text: string, position: length, shown: bool }
+export struct AnnotatedScrollBarDetailInfo { text: string, anchor: Point, offset: length }
+
+export global AnnotatedScrollBarBehavior {
+    pure callback layout([AnnotatedScrollBarLabel], length, float, length, length) -> [AnnotatedScrollBarMarker];
+}
+
+export component AnnotatedScrollBarDetail inherits Rectangle {
+    in property <AnnotatedScrollBarDetailInfo> detail;
+    in property <FlyoutRect> viewport;
+    in property <Point> origin;
+    private property <bool> bounded: root.viewport.width > 0px && root.viewport.height > 0px;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <length> preferred-detail-width:
+        clamp(round((measure.preferred-width + 20px) / 2px) * 2px, 40px, 360px);
+    private property <length> detail-width: root.bounded
+        ? min(root.preferred-detail-width, floor(root.viewport.width / 2px) * 2px) : root.preferred-detail-width;
+    private property <Size> desired: {
+        width: root.detail-width, height: max(40px, ceil(label.preferred-height / 2px) * 2px + 16px),
+    };
+    private property <FlyoutRect> bounds: root.bounded
+        ? FlyoutLayout.place-with-offsets(FlyoutPlacement.top, {
+            x: root.detail.anchor.x, y: root.detail.anchor.y, width: 0px, height: 0px,
+        }, root.viewport, root.desired, root.desired, { x: 2px, y: 2px })
+        : {
+            x: round((root.detail.anchor.x - root.desired.width / 2) / 2px) * 2px,
+            y: root.detail.anchor.y - root.desired.height - 2px,
+            width: root.desired.width, height: root.desired.height,
+        };
+
+    x: root.bounds.x - root.origin.x;
+    y: root.bounds.y - root.origin.y;
+    width: root.bounds.width;
+    height: root.bounds.height;
+    visible: root.detail.text != "" && root.width > 20px && root.height > 16px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: root.dark ? #ffffff18 : #00000010;
+    background: root.dark ? #2c2c2c : #f9f9f9;
+    drop-shadow-offset-y: 4px;
+    drop-shadow-blur: 8px;
+    drop-shadow-color: #00000029;
+    accessible-role: text;
+    accessible-label: root.detail.text;
+
+    measure := Text {
+        visible: false;
+        text: root.detail.text;
+        font-family: "Segoe UI";
+        font-weight: 600;
+        font-size: 14px;
+        accessible-role: none;
+    }
+
+    label := Text {
+        x: 10px;
+        y: 8px;
+        width: max(0px, root.detail-width - 20px);
+        height: max(0px, parent.height - 16px);
+        text: root.detail.text;
+        font-family: "Segoe UI";
+        font-size: 14px;
+        font-weight: 600;
+        wrap: word-wrap;
+        overflow: elide;
+        color: Palette.foreground;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+}
+
+component AnnotatedScrollBarArrow inherits Rectangle {
+    in property <bool> toward-start;
+    in property <bool> enabled;
+    in property <string> label;
+    callback invoked();
+    width: 30px;
+    height: 16px;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.invoked(); } }
+
+    Image {
+        width: 8px;
+        height: 8px;
+        source: root.toward-start ? @image-url("../../icons/caret_up_8_filled.svg")
+            : @image-url("../../icons/caret_down_8_filled.svg");
+        colorize: !root.enabled ? Palette.foreground.with-alpha(0.36)
+            : input.pressed ? Palette.foreground.with-alpha(0.45)
+            : input.has-hover ? Palette.foreground.with-alpha(0.62) : Palette.foreground;
+        accessible-role: none;
+    }
+    input := RepeatButtonInput {
+        enabled: root.enabled;
+        tab-stop: false;
+        accepts-return: false;
+        accepts-space: false;
+        clicked => { root.invoked(); }
+        repeated => { root.invoked(); }
+    }
+}
+
+export component AnnotatedScrollBar inherits Rectangle {
+    in property <[AnnotatedScrollBarLabel]> labels;
+    in property <length> minimum;
+    in property <length> maximum;
+    in property <length> viewport-size;
+    in property <length> value;
+    in property <length> small-change;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <brush> indicator-color: Palette.accent-background;
+    in property <string> accessible-name: @tr("Annotated scroll bar");
+    in property <bool> show-inline-detail: true;
+    in property <FlyoutRect> detail-viewport;
+    out property <bool> can-scroll: root.enabled && root.range > 0px && root.scale > 0;
+    out property <bool> dragging: root.pointer-held;
+    out property <length> effective-value: clamp(root.value, root.minimum, root.upper);
+    out property <AnnotatedScrollBarDetailInfo> detail: {
+        text: root.pointer-visible ? root.detail-label-requested(root.detail-offset) : "",
+        anchor: {
+            x: root.absolute-position.x + (root.rtl ? -2px : root.width + 2px),
+            y: root.absolute-position.y + 16px + round(root.detail-position / 2px) * 2px,
+        },
+        offset: root.detail-offset,
+    };
+    callback scrolling(length, AnnotatedScrollBarScrollingKind) -> bool;
+    callback scroll-requested(length);
+    pure callback detail-label-requested(length) -> string;
+
+    private property <length> upper: max(root.minimum, root.maximum);
+    private property <length> range: root.upper - root.minimum;
+    private property <length> extent: root.range + max(0px, root.viewport-size);
+    private property <length> track-height: max(0px, root.height - 32px);
+    private property <length> travel: max(0px, root.track-height - 4px);
+    private property <float> scale: root.extent > 0px ? root.travel / root.extent : 0;
+    private property <[AnnotatedScrollBarMarker]> markers:
+        AnnotatedScrollBarBehavior.layout(root.labels, root.minimum, root.scale, root.track-height, 14px);
+    private property <length> default-step;
+    private property <bool> pointer-held;
+    private property <bool> touch-input;
+    private property <int> touch-id;
+    private property <length> held-position;
+    private property <bool> pointer-visible: root.can-scroll && (root.pointer-held
+        || (!root.touch-input && rail-input.has-hover && rail-input.mouse-x >= 0px && rail-input.mouse-x < root.width
+            && rail-input.mouse-y >= 0px && rail-input.mouse-y < root.track-height));
+    private property <length> pointer-position: clamp(root.pointer-held ? root.held-position : rail-input.mouse-y, 0px, root.track-height);
+    private property <length> detail-position: root.pointer-position - (root.touch-id > 0 ? 22px : 0px);
+    private property <length> detail-offset: min(root.minimum + root.extent,
+        root.offset-at(max(0px, root.detail-position)));
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    min-width: 44px;
+    min-height: 36px;
+    preferred-width: max(44px, round(label-measure.preferred-width / 2px) * 2px);
+    preferred-height: 500px;
+    horizontal-stretch: 0;
+    vertical-stretch: 1;
+    accessible-role: groupbox;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+
+    changed can-scroll => { if !root.can-scroll { root.clear-pointer(); } }
+
+    pure function offset-at(position: length) -> length {
+        return root.minimum + (root.scale > 0 ? position / root.scale : 0px);
+    }
+
+    function request(offset: length, kind: AnnotatedScrollBarScrollingKind) {
+        if root.can-scroll && !root.scrolling(offset, kind) {
+            root.scroll-requested(clamp(offset, root.minimum, root.upper));
+        }
+    }
+
+    function step(toward-start: bool) {
+        if root.small-change <= 0px && root.default-step <= 0px {
+            root.default-step = max(0px, root.viewport-size) / 8;
+        }
+        let amount = root.small-change > 0px ? root.small-change : root.default-step;
+        let kind = toward-start ? AnnotatedScrollBarScrollingKind.increment-button
+            : AnnotatedScrollBarScrollingKind.decrement-button;
+        root.request(clamp(root.effective-value + (toward-start ? -amount : amount), root.minimum, root.upper), kind);
+    }
+
+    function clear-pointer() {
+        root.pointer-held = false;
+        root.touch-id = 0;
+    }
+
+    label-measure := VerticalLayout {
+        visible: false;
+        for label in root.labels: Text {
+            text: label.text;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            accessible-role: none;
+        }
+    }
+
+    AnnotatedScrollBarArrow {
+        x: root.rtl ? 0px : parent.width - self.width;
+        y: 0px;
+        toward-start: true;
+        enabled: root.can-scroll;
+        label: @tr("Scroll up");
+        invoked => { root.step(true); }
+    }
+
+    Rectangle {
+        x: 0px;
+        y: 16px;
+        width: parent.width;
+        height: root.track-height;
+
+        for marker in root.markers: Text {
+            x: 0px;
+            y: marker.position - 4px;
+            width: parent.width;
+            height: 20px;
+            visible: marker.shown;
+            text: marker.text;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            color: Palette.foreground;
+            vertical-alignment: center;
+            horizontal-alignment: root.rtl ? left : right;
+            accessible-role: none;
+        }
+
+        if root.pointer-visible: Rectangle {
+            x: root.rtl ? 0px : parent.width - self.width;
+            y: round(min(root.travel, root.pointer-position) / 2px) * 2px;
+            width: 30px;
+            height: 4px;
+            border-radius: 2px;
+            background: root.dark ? #ffffff29 : #00000037;
+        }
+
+        Rectangle {
+            x: root.rtl ? 0px : parent.width - self.width;
+            y: round(((root.effective-value - root.minimum) * root.scale) / 2px) * 2px;
+            width: 30px;
+            height: min(4px, parent.height);
+            border-radius: 2px;
+            background: root.indicator-color;
+        }
+
+        rail-input := TouchArea {
+            enabled: root.can-scroll;
+            pointer-event(event) => {
+                if !root.pointer-held && (event.kind == PointerEventKind.move || event.kind == PointerEventKind.down) {
+                    root.touch-input = event.touch-finger-id > 0;
+                }
+                if event.kind == PointerEventKind.cancel {
+                    root.clear-pointer();
+                } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.left
+                        && !root.pointer-held {
+                    root.held-position = rail-input.mouse-y;
+                    root.touch-id = event.touch-finger-id;
+                    root.pointer-held = true;
+                    root.request(root.offset-at(root.pointer-position), AnnotatedScrollBarScrollingKind.click);
+                } else if root.pointer-held && event.touch-finger-id == root.touch-id {
+                    if event.kind == PointerEventKind.move {
+                        root.held-position = rail-input.mouse-y;
+                        root.request(root.offset-at(root.pointer-position), AnnotatedScrollBarScrollingKind.drag);
+                    } else if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                        root.clear-pointer();
+                    }
+                }
+            }
+        }
+    }
+
+    AnnotatedScrollBarArrow {
+        x: root.rtl ? 0px : parent.width - self.width;
+        y: parent.height - self.height;
+        enabled: root.can-scroll;
+        label: @tr("Scroll down");
+        invoked => { root.step(false); }
+    }
+
+    if root.show-inline-detail: AnnotatedScrollBarDetail {
+        detail: root.detail;
+        viewport: root.detail-viewport;
+        origin: root.absolute-position;
+    }
+}

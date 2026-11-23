@@ -1,0 +1,70 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { ToggleButton, ToggleButtonState } from "../../ui/components/basic-input/toggle_button.slint";
+
+export component ToggleButtonExample inherits Window {
+    title: "WinUI ToggleButton";
+    preferred-width: 540px;
+    preferred-height: 244px;
+    background: #f3f3f3;
+    in property <color> accent: Palette.accent-background;
+    private property <string> last-event: "Unchecked";
+    private property <int> activation-count;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            three := CheckBox { text: "Three-state"; }
+            disabled := CheckBox { text: "Disable buttons"; }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            sample := ToggleButton {
+                text: "ToggleButton";
+                accent: root.accent;
+                is-three-state: three.checked;
+                enabled: !disabled.checked;
+                checked => { root.last-event = "Checked"; }
+                unchecked => { root.last-event = "Unchecked"; }
+                indeterminate => { root.last-event = "Indeterminate"; }
+                clicked => {
+                    root.last-event += " → Click";
+                    root.activation-count += 1;
+                }
+            }
+            pin := ToggleButton {
+                accessible-name: "Pin panel";
+                accent: root.accent;
+                enabled: !disabled.checked;
+
+                Image {
+                    width: 16px;
+                    height: 16px;
+                    source: @image-url("../../ui/icons/pin_16_regular.svg");
+                    colorize: pin.foreground;
+                    accessible-role: none;
+                }
+                Text { text: "Pin panel"; color: pin.foreground; vertical-alignment: center; accessible-role: none; }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Set unchecked"; clicked => { sample.check-state = ToggleButtonState.unchecked; } }
+            Button { text: "Set checked"; clicked => { sample.check-state = ToggleButtonState.checked; } }
+            Button { text: "Set indeterminate"; clicked => { sample.check-state = ToggleButtonState.indeterminate; } }
+        }
+
+        Text { text: root.last-event; color: Palette.foreground; }
+        Text { text: "Activations \{root.activation-count}"; color: Palette.foreground; }
+    }
+}

@@ -1,0 +1,91 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { CalendarDateText, CalendarView, CalendarViewBehavior, CalendarViewCell, CalendarViewDayName, CalendarViewDisplayMode, CalendarViewOptions, CalendarViewPage, CalendarViewSelectionChange, CalendarViewSelectionMode } from "../../ui/components/date-time/calendar_view.slint";
+
+export { CalendarDateText, CalendarViewBehavior, CalendarViewCell, CalendarViewDayName, CalendarViewDisplayMode, CalendarViewOptions, CalendarViewPage, CalendarViewSelectionChange, CalendarViewSelectionMode }
+
+export component CalendarViewExample inherits Window {
+    title: "CalendarView";
+    min-width: 632px;
+    preferred-height: 468px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+    in property <int> today;
+    in property <int> demo-min;
+    in property <int> demo-max;
+    in property <int> demo-blackout;
+    in property <color> accent: Palette.accent-background;
+    in property <color> selection-ink: Palette.accent-background;
+
+    private property <int> selected-mode;
+    private property <int> system;
+    private property <bool> chinese;
+    private property <bool> rtl;
+    private property <bool> monday;
+    private property <bool> limits;
+    private property <bool> blackout;
+    private property <bool> groups: true;
+    private property <bool> adjacent: true;
+    private property <int> invoked;
+    private property <int> added;
+    private property <int> removed;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        alignment: start;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button {
+                text: root.selected-mode == 0 ? "Single" : root.selected-mode == 1 ? "Multiple" : "None";
+                clicked => { root.selected-mode = Math.mod(root.selected-mode + 1, 3); }
+            }
+            Button { text: "Toggle range"; clicked => { root.limits = !root.limits; calendar.set-display-date(root.today); } }
+            Button { text: "Blackout date"; clicked => { root.blackout = !root.blackout; } }
+            Button { text: "Monday first"; clicked => { root.monday = !root.monday; } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Group labels"; clicked => { root.groups = !root.groups; } }
+            Button { text: "Adjacent dates"; clicked => { root.adjacent = !root.adjacent; } }
+            Button { text: "Toggle language"; clicked => { root.chinese = !root.chinese; } }
+            Button { text: "Change calendar"; clicked => { root.system = Math.mod(root.system + 1, 4); } }
+            Button {
+                text: "Today";
+                clicked => { calendar.display-mode = CalendarViewDisplayMode.month; calendar.set-display-date(root.today); }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            calendar := CalendarView {
+                width: 302px;
+                height: 306px;
+                number-of-weeks-in-view: 5;
+                today: root.today;
+                min-date: root.limits ? root.demo-min : 0;
+                max-date: root.limits ? root.demo-max : 0;
+                blackout-dates: root.blackout ? [root.demo-blackout] : [];
+                selection-mode: root.selected-mode == 0 ? CalendarViewSelectionMode.single
+                    : root.selected-mode == 1 ? CalendarViewSelectionMode.multiple : CalendarViewSelectionMode.none;
+                language: root.chinese ? "zh-CN" : "en-US";
+                calendar-identifier: root.system == 0 ? "GregorianCalendar" : root.system == 1 ? "HebrewCalendar"
+                    : root.system == 2 ? "HijriCalendar" : "JapaneseCalendar";
+                rtl: root.rtl;
+                first-day-of-week: root.monday ? 1 : -1;
+                group-label-visible: root.groups;
+                out-of-scope-enabled: root.adjacent;
+                accent: root.accent;
+                selection-ink: root.selection-ink;
+                selected-dates-changed(added, removed) => { root.added = added.length; root.removed = removed.length; }
+                date-invoked(date) => { root.invoked = date; }
+            }
+        }
+        Text {
+            text: "Selected \{calendar.selected-dates.length} · Added \{root.added} · Removed \{root.removed} · Focus \{calendar.focused-date} · Invoked \{root.invoked}";
+            color: Palette.foreground;
+            accessible-label: self.text;
+        }
+    }
+}

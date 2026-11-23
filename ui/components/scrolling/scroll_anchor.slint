@@ -1,0 +1,24 @@
+export struct ScrollAnchorCandidate {
+    id: string,
+    x: length, y: length, width: length, height: length,
+}
+
+export struct ScrollAnchorLayout {
+    viewport-width: length, viewport-height: length,
+    extent-width: length, extent-height: length,
+    candidates: [ScrollAnchorCandidate],
+}
+
+export struct ScrollAnchorRequest {
+    x: length, y: length, zoom: float,
+    horizontal-ratio: float, vertical-ratio: float,
+    horizontal-enabled: bool, vertical-enabled: bool,
+    center-content: bool, preferred-id: string,
+}
+
+export struct ScrollAnchorResult { id: string, x: length, y: length }
+
+export global ScrollAnchorBehavior {
+    in property <bool> ready;
+    pure callback resolve(ScrollAnchorLayout, ScrollAnchorLayout, ScrollAnchorRequest) -> ScrollAnchorResult;
+}

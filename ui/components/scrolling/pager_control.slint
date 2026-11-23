@@ -1,0 +1,399 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual, ButtonInput } from "../basic-input/button_input.slint";
+import { ComboBox, ComboBoxItem } from "../basic-input/combo_box.slint";
+import { NumberBox, NumberBoxValue } from "../text/number_box.slint";
+import { ToolTipSurface } from "../status-info/tool_tip.slint";
+
+export enum PagerControlDisplayMode { auto, combo-box, number-box, button-panel }
+export enum PagerControlButtonVisibility { visible, hidden-on-edge, hidden }
+
+export global PagerControlBehavior {
+    pure callback panel-items(int, int, bool) -> [int];
+    pure callback combo-items(int) -> [ComboBoxItem];
+    pure callback number-to-index(float) -> int;
+    callback traverse-focus(bool);
+}
+
+component PagerControlButton inherits Rectangle {
+    in property <string> label;
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> enabled: true;
+    in property <bool> selected;
+    in property <int> page-number;
+    in property <int> page-count;
+    in property <brush> indicator-color;
+    callback invoked();
+
+    private property <bool> numeric: root.page-number > 0;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> ink: !root.enabled ? (root.dark ? #ffffff5e : #0000005c)
+        : root.dark ? white : #000000e4;
+    width: root.numeric ? max(32px, round((caption.preferred-width + 24px) / 2px) * 2px) : 40px;
+    height: 40px;
+    forward-focus: input;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-item-index: root.page-number - 1;
+    accessible-item-count: max(0, root.page-count);
+    accessible-item-selected: root.selected;
+    accessible-action-default => { if root.enabled { root.invoked(); } }
+
+    Rectangle {
+        x: 0px;
+        y: root.numeric ? 4px : 0px;
+        width: parent.width;
+        height: root.numeric ? 32px : 40px;
+        border-radius: root.numeric ? 0px : 4px;
+        border-width: root.numeric ? 1px : 0px;
+        border-color: root.dark ? #ffffff18 : #00000014;
+        background: !root.enabled ? transparent : input.pressed ? (root.dark ? #ffffff0a : #00000006)
+            : input.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+        caption := Text {
+            text: root.text;
+            visible: root.numeric;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            color: root.ink;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+        if !root.numeric: Image {
+            source: root.icon;
+            width: 16px;
+            height: 16px;
+            colorize: root.ink;
+            accessible-role: none;
+        }
+        if input.keyboard-focused: ButtonFocusVisual {
+            control-width: parent.width;
+            control-height: parent.height;
+            control-radius: parent.border-radius;
+            horizontal-margin: 2px;
+            vertical-margin: root.numeric ? 2px : 0px;
+        }
+    }
+    if root.selected: Rectangle {
+        y: parent.height - self.height;
+        width: parent.width;
+        height: 2px;
+        border-radius: 1px;
+        background: root.indicator-color;
+    }
+    input := ButtonInput {
+        enabled: root.enabled;
+        clicked => { root.invoked(); }
+    }
+    if !root.numeric && root.enabled: Tooltip {
+        ToolTipSurface { text: root.label; }
+    }
+}
+
+component PagerControlCaption inherits HorizontalLayout {
+    in property <string> text;
+    in property <bool> trailing-space;
+    padding-left: 6px;
+    padding-right: root.trailing-space ? 6px : 0px;
+    alignment: start;
+    Text {
+        text: root.text;
+        font-family: "Segoe UI";
+        font-size: 14px;
+        vertical-alignment: center;
+        color: Palette.foreground;
+    }
+}
+
+component PagerControlNumberInput inherits NumberBox {
+    in property <NumberBoxValue> page-value;
+    callback page-submitted(float);
+    private property <bool> synchronizing;
+
+    value: root.page-value;
+    changed page-value => { root.restore-page(); }
+    value-changed(old, next) => {
+        if !root.synchronizing && next != root.page-value {
+            if next.has-value { root.page-submitted(next.number); }
+            settle.start();
+        }
+    }
+
+    settle := Timer {
+        interval: 0ms;
+        running: false;
+        triggered => {
+            self.stop();
+            root.restore-page();
+        }
+    }
+
+    function restore-page() {
+        root.synchronizing = true;
+        root.set-value(root.page-value);
+        root.synchronizing = false;
+    }
+}
+
+component PagerControlNavigation inherits Rectangle {
+    in property <bool> visible-button;
+    in property <bool> enabled;
+    in property <bool> points-right;
+    in property <bool> edge;
+    in property <string> label;
+    callback invoked();
+    width: 40px;
+    height: 40px;
+    if root.visible-button: PagerControlButton {
+        label: root.label;
+        enabled: root.enabled;
+        icon: root.edge ? (root.points-right ? @image-url("../../icons/next_16_regular.svg")
+            : @image-url("../../icons/previous_16_regular.svg"))
+            : (root.points-right ? @image-url("../../icons/chevron_right_16_regular.svg")
+                : @image-url("../../icons/chevron_left_16_regular.svg"));
+        invoked => { root.invoked(); }
+    }
+}
+
+export component PagerControl inherits Rectangle {
+    in property <PagerControlDisplayMode> display-mode;
+    in property <int> number-of-pages;
+    in-out property <int> selected-page-index;
+    in property <PagerControlButtonVisibility> first-button-visibility;
+    in property <PagerControlButtonVisibility> previous-button-visibility;
+    in property <PagerControlButtonVisibility> next-button-visibility;
+    in property <PagerControlButtonVisibility> last-button-visibility;
+    in property <bool> button-panel-always-show-first-last-page-index: true;
+    in property <string> prefix-text: @tr("Page");
+    in property <string> suffix-text: @tr("of");
+    in property <string> accessible-name: @tr("Page selector");
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <Size> popup-viewport;
+    in property <brush> indicator-color: Palette.accent-background;
+    out property <PagerControlDisplayMode> actual-display-mode: root.display-mode == PagerControlDisplayMode.auto
+        ? (root.number-of-pages >= 0 && root.number-of-pages < 10 ? PagerControlDisplayMode.combo-box
+            : PagerControlDisplayMode.number-box) : root.display-mode;
+    callback selected-index-changed(int, int);
+    callback first-clicked();
+    callback previous-clicked();
+    callback next-clicked();
+    callback last-clicked();
+    callback input-committed(int);
+
+    private property <int> index: clamp(root.selected-page-index, 0, root.last-index);
+    private property <int> last-index: root.number-of-pages < 0 ? 2147483646 : max(0, root.number-of-pages - 1);
+    private property <int> reported-index;
+    private property <bool> have-pages: root.number-of-pages != 0;
+    private property <bool> finite: root.number-of-pages >= 0;
+    private property <bool> previous-available: root.have-pages && root.index > 0;
+    private property <bool> next-available: root.have-pages && root.index < root.last-index;
+    private property <[int]> panel: root.actual-display-mode == PagerControlDisplayMode.button-panel
+        ? PagerControlBehavior.panel-items(root.number-of-pages, root.index, root.button-panel-always-show-first-last-page-index) : [];
+    private property <[ComboBoxItem]> combo-items: root.actual-display-mode == PagerControlDisplayMode.combo-box
+        ? PagerControlBehavior.combo-items(root.number-of-pages) : [];
+    private property <int> combo-state: root.have-pages && root.index < root.combo-items.length ? root.index : -1;
+    private property <int> panel-focus-ticket;
+
+    preferred-width: layout.preferred-width;
+    preferred-height: 40px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    accessible-role: navigation;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+
+    init => {
+        root.reported-index = root.index;
+        if root.selected-page-index != root.index { root.selected-page-index = root.index; }
+    }
+    changed selected-page-index => {
+        if root.selected-page-index != root.index { root.selected-page-index = root.index; }
+    }
+    changed index => {
+        if root.selected-page-index != root.index { root.selected-page-index = root.index; }
+        let previous = root.reported-index;
+        root.reported-index = root.index;
+        root.sync-combo();
+        root.selected-index-changed(previous, root.index);
+    }
+    changed actual-display-mode => { root.sync-combo(); }
+    changed number-of-pages => { root.sync-combo(); }
+
+    public function select(index: int) {
+        if root.have-pages { root.selected-page-index = clamp(index, 0, root.last-index); }
+    }
+
+    function sync-combo() {
+        root.combo-state = root.have-pages && root.index < root.combo-items.length ? root.index : -1;
+    }
+
+    function commit(index: int) {
+        if root.enabled && root.have-pages && index >= 0 && index != root.index {
+            root.select(index);
+            root.input-committed(root.index);
+        }
+    }
+
+    pure function policy(action: int) -> PagerControlButtonVisibility {
+        return action == 0 ? root.first-button-visibility : action == 1 ? root.previous-button-visibility
+            : action == 2 ? root.next-button-visibility : root.last-button-visibility;
+    }
+
+    pure function available(action: int) -> bool {
+        return action < 2 ? root.previous-available : root.next-available;
+    }
+
+    pure function reserves-space(action: int) -> bool {
+        return root.policy(action) != PagerControlButtonVisibility.hidden && (action != 3 || root.finite);
+    }
+
+    pure function action-name(action: int) -> string {
+        return action == 0 ? @tr("First page") : action == 1 ? @tr("Previous page")
+            : action == 2 ? @tr("Next page") : @tr("Last page");
+    }
+
+    function navigate(action: int) {
+        if !root.available(action) { return; }
+        root.select(action == 0 ? 0 : action == 1 ? root.index - 1 : action == 2 ? root.index + 1 : root.last-index);
+        if action == 0 { root.first-clicked(); }
+        else if action == 1 { root.previous-clicked(); }
+        else if action == 2 { root.next-clicked(); }
+        else { root.last-clicked(); }
+    }
+
+    settle-panel-focus := Timer {
+        interval: 0ms;
+        running: false;
+        triggered => {
+            self.stop();
+            root.panel-focus-ticket += 1;
+        }
+    }
+
+    FocusScope {
+        width: root.width;
+        height: root.height;
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        key-pressed(event) => {
+            if event.text == Key.LeftArrow || event.text == Key.RightArrow {
+                PagerControlBehavior.traverse-focus(event.text == Key.RightArrow);
+                return accept;
+            }
+            return reject;
+        }
+
+        layout := HorizontalLayout {
+            alignment: root.rtl ? end : start;
+
+            for action in (root.rtl ? [3, 2] : [0, 1]): Rectangle {
+                width: root.reserves-space(action) ? 40px : 0px;
+                height: 40px;
+                if root.reserves-space(action): PagerControlNavigation {
+                    visible-button: root.policy(action) != PagerControlButtonVisibility.hidden-on-edge || root.available(action);
+                    enabled: root.enabled && root.available(action);
+                    points-right: root.rtl == (action < 2);
+                    edge: action == 0 || action == 3;
+                    label: root.action-name(action);
+                    invoked => { root.navigate(action); }
+                }
+            }
+
+            if root.actual-display-mode == PagerControlDisplayMode.button-panel: HorizontalLayout {
+                alignment: center;
+                spacing: 6px;
+                for value[order] in root.panel: Rectangle {
+                    private property <int> page: root.rtl ? root.panel[root.panel.length - 1 - order] : value;
+                    private property <int> focus-ticket: root.panel-focus-ticket;
+                    width: page == 0 ? 20px : page-button.width;
+                    height: 40px;
+                    changed focus-ticket => {
+                        if self.page == root.index + 1 && root.enabled && root.have-pages { page-button.focus(); }
+                    }
+                    page-button := PagerControlButton {
+                        visible: parent.page > 0;
+                        text: parent.page;
+                        page-number: parent.page;
+                        page-count: root.number-of-pages;
+                        label: @tr("Page {}", parent.page);
+                        enabled: root.enabled && root.have-pages && parent.page > 0;
+                        selected: parent.page > 0 && parent.page == root.index + 1;
+                        indicator-color: root.indicator-color;
+                        invoked => { root.select(parent.page - 1); settle-panel-focus.start(); }
+                    }
+                    if self.page == 0: Image {
+                        source: @image-url("../../icons/more_horizontal_16_regular.svg");
+                        width: 20px;
+                        height: 20px;
+                        colorize: Palette.foreground;
+                        accessible-role: none;
+                    }
+                }
+            }
+
+            if root.actual-display-mode != PagerControlDisplayMode.button-panel: HorizontalLayout {
+                alignment: center;
+                if root.rtl && root.finite: PagerControlCaption { text: root.number-of-pages; }
+                if root.rtl && root.finite && root.suffix-text != "": PagerControlCaption { text: root.suffix-text; trailing-space: true; }
+                if !root.rtl && root.prefix-text != "": PagerControlCaption { text: root.prefix-text; trailing-space: true; }
+
+                if root.actual-display-mode == PagerControlDisplayMode.combo-box: Rectangle {
+                    width: 64px;
+                    height: 40px;
+                    ComboBox {
+                        x: 0px;
+                        y: 4px;
+                        width: parent.width;
+                        height: 32px;
+                        items: root.combo-items;
+                        selected-index <=> root.combo-state;
+                        enabled: root.enabled && root.have-pages;
+                        accessible-name: @tr("Page");
+                        rtl: root.rtl;
+                        popup-viewport: root.popup-viewport;
+                        selection-changed(old, next) => { root.commit(next); }
+                    }
+                }
+
+                if root.actual-display-mode == PagerControlDisplayMode.number-box: Rectangle {
+                    width: 64px;
+                    height: 40px;
+                    PagerControlNumberInput {
+                        x: 0px;
+                        y: 4px;
+                        width: parent.width;
+                        height: 32px;
+                        enabled: root.enabled && root.have-pages;
+                        minimum: 1;
+                        maximum: max(1, root.last-index + 1);
+                        page-value: { has-value: root.have-pages, number: root.index + 1 };
+                        large-change: 5;
+                        accessible-name: @tr("Page");
+                        text-alignment: root.rtl ? right : left;
+                        popup-viewport: root.popup-viewport;
+                        page-submitted(number) => { root.commit(PagerControlBehavior.number-to-index(number)); }
+                    }
+                }
+
+                if root.rtl && root.prefix-text != "": PagerControlCaption { text: root.prefix-text; trailing-space: true; }
+                if !root.rtl && root.finite && root.suffix-text != "": PagerControlCaption { text: root.suffix-text; }
+                if !root.rtl && root.finite: PagerControlCaption { text: root.number-of-pages; trailing-space: true; }
+            }
+
+            for action in (root.rtl ? [1, 0] : [2, 3]): Rectangle {
+                width: root.reserves-space(action) ? 40px : 0px;
+                height: 40px;
+                if root.reserves-space(action): PagerControlNavigation {
+                    visible-button: root.policy(action) != PagerControlButtonVisibility.hidden-on-edge || root.available(action);
+                    enabled: root.enabled && root.available(action);
+                    points-right: root.rtl == (action < 2);
+                    edge: action == 0 || action == 3;
+                    label: root.action-name(action);
+                    invoked => { root.navigate(action); }
+                }
+            }
+        }
+    }
+}

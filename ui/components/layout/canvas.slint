@@ -1,0 +1,29 @@
+export component Canvas inherits Rectangle {
+    preferred-width: 0px;
+    preferred-height: 0px;
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+    clip: false;
+    accessible-role: none;
+    @children
+}
+
+// Bind z on the child instance so Slint sorts the Canvas siblings at runtime.
+export component CanvasChild inherits Rectangle {
+    in property <length> left;
+    in property <length> top;
+    in property <bool> rtl;
+    in property <length> canvas-width: -1px;
+
+    x: root.rtl && root.canvas-width >= 0px ? root.canvas-width - root.left - root.width : root.left;
+    y: root.top;
+    width: root.preferred-width;
+    height: root.preferred-height;
+    preferred-width: content.preferred-width;
+    preferred-height: content.preferred-height;
+    accessible-role: none;
+
+    content := VerticalLayout {
+        @children
+    }
+}

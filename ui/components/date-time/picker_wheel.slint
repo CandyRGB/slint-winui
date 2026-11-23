@@ -1,0 +1,94 @@
+import { Palette } from "std-widgets.slint";
+
+export struct PickerWheelRow { text: string, offset: int }
+
+export component PickerWheel inherits Rectangle {
+    in property <string> label;
+    in property <[PickerWheelRow]> rows;
+    in property <bool> align-start;
+    in property <bool> rtl;
+    in property <bool> focused;
+    in property <bool> divider-visible;
+    callback activate();
+    callback step(int);
+
+    private property <length> pitch: 40px;
+    private property <length> middle: round((self.height - root.pitch) / 4px) * 2px;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <length> drag-origin;
+    private property <bool> dragged;
+
+    clip: true;
+    accessible-role: list;
+    accessible-label: root.label;
+    accessible-item-count: root.rows.length;
+
+    for row[i] in root.rows: Rectangle {
+        y: root.middle + row.offset * root.pitch;
+        width: parent.width;
+        height: root.pitch;
+        accessible-role: list-item;
+        accessible-label: row.text;
+        accessible-item-index: i;
+        accessible-item-count: root.rows.length;
+        accessible-item-selectable: true;
+        accessible-item-selected: row.offset == 0;
+        accessible-action-default => { root.activate(); root.step(row.offset); }
+
+        Text {
+            x: root.align-start ? 10px : 0px;
+            width: parent.width - 2 * self.x;
+            height: parent.height - 2px;
+            text: row.text;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            color: row.offset == 0 ? (root.dark ? black : white) : (root.dark ? white : #1a1a1a);
+            horizontal-alignment: !root.align-start ? center : root.rtl ? right : left;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+
+    if root.divider-visible: Rectangle {
+        x: 0px;
+        width: 1px;
+        height: parent.height;
+        background: root.dark ? #ffffff18 : #0000000f;
+    }
+    if root.focused: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-width: 2px;
+        border-radius: 4px;
+        border-color: root.dark ? white : #000000e4;
+    }
+
+    hit := TouchArea {
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.drag-origin = self.mouse-y;
+                root.dragged = false;
+                root.activate();
+            }
+            if event.kind == PointerEventKind.move && self.pressed {
+                let distance = (root.drag-origin - self.mouse-y) / root.pitch;
+                let steps = distance >= 0 ? floor(distance) : ceil(distance);
+                if steps != 0 {
+                    root.drag-origin -= steps * root.pitch;
+                    root.dragged = true;
+                    root.step(steps);
+                }
+            }
+        }
+        clicked => {
+            if !root.dragged { root.step(floor((hit.mouse-y - root.middle) / root.pitch)); }
+        }
+        scroll-event(event) => {
+            if event.delta-y == 0px { return reject; }
+            root.activate();
+            root.step(event.delta-y > 0px ? -1 : 1);
+            return accept;
+        }
+    }
+}

@@ -1,0 +1,417 @@
+import { Palette, ScrollView } from "std-widgets.slint";
+
+export enum TreeViewSelectionMode { none, single, multiple }
+export enum TreeViewCheckState { unchecked, checked, partial }
+export enum TreeViewDropMode { before, inside, after }
+
+export struct TreeViewItem {
+    id: string, parent-id: string, label: string, icon: image, expanded-icon: image,
+    disabled: bool, has-unrealized-children: bool, can-have-children: bool,
+}
+
+export struct TreeViewRow {
+    item: TreeViewItem, index: int, depth: int, expandable: bool, expanded: bool,
+    check: TreeViewCheckState, previous-sibling: string, next-sibling: string, first-child: string,
+}
+
+export global TreeViewBehavior {
+    in-out property <bool> ready;
+    pure callback layout([TreeViewItem], [string], [string], TreeViewSelectionMode) -> [TreeViewRow];
+    pure callback window([TreeViewRow], int, int) -> [TreeViewRow];
+    pure callback find([TreeViewRow], string) -> int;
+    pure callback next([TreeViewRow], int, bool) -> int;
+    pure callback set-expanded([string], string, bool) -> [string];
+    pure callback reconcile-selection([TreeViewItem], [string]) -> [string];
+    pure callback set-selected([TreeViewItem], [string], string, bool, TreeViewSelectionMode) -> [string];
+    pure callback can-move([TreeViewItem], [string], string, TreeViewDropMode) -> bool;
+    pure callback move-items([TreeViewItem], [string], string, TreeViewDropMode) -> [TreeViewItem];
+}
+
+component TreeRowPresenter inherits Rectangle {
+    in property <TreeViewRow> entry;
+    in property <TreeViewSelectionMode> mode;
+    in property <bool> enabled;
+    in property <bool> can-drag;
+    in property <bool> focused;
+    in property <bool> rtl;
+    in property <bool> drop-target;
+    in property <TreeViewDropMode> drop-mode;
+    callback invoked();
+    callback expansion(bool);
+    callback checked();
+    callback drag-moved(length, length);
+    callback drag-finished(length, length);
+    callback drag-cancelled();
+
+    private property <bool> selected: root.entry.check == TreeViewCheckState.checked;
+    private property <bool> mixed: root.entry.check == TreeViewCheckState.partial;
+    private property <bool> multi: root.mode == TreeViewSelectionMode.multiple;
+    private property <length> indent: min(max(0px, root.width - 104px), max(0, root.entry.depth) * 16px);
+    private property <length> selector-start: root.indent + 10px;
+    private property <length> chevron-start: root.indent + (root.multi ? 44px : 4px);
+    private property <length> text-start: root.chevron-start + (root.multi ? 26px : 36px);
+    private property <image> shown-icon: root.entry.expanded && root.entry.item.expanded-icon.width > 0
+        ? root.entry.item.expanded-icon : root.entry.item.icon;
+    private property <brush> foreground: Palette.foreground.with-alpha(!root.enabled ? 0.36 : hit.pressed ? 0.62 : 0.9);
+
+    border-radius: 4px;
+    border-width: root.focused || (root.drop-target && root.drop-mode == TreeViewDropMode.inside) ? 2px : 0px;
+    border-color: root.drop-target ? Palette.accent-background : Palette.foreground;
+    background: !root.enabled ? (root.selected ? Palette.foreground.with-alpha(0.04) : transparent)
+        : hit.pressed ? Palette.foreground.with-alpha(0.025)
+        : root.selected ? Palette.foreground.with-alpha(hit.has-hover ? 0.08 : 0.06)
+        : (hit.has-hover || caret.has-hover || (root.multi && checkbox-hit.has-hover)) ? Palette.foreground.with-alpha(0.04) : transparent;
+
+    accessible-role: list-item;
+    accessible-label: root.entry.item.label;
+    accessible-id: root.entry.item.id;
+    accessible-item-index: root.entry.index;
+    accessible-enabled: root.enabled;
+    accessible-expandable: root.entry.expandable;
+    accessible-expanded: root.entry.expanded;
+    accessible-item-selectable: root.mode != TreeViewSelectionMode.none;
+    accessible-item-selected: root.selected;
+    accessible-description: root.mixed ? @tr("Partially selected") : "";
+    accessible-action-default => { if (root.enabled) { root.invoked(); } }
+    accessible-action-expand => { if (root.enabled && root.entry.expandable && !root.entry.expanded) { root.expansion(true); } }
+
+    pure function at(start: length, extent: length) -> length {
+        return root.rtl ? root.width - start - extent : start;
+    }
+
+    if root.selected && !root.multi : Rectangle {
+        x: root.at(0px, self.width);
+        width: 4px;
+        height: 16px;
+        border-radius: 2px;
+        background: root.enabled ? Palette.accent-background : Palette.foreground.with-alpha(0.36);
+    }
+    if root.multi : Rectangle {
+        x: root.at(root.selector-start, self.width);
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border-width: 1px;
+        border-color: !root.enabled ? Palette.foreground.with-alpha(0.28)
+            : root.selected || root.mixed ? Palette.accent-background : Palette.foreground.with-alpha(0.45);
+        background: !root.enabled ? transparent : root.selected || root.mixed ? Palette.accent-background
+            : checkbox-hit.pressed ? Palette.foreground.with-alpha(0.08) : transparent;
+        if root.selected || root.mixed : Image {
+            width: 16px;
+            height: 16px;
+            source: root.mixed ? @image-url("../../icons/subtract_16_regular.svg") : @image-url("../../icons/checkmark_16_regular.svg");
+            colorize: root.enabled ? Palette.accent-foreground : Palette.foreground.with-alpha(0.36);
+            accessible-role: none;
+        }
+    }
+    if root.entry.expandable : Image {
+        x: root.at(root.chevron-start + 10px, 12px);
+        width: 12px;
+        height: 12px;
+        source: root.entry.expanded ? @image-url("../../icons/chevron_down_16_regular.svg")
+            : root.rtl ? @image-url("../../icons/chevron_left_16_regular.svg") : @image-url("../../icons/chevron_right_16_regular.svg");
+        colorize: root.foreground;
+        accessible-role: none;
+    }
+    HorizontalLayout {
+        x: root.rtl ? 8px : root.text-start;
+        width: max(0px, root.width - root.text-start - 8px);
+        height: parent.height;
+        alignment: root.rtl ? end : start;
+        spacing: 8px;
+        if !root.rtl && root.shown-icon.width > 0 : Rectangle {
+            width: 16px;
+            Image { width: 16px; height: 16px; source: root.shown-icon; colorize: root.foreground; accessible-role: none; }
+        }
+        Text {
+            text: root.entry.item.label;
+            color: root.foreground;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            vertical-alignment: center;
+            horizontal-alignment: root.rtl ? right : left;
+            overflow: elide;
+            accessible-role: none;
+        }
+        if root.rtl && root.shown-icon.width > 0 : Rectangle {
+            width: 16px;
+            Image { width: 16px; height: 16px; source: root.shown-icon; colorize: root.foreground; accessible-role: none; }
+        }
+    }
+    if root.drop-target && root.drop-mode != TreeViewDropMode.inside : Rectangle {
+        y: root.drop-mode == TreeViewDropMode.before ? 0px : max(0px, parent.height - 2px);
+        height: 2px;
+        background: Palette.accent-background;
+    }
+
+    hit := TouchArea {
+        enabled: root.enabled;
+        property <bool> dragging;
+        clicked => { if (!self.dragging) { root.invoked(); } }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.cancel && self.dragging) {
+                self.dragging = false;
+                root.drag-cancelled();
+            }
+            if (event.kind == PointerEventKind.move && self.pressed && root.can-drag && event.touch-finger-id == 0) {
+                if (abs(self.mouse-x - self.pressed-x) >= 8px || abs(self.mouse-y - self.pressed-y) >= 8px) { self.dragging = true; }
+                if (self.dragging) { root.drag-moved(self.mouse-x, self.mouse-y); }
+            }
+            if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left && self.dragging) {
+                self.dragging = false;
+                root.drag-finished(self.mouse-x, self.mouse-y);
+            }
+        }
+    }
+    caret := TouchArea {
+        enabled: root.enabled && root.entry.expandable;
+        x: root.at(root.chevron-start, self.width);
+        width: 32px;
+        clicked => { root.expansion(!root.entry.expanded); }
+        if root.entry.expandable : Rectangle {
+            accessible-role: button;
+            accessible-label: root.entry.expanded ? @tr("Collapse {}", root.entry.item.label) : @tr("Expand {}", root.entry.item.label);
+            accessible-enabled: root.enabled;
+            accessible-action-default => { if (root.enabled) { root.expansion(!root.entry.expanded); } }
+        }
+    }
+    checkbox-hit := TouchArea {
+        enabled: root.enabled && root.multi;
+        x: root.at(root.selector-start - 4px, self.width);
+        width: 28px;
+        clicked => { root.checked(); }
+        if root.multi : Rectangle {
+            accessible-role: checkbox;
+            accessible-label: @tr("Select {}", root.entry.item.label);
+            accessible-enabled: root.enabled;
+            accessible-checkable: true;
+            accessible-checked: root.selected;
+            accessible-description: root.mixed ? @tr("Partially selected") : "";
+            accessible-action-default => { if (root.enabled) { root.checked(); } }
+        }
+    }
+}
+
+export component TreeView inherits Rectangle {
+    in-out property <[TreeViewItem]> items;
+    in-out property <[string]> selected-ids;
+    in-out property <[string]> expanded-ids;
+    in property <TreeViewSelectionMode> selection-mode: TreeViewSelectionMode.single;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <bool> can-drag-items: true;
+    in property <bool> can-reorder-items: true;
+    in property <string> accessible-name: @tr("Tree view");
+    out property <string> focused-id: key.has-focus ? root.active-id : "";
+
+    callback expanding(string);
+    callback collapsed(string);
+    callback item-invoked(string);
+    callback selection-changed();
+    callback items-reordered([string], string, TreeViewDropMode);
+
+    private property <[TreeViewRow]> rows: TreeViewBehavior.ready
+        ? TreeViewBehavior.layout(root.items, root.expanded-ids, root.selected-ids, root.selection-mode) : [];
+    private property <length> row-height: 28px;
+    private property <int> first: max(0, floor(-list.content-y / root.row-height) - 1);
+    private property <int> end: ceil((list.visible-height - list.content-y) / root.row-height) + 1;
+    private property <[TreeViewRow]> rendered: TreeViewBehavior.window(root.rows, root.first, root.end);
+    private property <string> active-id;
+    private property <int> active: TreeViewBehavior.find(root.rows, root.active-id);
+    private property <string> pressed;
+    private property <bool> focus-requested;
+    private property <[string]> dragged;
+    private property <string> drop-id;
+    private property <TreeViewDropMode> drop-mode;
+    private property <bool> drop-valid;
+
+    min-width: 72px;
+    min-height: root.row-height;
+    preferred-height: min(280px, max(root.row-height, root.rows.length * root.row-height));
+    forward-focus: key;
+    accessible-role: tree;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-item-count: root.rows.length;
+    accessible-delegate-focus: key.has-focus ? root.active : -1;
+    changed selected-ids => { root.selection-changed(); }
+
+    public function focus-item(id: string) {
+        let index = TreeViewBehavior.find(root.rows, id);
+        if (index >= 0) { root.take-focus(index); }
+    }
+
+    public function set-selected(id: string, selected: bool) {
+        root.selected-ids = TreeViewBehavior.set-selected(root.items, root.selected-ids, id, selected, root.selection-mode);
+    }
+
+    public function set-expanded(id: string, expanded: bool) {
+        let index = TreeViewBehavior.find(root.rows, id);
+        if (index < 0) { return; }
+        let row = root.rows[index];
+        if (!row.expandable || row.expanded == expanded) { return; }
+        root.expanded-ids = TreeViewBehavior.set-expanded(root.expanded-ids, id, expanded);
+        if (expanded) { root.expanding(id); }
+        else {
+            if (key.has-focus && root.active < 0) { root.take-focus(index); }
+            root.collapsed(id);
+        }
+    }
+
+    function take-focus(index: int) {
+        if (!root.enabled || index < 0 || index >= root.rows.length) { return; }
+        root.focus-requested = true;
+        root.set-focus(index);
+        key.focus();
+        root.focus-requested = false;
+    }
+
+    function set-focus(index: int) {
+        if (index < 0 || index >= root.rows.length) { return; }
+        root.active-id = root.rows[index].item.id;
+        let top = root.row-height * index;
+        let bottom = top + root.row-height;
+        if (top < -list.content-y) { list.content-y = -top; }
+        else if (bottom > -list.content-y + list.visible-height) {
+            list.content-y = min(0px, list.visible-height - bottom);
+        }
+    }
+
+    function invoke(index: int, toggle: bool) {
+        if (!root.enabled || index < 0 || index >= root.rows.length || root.rows[index].item.disabled) { return; }
+        let row = root.rows[index];
+        root.take-focus(index);
+        if (root.selection-mode == TreeViewSelectionMode.single) { root.set-selected(row.item.id, true); }
+        if (toggle && root.selection-mode == TreeViewSelectionMode.multiple) {
+            root.set-selected(row.item.id, row.check != TreeViewCheckState.checked);
+        } else { root.item-invoked(row.item.id); }
+    }
+
+    function move-on-axis(forward: bool) {
+        if (root.active < 0) { return; }
+        let row = root.rows[root.active];
+        if (forward && row.expandable && !row.expanded) { root.set-expanded(row.item.id, true); }
+        else if (forward && row.expanded) { root.focus-item(row.first-child); }
+        else if (!forward && row.expanded) { root.set-expanded(row.item.id, false); }
+        else if (!forward) { root.focus-item(row.item.parent-id); }
+    }
+
+    function move-items(ids: [string], target: string, mode: TreeViewDropMode) {
+        if (TreeViewBehavior.can-move(root.items, ids, target, mode)) {
+            root.items = TreeViewBehavior.move-items(root.items, ids, target, mode);
+            if (root.selection-mode == TreeViewSelectionMode.multiple) {
+                root.selected-ids = TreeViewBehavior.reconcile-selection(root.items, root.selected-ids);
+            }
+            if (mode == TreeViewDropMode.inside) { root.set-expanded(target, true); }
+            root.items-reordered(ids, target, mode);
+            root.focus-item(root.active-id);
+        }
+    }
+
+    function update-drag(row: TreeViewRow, x: length, y: length) {
+        if (root.dragged.length == 0) {
+            root.active-id = row.item.id;
+            root.dragged = root.selection-mode == TreeViewSelectionMode.multiple && row.check == TreeViewCheckState.checked
+                ? root.selected-ids : [row.item.id];
+        }
+        let index = floor(y / root.row-height);
+        root.drop-valid = false;
+        if (x < 0px || x > list.visible-width || y + list.content-y < 0px
+            || y + list.content-y > list.visible-height || index < 0 || index >= root.rows.length) { return; }
+        let destination = root.rows[index];
+        let local = y - index * root.row-height;
+        root.drop-id = destination.item.id;
+        root.drop-mode = local < 8px ? TreeViewDropMode.before
+            : local > root.row-height - 8px ? TreeViewDropMode.after : TreeViewDropMode.inside;
+        root.drop-valid = TreeViewBehavior.can-move(root.items, root.dragged, root.drop-id, root.drop-mode);
+    }
+
+    function clear-drag() {
+        root.dragged = [];
+        root.drop-valid = false;
+        root.drop-id = "";
+    }
+
+    list := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, root.rows.length * root.row-height);
+        horizontal-scrollbar-policy: always-off;
+        for entry in root.rendered : TreeRowPresenter {
+            x: 4px;
+            y: root.row-height * entry.index + 2px;
+            width: max(0px, list.visible-width - 8px);
+            height: root.row-height - 4px;
+            entry: entry;
+            mode: root.selection-mode;
+            rtl: root.rtl;
+            enabled: root.enabled && !entry.item.disabled;
+            focused: root.focused-id == entry.item.id;
+            can-drag: root.can-drag-items && root.can-reorder-items;
+            drop-target: root.drop-valid && root.drop-id == entry.item.id;
+            drop-mode: root.drop-mode;
+            invoked => { root.invoke(entry.index, false); }
+            expansion(expanded) => { root.take-focus(entry.index); root.set-expanded(entry.item.id, expanded); }
+            checked => { root.take-focus(entry.index); root.set-selected(entry.item.id, entry.check != TreeViewCheckState.checked); }
+            drag-moved(x, y) => { root.update-drag(entry, self.x + x, self.y + y); }
+            drag-finished(x, y) => {
+                root.update-drag(entry, self.x + x, self.y + y);
+                if (root.drop-valid) { root.move-items(root.dragged, root.drop-id, root.drop-mode); }
+                root.clear-drag();
+            }
+            drag-cancelled => { root.clear-drag(); }
+        }
+    }
+
+    key := FocusScope {
+        enabled: root.enabled && root.rows.length > 0;
+        width: 0px;
+        focus-on-click: false;
+        changed has-focus => {
+            root.pressed = "";
+            if (self.has-focus && !root.focus-requested && root.active < 0) {
+                let chosen = root.selected-ids.length > 0 ? TreeViewBehavior.find(root.rows, root.selected-ids[0]) : -1;
+                root.set-focus(chosen >= 0 ? chosen : TreeViewBehavior.next(root.rows, -1, true));
+            }
+        }
+        key-pressed(event) => {
+            if (event.text == Key.Escape && root.dragged.length > 0) { root.clear-drag(); return accept; }
+            if (event.text == Key.Return || event.text == Key.Space) {
+                if (!event.repeat && root.active >= 0) { root.pressed = root.active-id; }
+                return accept;
+            }
+            let down = event.text == Key.DownArrow;
+            let up = event.text == Key.UpArrow;
+            if (down || up) {
+                if (event.modifiers.alt && event.modifiers.shift && !event.modifiers.control && root.active >= 0 && root.can-reorder-items) {
+                    let row = root.rows[root.active];
+                    let sibling = down ? row.next-sibling : row.previous-sibling;
+                    if (sibling != "") {
+                        root.move-items([row.item.id], sibling, down ? TreeViewDropMode.after : TreeViewDropMode.before);
+                    }
+                } else { root.set-focus(TreeViewBehavior.next(root.rows, root.active, down)); }
+                return accept;
+            }
+            if (event.text == Key.Home || event.text == Key.End) {
+                let first = event.text == Key.Home;
+                root.set-focus(TreeViewBehavior.next(root.rows, first ? -1 : root.rows.length, first));
+                return accept;
+            }
+            if (event.text == Key.LeftArrow || event.text == Key.RightArrow) {
+                root.move-on-axis(event.text == (root.rtl ? Key.LeftArrow : Key.RightArrow));
+                return accept;
+            }
+            return reject;
+        }
+        key-released(event) => {
+            if (event.text == Key.Return || event.text == Key.Space) {
+                let id = root.pressed;
+                root.pressed = "";
+                if (id != "" && root.active-id == id) { root.invoke(root.active, event.text == Key.Space); }
+                return accept;
+            }
+            return reject;
+        }
+    }
+}

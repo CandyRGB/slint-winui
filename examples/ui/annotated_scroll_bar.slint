@@ -1,0 +1,156 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { AnnotatedScrollBar, AnnotatedScrollBarBehavior, AnnotatedScrollBarDetail, AnnotatedScrollBarLabel, AnnotatedScrollBarMarker, AnnotatedScrollBarScrollingKind } from "../../ui/components/scrolling/annotated_scroll_bar.slint";
+import { ScrollView, ScrollMode, ScrollBarVisibility } from "../../ui/components/scrolling/scroll_view.slint";
+import { ScrollControllerResult } from "../../ui/components/scrolling/scroll_controller.slint";
+
+export { AnnotatedScrollBarBehavior, AnnotatedScrollBarLabel, AnnotatedScrollBarMarker, AnnotatedScrollBarScrollingKind }
+
+export component AnnotatedScrollBarExample inherits Window {
+    title: "AnnotatedScrollBar";
+    background: #f3f3f3;
+    min-width: 684px;
+    preferred-height: 614px;
+    default-font-family: "Segoe UI";
+
+    in property <brush> accent: Palette.accent-background;
+    private property <bool> short-bar;
+    private property <bool> wide;
+    private property <bool> rtl;
+    private property <bool> cancel-requests;
+    private property <bool> custom-step;
+    private property <bool> long-preview;
+    private property <bool> preview-in-grid;
+    private property <int> columns: root.wide ? 4 : 1;
+    private property <length> extent: ceil(250 / root.columns) * 90px + 4px;
+    private property <string> kind;
+    private property <bool> step-request;
+    private property <int> requests;
+    private property <int> commits;
+    private property <int> last-completed;
+
+    pure function row-start(item: int) -> length {
+        return floor(item / root.columns) * 90px;
+    }
+
+    pure function color-name(offset: length) -> string {
+        return offset <= root.row-start(31) ? "Azure" : offset <= root.row-start(81) ? "Crimson"
+            : offset <= root.row-start(89) ? "Cyan" : offset <= root.row-start(159) ? "Fuchsia" : "Gold";
+    }
+
+    HorizontalLayout {
+        x: 24px;
+        y: 16px;
+        width: parent.width - 48px;
+        height: 32px;
+        spacing: 8px;
+        alignment: start;
+        Button { text: "Short rail"; clicked => { root.short-bar = !root.short-bar; } }
+        Button { text: "Four columns"; clicked => { root.wide = !root.wide; } }
+        Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+        Button { text: "Cancel scroll"; clicked => { root.cancel-requests = !root.cancel-requests; } }
+        Button { text: "Jump to Gold"; clicked => { grid.scroll-to(0px, root.row-start(160)); } }
+        Button { text: "Step 90"; clicked => { root.custom-step = !root.custom-step; } }
+    }
+
+    grid := ScrollView {
+        x: root.rtl ? 24px + bar.width + 4px : 24px;
+        y: 68px;
+        width: root.columns * 120px + 4px;
+        height: 500px;
+        label: "Color grid";
+        is-tab-stop: true;
+        horizontal-scroll-mode: ScrollMode.disabled;
+        vertical-scroll-bar-visibility: ScrollBarVisibility.hidden;
+        vertical-controller-dragging: bar.dragging;
+        extent-width: self.width;
+        extent-height: root.extent;
+        rtl: root.rtl;
+        background: #d3d3d3;
+        border-radius: 4px;
+        clip: true;
+        controller-scroll-completed(operation, result) => {
+            if result == ScrollControllerResult.completed { root.last-completed = operation.id; }
+        }
+        for index in 250: Rectangle {
+            x: 6px + Math.mod(index, root.columns) * 120px;
+            y: 6px + root.row-start(index);
+            width: 112px;
+            height: 82px;
+            border-radius: 4px;
+            background: index < 32 ? #f0ffff : index < 82 ? #dc143c : index < 90 ? #00ffff
+                : index < 160 ? #ff00ff : #ffd700;
+        }
+    }
+
+    bar := AnnotatedScrollBar {
+        x: root.rtl ? 24px : 28px + root.columns * 120px + 4px;
+        y: 68px;
+        width: self.preferred-width;
+        height: root.short-bar ? 144px : 500px;
+        minimum: grid.vertical-controller-state.minimum;
+        maximum: grid.vertical-controller-state.maximum;
+        viewport-size: grid.vertical-controller-state.viewport;
+        value: grid.vertical-controller-state.offset;
+        enabled: grid.vertical-controller-state.can-scroll;
+        show-inline-detail: false;
+        small-change: root.custom-step ? 90px : 0px;
+        rtl: root.rtl;
+        indicator-color: root.accent;
+        labels: [
+            { text: "Azure", offset: 0px },
+            { text: "Crimson", offset: root.row-start(32) },
+            { text: "Cyan", offset: root.row-start(82) },
+            { text: "Fuchsia", offset: root.row-start(90) },
+            { text: "Gold", offset: root.row-start(160) },
+        ];
+        detail-label-requested(offset) => {
+            let name = root.color-name(offset);
+            return root.long-preview ? name + " · Color group at this position in the collection. Scroll here to see matching tiles." : name;
+        }
+        scrolling(offset, kind) => {
+            root.requests += 1;
+            root.step-request = kind == AnnotatedScrollBarScrollingKind.increment-button
+                || kind == AnnotatedScrollBarScrollingKind.decrement-button;
+            root.kind = kind == AnnotatedScrollBarScrollingKind.click ? "click"
+                : kind == AnnotatedScrollBarScrollingKind.drag ? "drag"
+                : kind == AnnotatedScrollBarScrollingKind.increment-button ? "up" : "down";
+            return root.cancel-requests;
+        }
+        scroll-requested(offset) => {
+            root.commits += 1;
+            if root.step-request {
+                grid.controller-scroll-by(Orientation.vertical, offset - grid.vertical-controller-state.offset,
+                    { ignore-snap-points: true });
+            } else {
+                grid.controller-scroll-to(Orientation.vertical, offset, { ignore-snap-points: true });
+            }
+        }
+    }
+
+    Text {
+        x: 24px;
+        y: 588px;
+        text: "Offset \{round(bar.effective-value / 1px)} · Requests \{root.requests} · Accepted \{root.commits} · \{root.kind} · Completed \{root.last-completed}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+
+    HorizontalLayout {
+        x: root.width - 250px;
+        y: 576px;
+        width: 226px;
+        height: 32px;
+        spacing: 8px;
+        alignment: end;
+        Button { text: "Long preview"; clicked => { root.long-preview = !root.long-preview; } }
+        Button { text: "Grid bounds"; clicked => { root.preview-in-grid = !root.preview-in-grid; } }
+    }
+
+    AnnotatedScrollBarDetail {
+        detail: bar.detail;
+        viewport: root.preview-in-grid
+            ? { x: min(grid.x, bar.x), y: grid.y, width: grid.width + bar.width + 4px, height: grid.height }
+            : { x: 0px, y: 0px, width: root.width, height: root.height };
+    }
+}

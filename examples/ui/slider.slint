@@ -1,0 +1,109 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { Slider, SliderSnapsTo, SliderTickPlacement } from "../../ui/components/basic-input/slider.slint";
+
+export component SliderExample inherits Window {
+    title: "Slider";
+    min-width: 700px;
+    preferred-height: 520px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+    in property <color> accent: Palette.accent-background;
+
+    private property <bool> rtl;
+    private property <bool> reversed;
+    private property <bool> disabled;
+    private property <bool> show-tip: true;
+    private property <float> simple-value: 50;
+    private property <float> last-released: 50;
+    private property <int> change-count;
+
+    VerticalLayout {
+        padding: 40px;
+        spacing: 28px;
+        alignment: start;
+
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+            Button { text: "Reverse"; clicked => { root.reversed = !root.reversed; } }
+            Button { text: "Thumb tooltip"; clicked => { root.show-tip = !root.show-tip; } }
+            Button { text: "Disable"; clicked => { root.disabled = !root.disabled; } }
+            Button { text: "Set 51.7"; clicked => { root.simple-value = 51.7; } }
+        }
+        HorizontalLayout {
+            spacing: 36px;
+            alignment: start;
+            slider := Slider {
+                width: 200px;
+                accessible-name: "Simple example";
+                value <=> root.simple-value;
+                accent: root.accent;
+                rtl: root.rtl;
+                direction-reversed: root.reversed;
+                enabled: !root.disabled;
+                thumb-tooltip-enabled: root.show-tip;
+                value-changed(old, value) => { root.change-count += 1; }
+                released(v) => { root.last-released = v; }
+            }
+            Text {
+                text: "Value \{slider.value} · Events \{root.change-count} · Released \{root.last-released}";
+                color: Palette.foreground;
+                vertical-alignment: center;
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 36px;
+            Slider {
+                width: 290px;
+                header: "Snap to ticks";
+                minimum: 0;
+                maximum: 95;
+                value: 40;
+                small-change: 5;
+                tick-placement: SliderTickPlacement.outside;
+                tick-frequency: 20;
+                snaps-to: SliderSnapsTo.ticks;
+                accent: root.accent;
+                rtl: root.rtl;
+                direction-reversed: root.reversed;
+                enabled: !root.disabled;
+                thumb-tooltip-enabled: root.show-tip;
+            }
+            Slider {
+                width: 160px;
+                header: "Fractional steps";
+                minimum: 0.25;
+                maximum: 2.3;
+                value: 1;
+                small-change: 0.25;
+                step-frequency: 0.25;
+                tick-placement: SliderTickPlacement.inline;
+                tick-frequency: 0.25;
+                accent: root.accent;
+                enabled: !root.disabled;
+                thumb-tooltip-enabled: root.show-tip;
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            Slider {
+                width: 100px;
+                height: 100px;
+                accessible-name: "Vertical example";
+                orientation: Orientation.vertical;
+                minimum: -50;
+                maximum: 50;
+                value: 0;
+                tick-frequency: 10;
+                tick-placement: SliderTickPlacement.outside;
+                accent: root.accent;
+                rtl: root.rtl;
+                direction-reversed: root.reversed;
+                enabled: !root.disabled;
+                thumb-tooltip-enabled: root.show-tip;
+            }
+        }
+    }
+}

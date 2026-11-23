@@ -1,0 +1,423 @@
+import { Palette, ScrollView } from "std-widgets.slint";
+import { ScrollingTextInput, TextBoxField } from "text_box_field.slint";
+
+export struct AutoSuggestion {
+    id: string,
+    label: string,
+    suggested-text: string,
+}
+
+export enum AutoSuggestTextChangeReason { programmatic-change, user-input, suggestion-chosen }
+
+component AutoSuggestButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    border-radius: 4px;
+    background: !root.enabled ? transparent
+        : hit.pressed ? (root.dark ? #ffffff0a : #00000006)
+        : hit.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+
+    Image {
+        source: root.icon;
+        width: 12px;
+        height: 12px;
+        colorize: Palette.foreground.with-alpha(!root.enabled ? 0.36 : hit.pressed ? 0.60 : 0.84);
+        accessible-role: none;
+    }
+
+    hit := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component AutoSuggestRow inherits Rectangle {
+    in property <string> label;
+    in property <bool> highlighted;
+    in property <int> index;
+    callback invoked();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    height: 36px;
+    accessible-role: list-item;
+    accessible-label: root.label;
+    accessible-item-index: root.index;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.highlighted;
+    accessible-action-default => { root.invoked(); }
+
+    Rectangle {
+        x: 4px;
+        y: 2px;
+        width: max(0px, parent.width - 8px);
+        height: parent.height - 4px;
+        border-radius: 4px;
+        background: hit.pressed ? (root.dark ? #ffffff0a : #00000006)
+            : root.highlighted || hit.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+
+        if root.highlighted : Rectangle {
+            x: 0px;
+            width: 2px;
+            height: 16px;
+            border-radius: 1px;
+            background: Palette.accent-background;
+        }
+
+        Text {
+            x: 12px;
+            y: 0px;
+            width: max(0px, parent.width - 24px);
+            height: parent.height;
+            text: root.label;
+            color: Palette.foreground;
+            font-size: 14px;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+
+        hit := TouchArea {
+            clicked => { root.invoked(); }
+        }
+    }
+}
+
+export component AutoSuggestBox inherits Rectangle {
+    in-out property <string> text;
+    in property <[AutoSuggestion]> suggestions;
+    in property <string> header;
+    in property <string> placeholder-text;
+    in property <string> description;
+    in property <image> query-icon;
+    in property <bool> enabled: true;
+    in property <bool> update-text-on-select: true;
+    in property <length> maximum-suggestion-list-height: 374px;
+    in property <Size> popup-viewport;
+    out property <bool> has-focus: editor.has-focus;
+    out property <bool> is-suggestion-list-open: root.enabled && root.has-focus
+        && root.open-requested && root.suggestion-count > 0 && root.list-height > 4px;
+    out property <int> text-revision;
+
+    callback text-changed(text: string, reason: AutoSuggestTextChangeReason, revision: int);
+    callback suggestion-chosen(AutoSuggestion);
+    callback query-submitted(query: string, has-suggestion: bool, suggestion: AutoSuggestion);
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> text-color: root.enabled ? Palette.foreground : Palette.foreground.with-alpha(0.36);
+    private property <bool> open-requested;
+    private property <string> typed-text;
+    private property <string> published-text;
+    private property <int> highlighted: -1;
+    private property <AutoSuggestion> selected;
+    private property <int> suggestion-count: root.suggestions.length;
+    private property <length> content-height: 4px + root.suggestion-count * 36px;
+    private property <length> desired-list-height: root.maximum-suggestion-list-height < 0px ? root.content-height
+        : min(root.content-height, root.maximum-suggestion-list-height);
+    private property <length> space-above: max(0px, field.absolute-position.y - 2px);
+    private property <length> space-below: root.popup-viewport.height > 0px
+        ? max(0px, root.popup-viewport.height - field.absolute-position.y - field.height - 2px)
+        : root.desired-list-height;
+    private property <bool> above: root.space-below < root.desired-list-height && root.space-above > root.space-below;
+    private property <length> list-height: floor(min(root.desired-list-height,
+        root.above ? root.space-above : root.space-below) / 2px) * 2px;
+
+    min-width: 64px;
+    preferred-width: 224px;
+    height: layout.preferred-height;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    z: root.is-suggestion-list-open ? 1 : 0;
+    forward-focus: editor;
+
+    init => {
+        root.published-text = root.text;
+        root.typed-text = root.text;
+    }
+
+    changed text => {
+        if (root.text != root.published-text) {
+            root.typed-text = root.text;
+            root.clear-selection();
+            root.publish-text(root.text, AutoSuggestTextChangeReason.programmatic-change);
+        }
+    }
+    changed suggestions => { root.validate-selection(); }
+    changed suggestion-count => { root.validate-selection(); }
+    changed enabled => { if (!root.enabled) { root.close-suggestions(); } }
+
+    public function open-suggestions() {
+        if (root.enabled) {
+            editor.focus();
+            root.open-requested = true;
+        }
+    }
+
+    public function close-suggestions() {
+        root.open-requested = false;
+        root.clear-selection();
+    }
+
+    public pure function is-current(revision: int) -> bool {
+        return root.text-revision == revision;
+    }
+
+    public function submit-query() {
+        root.submit(false, {});
+    }
+
+    function clear-selection() {
+        root.highlighted = -1;
+        root.selected = {};
+    }
+
+    function validate-selection() {
+        if (root.highlighted >= 0 && (root.highlighted >= root.suggestion-count
+            || root.suggestions[root.highlighted] != root.selected)) {
+            root.restore-typed-text();
+        }
+    }
+
+    function publish-text(value: string, reason: AutoSuggestTextChangeReason) {
+        if (value != root.published-text) {
+            root.published-text = value;
+            if (root.text != root.published-text) {
+                root.text = root.published-text;
+            }
+            root.text-revision += 1;
+            root.text-changed(root.published-text, reason, root.text-revision);
+        }
+    }
+
+    function edit(value: string) {
+        root.clear-selection();
+        root.typed-text = value;
+        root.open-requested = true;
+        root.publish-text(value, AutoSuggestTextChangeReason.user-input);
+    }
+
+    function restore-typed-text() {
+        root.clear-selection();
+        root.publish-text(root.typed-text, AutoSuggestTextChangeReason.programmatic-change);
+    }
+
+    function choose(index: int) {
+        root.highlighted = index;
+        root.selected = root.suggestions[index];
+        if (root.update-text-on-select) {
+            root.publish-text(root.selected.suggested-text == "" ? root.selected.label : root.selected.suggested-text,
+                AutoSuggestTextChangeReason.suggestion-chosen);
+        }
+        root.suggestion-chosen(root.selected);
+        if (root.text != root.published-text) {
+            root.publish-text(root.text, AutoSuggestTextChangeReason.programmatic-change);
+        }
+        editor.select-all();
+        editor.clear-selection();
+    }
+
+    function move-selection(forward: bool) {
+        if (root.suggestion-count == 1 && root.highlighted == 0) {
+            return;
+        }
+        let next = root.highlighted < 0 ? (forward ? 0 : root.suggestion-count - 1)
+            : root.highlighted + (forward ? 1 : -1);
+        if (next < 0 || next >= root.suggestion-count) {
+            root.restore-typed-text();
+        } else {
+            root.choose(next);
+        }
+    }
+
+    function pick(index: int) {
+        if (root.is-suggestion-list-open && index >= 0 && index < root.suggestion-count) {
+            if (index != root.highlighted) {
+                root.choose(index);
+            }
+            root.submit(true, root.selected);
+        }
+    }
+
+    function submit(has-suggestion: bool, suggestion: AutoSuggestion) {
+        if (root.enabled) {
+            root.query-submitted(root.text, has-suggestion, suggestion);
+            root.typed-text = root.text;
+            root.close-suggestions();
+        }
+    }
+
+    layout := VerticalLayout {
+        spacing: 8px;
+
+        if root.header != "" : Text {
+            text: root.header;
+            font-size: 14px;
+            color: root.text-color;
+            accessible-role: none;
+        }
+
+        field := TextBoxField {
+            private property <bool> query-visible: root.query-icon.width > 0 && root.query-icon.height > 0;
+            private property <bool> clear-visible: root.enabled && root.has-focus && root.text != "";
+            private property <length> accessories: (self.query-visible ? 36px : 0px)
+                + (self.clear-visible ? 32px : 0px);
+            enabled: root.enabled;
+            editing: root.has-focus;
+
+            TouchArea {
+                enabled: root.enabled;
+                clicked => { editor.focus(); }
+            }
+
+            Rectangle {
+                x: 12px;
+                y: 0px;
+                width: max(1px, parent.width - self.x - (field.accessories > 0px ? field.accessories : 12px));
+                height: parent.height;
+                clip: true;
+
+                Text {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.text == "" && editor.preedit-text == "";
+                    text: root.placeholder-text;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                    color: Palette.foreground.with-alpha(root.enabled ? 0.60 : 0.36);
+                    overflow: elide;
+                    accessible-role: none;
+                }
+
+                editor := ScrollingTextInput {
+                    viewport-width: parent.width;
+                    height: parent.height;
+                    text <=> root.text;
+                    enabled: root.enabled;
+                    color: root.text-color;
+                    accessible-role: text-input;
+                    accessible-label: root.header != "" ? root.header : root.placeholder-text;
+                    accessible-placeholder-text: root.placeholder-text;
+                    accessible-enabled: root.enabled;
+                    accessible-value: self.text;
+                    accessible-expandable: true;
+                    accessible-expanded: root.is-suggestion-list-open;
+                    accessible-action-expand => { root.open-suggestions(); }
+                    accessible-action-set-value(value) => { if (root.enabled) { root.edit(value); } }
+                    accessible-action-set-selection-offsets(anchor, focus) => { self.set-selection-offsets(anchor, focus); }
+
+                    edited => { root.edit(self.text); }
+                    changed has-focus => {
+                        if (self.has-focus) {
+                            root.open-requested = root.text != "";
+                        } else {
+                            root.close-suggestions();
+                        }
+                    }
+
+                    key-pressed(event) => {
+                        if (root.is-suggestion-list-open && (event.text == Key.UpArrow || event.text == Key.DownArrow)) {
+                            root.move-selection(root.above ? event.text == Key.UpArrow : event.text == Key.DownArrow);
+                            return accept;
+                        }
+                        if (root.is-suggestion-list-open && (event.text == Key.Escape || event.text == Key.Tab || event.text == Key.Backtab)) {
+                            root.restore-typed-text();
+                            root.close-suggestions();
+                            return event.text == Key.Escape ? accept : reject;
+                        }
+                        if (event.text == Key.Return && self.preedit-text == "") {
+                            if (!event.repeat) {
+                                root.submit(root.is-suggestion-list-open && root.highlighted >= 0, root.selected);
+                            }
+                            return accept;
+                        }
+                        return reject;
+                    }
+                }
+            }
+
+            if field.query-visible : AutoSuggestButton {
+                x: parent.width - 34px;
+                y: 2px;
+                width: 32px;
+                height: 28px;
+                icon: root.query-icon;
+                label: @tr("Search");
+                enabled: root.enabled;
+                clicked => { root.submit-query(); }
+            }
+
+            if field.clear-visible : AutoSuggestButton {
+                x: parent.width - field.accessories + 2px;
+                y: 4px;
+                width: 28px;
+                height: 24px;
+                icon: @image-url("../../icons/dismiss_16_regular.svg");
+                label: @tr("Clear");
+                clicked => { root.edit(""); }
+            }
+        }
+
+        if root.description != "" : Text {
+            text: root.description;
+            font-size: 12px;
+            color: Palette.foreground.with-alpha(root.enabled ? 0.60 : 0.36);
+        }
+    }
+
+    if root.is-suggestion-list-open : Rectangle {
+        x: field.x;
+        y: root.above ? field.y - self.height - 2px : field.y + field.height + 2px;
+        width: field.width;
+        height: root.list-height;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: root.dark ? #00000033 : #0000000f;
+        background: root.dark ? #2c2c2c : #f9f9f9;
+        drop-shadow-color: root.dark ? #00000042 : #00000024;
+        drop-shadow-blur: 16px;
+        drop-shadow-offset-y: 8px;
+        accessible-role: list;
+        accessible-label: @tr("Suggestions");
+        accessible-item-count: root.suggestion-count;
+
+        ScrollView {
+            private property <int> target: root.highlighted < 0 ? -1
+                : root.above ? root.suggestion-count - 1 - root.highlighted : root.highlighted;
+            width: parent.width;
+            height: parent.height;
+            horizontal-scrollbar-policy: always-off;
+            content-width: self.visible-width;
+            content-height: max(root.content-height, self.visible-height);
+            content-y: root.above ? self.visible-height - self.content-height : 0px;
+
+            changed target => {
+                if (self.target >= 0) {
+                    let top = self.target * 36px + 2px;
+                    let wanted = min(top, max(-self.content-y, top + 36px - self.visible-height));
+                    self.content-y = -max(0px, min(wanted, self.content-height - self.visible-height));
+                }
+            }
+
+            VerticalLayout {
+                padding-top: 2px;
+                padding-bottom: 2px;
+                for suggestion[position] in root.suggestions : AutoSuggestRow {
+                    private property <int> suggestion-index: root.above ? root.suggestion-count - 1 - position : position;
+                    label: root.suggestions[self.suggestion-index].label;
+                    index: position;
+                    highlighted: self.suggestion-index == root.highlighted;
+                    invoked => { root.pick(self.suggestion-index); }
+                }
+            }
+        }
+    }
+}

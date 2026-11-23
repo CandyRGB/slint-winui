@@ -1,0 +1,526 @@
+import { Palette } from "std-widgets.slint";
+
+export enum TabViewWidthMode { equal, size-to-content, compact }
+export enum TabViewCloseButtonOverlayMode { auto, on-pointer-over }
+
+export struct TabViewItem { id: string, label: string, icon: image, non-closable: bool, disabled: bool }
+export struct TabViewMeasurement { label: string, width: length }
+export struct TabViewRow { item: TabViewItem, index: int, width: length, offset: length, compact: bool }
+export struct TabViewLayout { rows: [TabViewRow], selected-id: string, selected-index: int, total-width: length }
+
+export global TabViewBehavior {
+    in-out property <bool> ready;
+    pure callback measurements() -> [TabViewMeasurement];
+    callback measure([TabViewMeasurement], int, string, length);
+    pure callback layout([TabViewItem], [TabViewMeasurement], string, int, length, TabViewWidthMode) -> TabViewLayout;
+    pure callback find-adjacent([TabViewItem], int, bool, bool) -> int;
+    pure callback drop-index([TabViewRow], int, length) -> int;
+}
+
+component TabMeasure inherits Text {
+    in property <int> index;
+    in property <[TabViewMeasurement]> measurements;
+    private property <TabViewMeasurement> measured: { label: self.text, width: self.preferred-width };
+    font-family: "Segoe UI";
+    font-size: 12px;
+    visible: false;
+    init => { TabViewBehavior.measure(root.measurements, root.index, self.text, self.preferred-width); }
+    changed measured => { TabViewBehavior.measure(root.measurements, root.index, self.text, self.preferred-width); }
+}
+
+component TabCommand inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 16px;
+    in property <string> label;
+    in property <bool> enabled: true;
+    in property <bool> tab-stop: true;
+    callback invoked();
+    callback horizontal-key(KeyEvent) -> EventResult;
+    forward-focus: keys;
+
+    width: 32px;
+    height: 24px;
+    border-radius: 4px;
+    background: !root.enabled ? transparent : hit.pressed ? Palette.foreground.with-alpha(0.024)
+        : hit.has-hover ? Palette.foreground.with-alpha(0.06) : transparent;
+    border-width: keys.has-focus && root.enabled ? 2px : 0px;
+    border-color: Palette.foreground;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.invoked(); } }
+
+    Image {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        colorize: Palette.foreground.with-alpha(!root.enabled ? 0.36 : hit.pressed ? 0.62 : 0.9);
+        accessible-role: none;
+    }
+    hit := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            if (root.tab-stop) { keys.focus(); }
+            root.invoked();
+        }
+    }
+    keys := FocusScope {
+        focus-on-click: false;
+        enabled: root.enabled;
+        focus-on-tab-navigation: root.tab-stop;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == Key.Space) {
+                if (!event.repeat) { root.invoked(); }
+                return accept;
+            }
+            return root.horizontal-key(event);
+        }
+    }
+}
+
+component TabHeader inherits TouchArea {
+    in property <TabViewRow> entry;
+    in property <bool> selected;
+    in property <bool> focused;
+    in property <bool> hide-separator;
+    in property <bool> close-on-hover;
+    in property <bool> rtl;
+    callback invoked();
+    callback close-requested();
+    callback drag-moved(length, length);
+    callback drag-finished(length, length);
+    callback drag-cancelled();
+    private property <bool> dragging;
+    private property <bool> middle-pressed;
+    private property <bool> show-close: !root.entry.item.non-closable && (!root.close-on-hover || root.selected || root.has-hover);
+    private property <bool> has-icon: root.entry.item.icon.width > 0;
+    private property <length> label-start: 8px + (root.has-icon ? 26px : 0px);
+    private property <length> label-end: root.show-close ? 36px : 8px;
+    private property <brush> foreground: Palette.foreground.with-alpha(!root.enabled ? 0.36 : root.selected ? 0.9 : self.pressed ? 0.45 : 0.62);
+    enabled: !root.entry.item.disabled;
+    accessible-role: tab;
+    accessible-label: root.entry.item.label;
+    accessible-enabled: root.enabled;
+    accessible-item-index: root.entry.index;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.selected;
+    accessible-action-default => { if (root.enabled) { root.invoked(); } }
+
+    pointer-event(event) => {
+        if (event.kind == PointerEventKind.cancel) {
+            root.dragging = false;
+            root.middle-pressed = false;
+            root.drag-cancelled();
+        }
+        if (event.button == PointerEventButton.middle) {
+            if (event.kind == PointerEventKind.down) { root.middle-pressed = true; }
+            if (event.kind == PointerEventKind.up) {
+                let close = root.middle-pressed && !root.entry.item.non-closable
+                    && self.mouse-x >= 0px && self.mouse-x < self.width && self.mouse-y >= 0px && self.mouse-y < self.height;
+                root.middle-pressed = false;
+                if (close) { root.close-requested(); }
+            }
+        }
+        if (event.kind == PointerEventKind.move && self.pressed && event.touch-finger-id == 0) {
+            if (abs(self.mouse-x - self.pressed-x) >= 8px || abs(self.mouse-y - self.pressed-y) >= 8px) { root.dragging = true; }
+            if (root.dragging) { root.drag-moved(self.mouse-x, self.mouse-y); }
+        }
+        if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up && root.dragging) {
+            root.dragging = false;
+            root.drag-finished(self.mouse-x, self.mouse-y);
+        }
+    }
+    clicked => { if (!root.dragging) { root.invoked(); } }
+
+    Rectangle {
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+        background: root.selected ? transparent : root.pressed ? (Palette.color-scheme == ColorScheme.dark ? #3a3a3a73 : #ffffffb3)
+            : root.has-hover ? Palette.foreground.with-alpha(0.04) : transparent;
+    }
+    if !root.hide-separator && !root.has-hover && !root.pressed : Rectangle {
+        x: root.rtl ? 0px : parent.width - self.width;
+        width: 1px;
+        height: 16px;
+        background: Palette.foreground.with-alpha(0.08);
+    }
+    if root.has-icon : Image {
+        source: root.entry.item.icon;
+        x: root.rtl ? parent.width - 24px : 8px;
+        width: 16px;
+        height: 16px;
+        colorize: root.foreground;
+        accessible-role: none;
+    }
+    if !root.entry.compact : Text {
+        x: root.rtl ? root.label-end : root.label-start;
+        width: max(0px, parent.width - root.label-start - root.label-end);
+        height: parent.height;
+        text: root.entry.item.label;
+        font-family: "Segoe UI";
+        font-size: 12px;
+        font-weight: root.selected ? 600 : 400;
+        horizontal-alignment: root.rtl ? right : left;
+        vertical-alignment: center;
+        overflow: elide;
+        color: root.foreground;
+        accessible-role: none;
+    }
+    if root.show-close : TabCommand {
+        x: root.rtl ? 4px : parent.width - 36px;
+        enabled: root.enabled;
+        tab-stop: false;
+        label: @tr("Close {}", root.entry.item.label);
+        icon: @image-url("../../icons/dismiss_16_regular.svg");
+        invoked => { root.close-requested(); }
+    }
+    if root.focused && root.enabled : Rectangle {
+        x: 1px;
+        y: 1px;
+        width: max(0px, parent.width - 2px);
+        height: max(0px, parent.height - 2px);
+        border-width: 2px;
+        border-radius: 6px;
+        border-color: Palette.foreground;
+        accessible-role: none;
+    }
+}
+
+export component TabView inherits Rectangle {
+    slot tab-strip-header;
+    slot tab-strip-footer;
+    in property <[TabViewItem]> items;
+    in-out property <string> selected-id;
+    out property <int> selected-index: root.metrics.selected-index;
+    in property <TabViewWidthMode> width-mode: TabViewWidthMode.equal;
+    in property <TabViewCloseButtonOverlayMode> close-button-overlay-mode: TabViewCloseButtonOverlayMode.auto;
+    in property <bool> is-add-tab-button-visible: true;
+    in property <bool> can-reorder-tabs: true;
+    in property <bool> can-drag-tabs: false;
+    in property <bool> rtl;
+    in property <brush> content-background: Palette.color-scheme == ColorScheme.dark ? #282828 : #f9f9f9;
+    callback selection-changed(string);
+    callback add-tab-button-click();
+    callback tab-close-requested(string);
+    callback tab-reorder-requested(string, int);
+    callback tab-drag-starting(string);
+    callback tab-drag-completed(string);
+    callback tab-dropped-outside(string);
+
+    private property <[TabViewMeasurement]> measurements: TabViewBehavior.ready ? TabViewBehavior.measurements() : [];
+    private property <length> strip-height: max(40px, round(max(header-layout.preferred-height, footer-layout.preferred-height) / 2px) * 2px);
+    private property <length> slot-width-limit: min(floor(root.width / 6px) * 2px, floor(max(0px, root.width - 160px) / 4px) * 2px);
+    private property <length> header-width: max(2px, min(round(header-layout.preferred-width / 2px) * 2px, root.slot-width-limit));
+    private property <length> footer-width: min(round(footer-layout.preferred-width / 2px) * 2px, root.slot-width-limit);
+    private property <length> add-width: root.is-add-tab-button-visible ? 36px : 0px;
+    private property <length> available: max(0px, root.width - root.header-width - root.add-width - root.footer-width);
+    private property <int> last-index: -1;
+    private property <TabViewLayout> metrics: TabViewBehavior.ready ? TabViewBehavior.layout(root.items, root.measurements, root.selected-id, root.last-index, root.available, root.width-mode)
+        : { selected-index: -1 };
+    private property <string> current-id: root.metrics.selected-id;
+    private property <bool> overflowing: root.metrics.total-width > root.available + 1px;
+    private property <length> scroll-button-width: root.overflowing ? 44px : 0px;
+    private property <length> viewport-start: root.header-width + root.scroll-button-width;
+    private property <length> viewport-width: max(0px, min(root.metrics.total-width, root.available - 2 * root.scroll-button-width));
+    private property <length> max-scroll: max(0px, root.metrics.total-width - root.viewport-width);
+    private property <length> scroll-position;
+    private property <length> offset: clamp(root.scroll-position, 0px, root.max-scroll);
+    private property <int> focused-index: -1;
+    private property <string> dragged-id;
+    private property <int> drag-index: -1;
+    private property <int> drop-index: -1;
+    private property <length> drop-offset;
+    private property <length> drag-x;
+    private property <length> drag-y;
+    private property <brush> divider: Palette.foreground.with-alpha(0.06);
+
+    preferred-height: root.strip-height + content.preferred-height;
+    min-height: root.strip-height + content.min-height;
+    preferred-width: max(160px, content.preferred-width);
+    min-width: max(160px, content.min-width);
+
+    changed current-id => {
+        root.selected-id = root.current-id;
+        root.selection-changed(root.current-id);
+        root.reveal(root.selected-index);
+    }
+    changed selected-index => {
+        if (root.selected-index >= 0) { root.last-index = root.selected-index; }
+    }
+    changed max-scroll => { root.scroll-position = root.offset; }
+
+    public function focus-selected() {
+        if (root.selected-index >= 0) { root.focus-tab(root.selected-index); }
+    }
+
+    function reveal(index: int) {
+        if (index >= 0 && index < root.metrics.rows.length && root.viewport-width > 0px) {
+            let row = root.metrics.rows[index];
+            if (row.offset < root.offset || row.width > root.viewport-width) { root.scroll-position = row.offset; }
+            else if (row.offset + row.width > root.offset + root.viewport-width) {
+                root.scroll-position = clamp(row.offset + row.width - root.viewport-width, 0px, root.max-scroll);
+            }
+        }
+    }
+    function scroll-by(delta: length) { root.scroll-position = clamp(root.offset + delta, 0px, root.max-scroll); }
+    function scroll-wheel(event: PointerScrollEvent) -> EventResult {
+        if (!root.overflowing) { return reject; }
+        let delta = abs(event.delta-x) > abs(event.delta-y) ? (root.rtl ? -event.delta-x : event.delta-x) : event.delta-y;
+        root.scroll-by(-delta);
+        return accept;
+    }
+    function focus-tab(index: int) {
+        if (index >= 0) {
+            root.focused-index = index;
+            strip-keys.focus();
+            root.reveal(index);
+        }
+    }
+    function select-tab(index: int) {
+        if (index >= 0 && index < root.items.length && !root.items[index].disabled) {
+            root.selected-id = root.items[index].id;
+            root.focus-tab(index);
+        }
+    }
+    function close-tab(index: int) {
+        if (index >= 0 && index < root.items.length && !root.items[index].non-closable && !root.items[index].disabled) {
+            let focused = strip-keys.has-focus;
+            root.tab-close-requested(root.items[index].id);
+            if (focused) { root.focus-selected(); }
+        }
+    }
+    function update-drop(x: length, y: length) {
+        root.drag-x = x;
+        root.drag-y = y;
+        if (root.can-reorder-tabs && y >= 0px && y <= root.strip-height) {
+            let target = TabViewBehavior.drop-index(root.metrics.rows, root.drag-index, x + root.offset);
+            root.drop-index = target;
+            if (target >= 0 && target < root.metrics.rows.length) {
+                let row = root.metrics.rows[target];
+                root.drop-offset = row.offset + (target > root.drag-index ? row.width : 0px);
+            }
+        } else { root.drop-index = -1; }
+    }
+    function clear-drag() {
+        root.dragged-id = "";
+        root.drag-index = -1;
+        root.drop-index = -1;
+    }
+    function finish-drag(x: length, y: length, cancelled: bool) {
+        let id = root.dragged-id;
+        if (id == "") { return; }
+        root.update-drop(x, y);
+        let target = root.drop-index;
+        let origin = root.drag-index;
+        root.clear-drag();
+        if (!cancelled) {
+            if (root.can-drag-tabs && (y < -16px || y > root.strip-height + 16px || x + root.viewport-start < -16px || x + root.viewport-start > root.width + 16px)) {
+                root.tab-dropped-outside(id);
+            } else if (target >= 0 && target != origin) { root.tab-reorder-requested(id, target); }
+        }
+        if (root.can-drag-tabs) { root.tab-drag-completed(id); }
+    }
+
+    for item[index] in (TabViewBehavior.ready ? root.items : []) : TabMeasure {
+        text: item.label;
+        font-weight: item.id == root.current-id ? 600 : 400;
+        index: index;
+        measurements: root.measurements;
+    }
+
+    shortcuts := FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            if (event.modifiers.control && (event.text == Key.Tab || event.text == Key.Backtab)) {
+                let forward = !event.modifiers.shift && event.text != Key.Backtab;
+                root.select-tab(TabViewBehavior.find-adjacent(root.items, root.selected-index, forward, true));
+                return accept;
+            }
+            if (event.modifiers.control && event.text == Key.F4) {
+                if (!event.repeat) { root.close-tab(root.selected-index); }
+                return accept;
+            }
+            return reject;
+        }
+        Rectangle {
+            y: root.strip-height;
+            height: max(0px, parent.height - self.y);
+            background: root.content-background;
+            accessible-role: tab-panel;
+
+            content := VerticalLayout { @children }
+        }
+        Rectangle {
+            width: parent.width;
+            height: 1px;
+            y: root.strip-height - 1px;
+            background: root.divider;
+        }
+        Rectangle {
+            x: root.rtl ? parent.width - root.header-width : 0px;
+            width: root.header-width;
+            height: root.strip-height;
+            clip: true;
+            header-layout := HorizontalLayout { alignment: start; tab-strip-header { } }
+        }
+        Rectangle {
+            x: root.rtl ? 0px : parent.width - root.footer-width;
+            width: root.footer-width;
+            height: root.strip-height;
+            clip: true;
+            footer-layout := HorizontalLayout { alignment: end; tab-strip-footer { } }
+        }
+        if root.overflowing : TabCommand {
+            x: root.rtl ? parent.width - root.header-width - 36px : root.header-width + 8px;
+            y: root.strip-height - 28px;
+            enabled: root.offset > 0px;
+            tab-stop: false;
+            label: @tr("Scroll toward the first tab");
+            icon-size: 12px;
+            icon: root.rtl ? @image-url("../../icons/chevron_right_16_regular.svg") : @image-url("../../icons/chevron_left_16_regular.svg");
+            invoked => { root.scroll-by(-max(48px, round(root.viewport-width / 4px) * 2px)); }
+        }
+        rail := TouchArea {
+            x: root.rtl ? parent.width - root.viewport-start - self.width : root.viewport-start;
+            y: root.strip-height - 32px;
+            width: root.viewport-width;
+            height: 32px;
+            accessible-role: tab-list;
+            accessible-item-count: root.items.length;
+            accessible-orientation: Orientation.horizontal;
+            accessible-delegate-focus: strip-keys.has-focus ? root.focused-index : root.selected-index;
+            scroll-event(event) => { return root.scroll-wheel(event); }
+
+            Rectangle {
+                clip: true;
+                if root.selected-index >= 0 : Rectangle {
+                    property <TabViewRow> entry: root.metrics.rows[root.selected-index];
+                    x: root.rtl ? parent.width - (self.entry.offset - root.offset) - self.entry.width : self.entry.offset - root.offset;
+                    width: self.entry.width;
+                    height: parent.height + 1px;
+                    border-top-left-radius: 8px;
+                    border-top-right-radius: 8px;
+                    border-width: 1px;
+                    border-color: root.divider;
+                    background: root.content-background;
+
+                    // The selected header turns outward where it meets the content.
+                    Path {
+                        x: -4px;
+                        y: 28px;
+                        width: 4px;
+                        height: 4px;
+                        viewbox-width: 4;
+                        viewbox-height: 4;
+                        fill: root.content-background;
+                        stroke: root.divider;
+                        stroke-width: 1px;
+                        commands: "M0 4 A4 4 0 0 0 4 0 L4 4";
+                    }
+                    Path {
+                        x: parent.width;
+                        y: 28px;
+                        width: 4px;
+                        height: 4px;
+                        viewbox-width: 4;
+                        viewbox-height: 4;
+                        fill: root.content-background;
+                        stroke: root.divider;
+                        stroke-width: 1px;
+                        commands: "M0 4 L0 0 A4 4 0 0 0 4 4";
+                    }
+                }
+                for row in root.metrics.rows : TabHeader {
+                    x: root.rtl ? parent.width - (row.offset - root.offset) - row.width : row.offset - root.offset;
+                    width: row.width;
+                    height: parent.height;
+                    entry: row;
+                    rtl: root.rtl;
+                    selected: row.index == root.selected-index;
+                    focused: strip-keys.has-focus && row.index == root.focused-index;
+                    hide-separator: row.index == root.selected-index || row.index + 1 == root.selected-index || row.index + 1 == root.items.length;
+                    close-on-hover: root.close-button-overlay-mode == TabViewCloseButtonOverlayMode.on-pointer-over;
+                    invoked => { root.select-tab(row.index); }
+                    close-requested => { root.close-tab(row.index); }
+                    drag-moved(x, y) => {
+                        if (root.can-reorder-tabs || root.can-drag-tabs) {
+                            if (root.dragged-id == "") {
+                                root.dragged-id = row.item.id;
+                                root.drag-index = row.index;
+                                if (root.can-drag-tabs) { root.tab-drag-starting(row.item.id); }
+                            }
+                            let rail-x = root.rtl ? rail.width - self.x - x : self.x + x;
+                            root.update-drop(rail-x, self.y + y + rail.y);
+                        }
+                    }
+                    drag-finished(x, y) => { root.finish-drag(root.rtl ? rail.width - self.x - x : self.x + x, self.y + y + rail.y, false); }
+                    drag-cancelled => { root.finish-drag(root.drag-x, root.drag-y, true); }
+                }
+                if root.drop-index >= 0 && root.drop-index != root.drag-index : Rectangle {
+                    x: clamp(root.rtl ? rail.width - root.drop-offset + root.offset : root.drop-offset - root.offset, 0px, max(0px, rail.width - 2px));
+                    width: 2px;
+                    height: parent.height;
+                    background: Palette.accent-background;
+                }
+            }
+            strip-keys := FocusScope {
+                width: 0px;
+                enabled: root.selected-index >= 0;
+                focus-on-click: false;
+                changed has-focus => { if (self.has-focus && root.focused-index < 0) { root.focused-index = root.selected-index; } }
+                key-pressed(event) => {
+                    if (event.modifiers.control) { return reject; }
+                    if (event.text == Key.LeftArrow || event.text == Key.RightArrow) {
+                        let forward = event.text == (root.rtl ? Key.LeftArrow : Key.RightArrow);
+                        if (event.modifiers.alt && event.modifiers.shift && root.can-reorder-tabs) {
+                            let other = root.focused-index + (forward ? 1 : -1);
+                            if (other >= 0 && other < root.items.length && root.focused-index >= 0) {
+                                root.tab-reorder-requested(root.items[root.focused-index].id, other);
+                                root.focus-tab(other);
+                            }
+                        } else {
+                            let next = TabViewBehavior.find-adjacent(root.items, root.focused-index, forward, false);
+                            if (next >= 0) { root.focus-tab(next); }
+                            else if (forward && root.is-add-tab-button-visible) { add.focus(); }
+                        }
+                        return accept;
+                    }
+                    if (event.text == Key.Space || event.text == Key.Return) {
+                        if (!event.repeat) { root.select-tab(root.focused-index); }
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+        }
+        if root.overflowing : TabCommand {
+            property <length> start: root.viewport-start + root.viewport-width + 4px;
+            x: root.rtl ? parent.width - self.start - self.width : self.start;
+            y: root.strip-height - 28px;
+            enabled: root.offset < root.max-scroll;
+            tab-stop: false;
+            label: @tr("Scroll toward the last tab");
+            icon-size: 12px;
+            icon: root.rtl ? @image-url("../../icons/chevron_left_16_regular.svg") : @image-url("../../icons/chevron_right_16_regular.svg");
+            invoked => { root.scroll-by(max(48px, round(root.viewport-width / 4px) * 2px)); }
+        }
+        add := TabCommand {
+            property <length> start: root.viewport-start + root.viewport-width + root.scroll-button-width + 4px;
+            x: root.rtl ? parent.width - self.start - self.width : self.start;
+            y: root.strip-height - 28px;
+            visible: root.is-add-tab-button-visible;
+            enabled: root.is-add-tab-button-visible;
+            label: @tr("Add new tab");
+            icon: @image-url("../../icons/add_16_regular.svg");
+            invoked => { root.add-tab-button-click(); }
+            horizontal-key(event) => {
+                if (!event.modifiers.control && event.text == (root.rtl ? Key.RightArrow : Key.LeftArrow)) {
+                    root.focus-tab(TabViewBehavior.find-adjacent(root.items, root.items.length, false, false));
+                    return accept;
+                }
+                return reject;
+            }
+        }
+    }
+}

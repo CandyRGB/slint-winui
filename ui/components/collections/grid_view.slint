@@ -1,0 +1,470 @@
+import { Palette, ScrollView } from "std-widgets.slint";
+import { ButtonFocusVisual } from "../basic-input/button_input.slint";
+
+export struct GridViewItem {
+    id: string,
+    title: string,
+    description: string,
+    image: image,
+    disabled: bool,
+}
+
+export enum GridViewSelectionMode { none, single, multiple, extended }
+export enum GridViewPresentation { image, text, image-and-text }
+
+export global GridViewBehavior {
+    in property <bool> ready;
+    pure callback index-of([GridViewItem], string) -> int;
+    pure callback adjacent([GridViewItem], int, int, int, int) -> int;
+    pure callback range([GridViewItem], [string], int, int) -> [string];
+    pure callback reconcile([GridViewItem], [string], GridViewSelectionMode) -> [string];
+    pure callback mark([string], string, bool) -> [string];
+    pure callback reorder([GridViewItem], [string], int) -> [GridViewItem];
+}
+
+component GridViewTile inherits Rectangle {
+    in property <GridViewItem> item;
+    in property <int> index;
+    in property <int> count;
+    in property <bool> enabled;
+    in property <bool> selectable;
+    in property <bool> selected;
+    in property <bool> focused;
+    in property <bool> show-check;
+    in property <bool> rtl;
+    in property <color> accent;
+    in property <GridViewPresentation> presentation;
+    in property <bool> dragging;
+    callback invoked(KeyboardModifiers);
+    callback requested-selection();
+    callback pressed();
+    callback dragged(length, length, length, length);
+    callback released();
+    callback cancelled();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> accent-fill: !root.enabled ? (root.dark ? #ffffff28 : #00000037)
+        : root.accent.with-alpha(hit.pressed ? 0.8 : hit.has-hover ? 0.9 : 1);
+    private property <bool> photo: root.item.image.width > 0 && root.presentation == GridViewPresentation.image;
+
+    border-radius: 4px;
+    background: hit.pressed || root.selected ? (root.dark ? #ffffff0a : #00000006)
+        : hit.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+    accessible-role: list-item;
+    accessible-label: root.item.title;
+    accessible-item-index: root.index;
+    accessible-item-count: root.count;
+    accessible-item-selectable: root.selectable;
+    accessible-item-selected: root.selected;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.requested-selection(); }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: 4px;
+        clip: true;
+        opacity: root.dragging ? 0.6 : root.enabled ? 1 : 0.55;
+
+        if root.photo: Image {
+            x: 0px; y: 0px;
+            width: parent.width;
+            height: parent.height;
+            source: root.item.image;
+            image-fit: cover;
+            accessible-role: none;
+        }
+        if !root.photo: HorizontalLayout {
+            padding: 12px;
+            spacing: 8px;
+            if root.presentation == GridViewPresentation.image-and-text && root.item.image.width > 0: Image {
+                width: 54px;
+                source: root.item.image;
+                image-fit: cover;
+                accessible-role: none;
+            }
+            VerticalLayout {
+                spacing: 4px;
+                alignment: center;
+                Text {
+                    text: root.item.title;
+                    font-family: "Segoe UI Variable Text";
+                    font-size: 14px;
+                    horizontal-alignment: root.rtl ? right : left;
+                    color: Palette.foreground;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+                if root.presentation == GridViewPresentation.image-and-text && root.item.description != "": Text {
+                    text: root.item.description;
+                    font-family: "Segoe UI Variable Text";
+                    font-size: 12px;
+                    horizontal-alignment: root.rtl ? right : left;
+                    color: Palette.foreground.with-alpha(0.6);
+                    wrap: word-wrap;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+            }
+        }
+    }
+
+    if root.selected || (root.enabled && hit.has-hover && !hit.pressed): Rectangle {
+        border-width: root.selected ? 2px : 1px;
+        border-radius: 4px;
+        border-color: root.selected ? root.accent-fill : (root.dark ? #ffffff37 : #00000037);
+        if root.selected: Rectangle {
+            x: 2px; y: 2px;
+            width: max(0px, parent.width - 4px);
+            height: max(0px, parent.height - 4px);
+            border-width: 2px;
+            border-radius: 4px;
+            border-color: root.dark ? #454545 : white;
+        }
+    }
+    if root.show-check && (root.selected || hit.has-hover || root.focused): Rectangle {
+        x: root.rtl ? 6px : parent.width - 26px;
+        y: 6px;
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border-width: root.selected ? 0px : 1px;
+        border-color: root.dark ? #ffffff8b : #00000072;
+        background: root.selected ? root.accent-fill : (root.dark ? #1e1e1ee6 : #ffffffe6);
+        if root.selected: Image {
+            source: @image-url("../../icons/checkbox_checkmark.svg");
+            colorize: root.dark ? black : white;
+            accessible-role: none;
+        }
+    }
+    if root.focused: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+    }
+
+    hit := TouchArea {
+        enabled: root.enabled;
+        private property <KeyboardModifiers> modifiers;
+        clicked => { root.invoked(self.modifiers); }
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                self.modifiers = event.modifiers;
+                root.pressed();
+            }
+            if event.kind == PointerEventKind.move && self.pressed && event.touch-finger-id == 0 {
+                root.dragged(self.mouse-x, self.mouse-y, self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+            }
+            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left { root.released(); }
+            if event.kind == PointerEventKind.cancel { root.cancelled(); }
+        }
+    }
+}
+
+export component GridView inherits Rectangle {
+    in-out property <[GridViewItem]> items;
+    in-out property <[string]> selected-ids;
+    in property <GridViewSelectionMode> selection-mode: GridViewSelectionMode.single;
+    in property <GridViewPresentation> presentation: GridViewPresentation.image;
+    in property <Orientation> orientation: Orientation.horizontal;
+    in property <length> item-width: 190px;
+    in property <length> item-height: 130px;
+    in property <length> column-spacing: 4px;
+    in property <length> row-spacing: 4px;
+    in property <int> maximum-rows-or-columns: -1;
+    in property <bool> rtl;
+    in property <bool> enabled: true;
+    in property <bool> item-click-enabled;
+    in property <bool> single-selection-follows-focus: true;
+    in property <bool> multi-select-check-box-enabled: true;
+    in property <bool> can-drag-items;
+    in property <bool> can-reorder-items;
+    in property <bool> allow-drop;
+    in property <color> accent: Palette.accent-background;
+    in property <string> accessible-name: @tr("Grid view");
+    out property <int> focused-index: key.has-focus ? root.active : -1;
+    out property <int> track-count: root.lanes;
+    out property <int> realized-count: root.last-index - root.first-index;
+
+    callback item-clicked(GridViewItem);
+    callback selection-changed();
+    callback items-reordered([string], int);
+
+    private property <int> count: root.items.length;
+    private property <bool> behavior-ready: GridViewBehavior.ready;
+    private property <bool> column-major: root.orientation == Orientation.vertical;
+    private property <length> cell-width: max(2px, root.item-width);
+    private property <length> cell-height: max(2px, root.item-height);
+    private property <length> column-gap: max(0px, root.column-spacing);
+    private property <length> row-gap: max(0px, root.row-spacing);
+    private property <length> column-pitch: root.cell-width + root.column-gap;
+    private property <length> row-pitch: root.cell-height + root.row-gap;
+    private property <length> cross-extent: root.column-major ? list.visible-height : list.visible-width;
+    private property <int> fits: max(1, floor((root.cross-extent + (root.column-major ? root.row-gap : root.column-gap))
+        / (root.column-major ? root.row-pitch : root.column-pitch)));
+    private property <int> lanes: root.maximum-rows-or-columns > 0 ? min(root.fits, root.maximum-rows-or-columns) : root.fits;
+    private property <int> lines: ceil(root.count / root.lanes);
+    private property <length> main-pitch: root.column-major ? root.column-pitch : root.row-pitch;
+    private property <length> main-viewport: root.column-major ? list.visible-width : list.visible-height;
+    private property <length> main-content: max(root.main-viewport, root.lines * root.main-pitch
+        - (root.column-major ? root.column-gap : root.row-gap));
+    private property <length> scroll-offset: max(0px, root.column-major
+        ? (root.rtl ? root.main-content - list.visible-width + list.content-x : -list.content-x) : -list.content-y);
+    private property <int> first-index: min(root.count, max(0, floor(root.scroll-offset / root.main-pitch) - 1) * root.lanes);
+    private property <int> last-index: max(root.first-index,
+        min(root.count, (ceil((root.scroll-offset + root.main-viewport) / root.main-pitch) + 1) * root.lanes));
+    private property <string> active-id;
+    private property <string> anchor-id;
+    private property <int> active: !GridViewBehavior.ready || root.active-id == "" ? -1
+        : GridViewBehavior.index-of(root.items, root.active-id);
+    private property <bool> keyboard-focus;
+    private property <[string]> dragged-ids;
+    private property <int> insertion: -1;
+    private property <length> insertion-x;
+    private property <length> insertion-y;
+    private property <bool> reorder-enabled: root.enabled && root.can-drag-items && root.can-reorder-items && root.allow-drop;
+
+    min-width: 40px;
+    min-height: 40px;
+    preferred-width: 656px;
+    preferred-height: 268px;
+    forward-focus: key;
+    accessible-role: AccessibleRole.list;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-item-count: root.count;
+    accessible-delegate-focus: root.focused-index;
+
+    changed items => { root.normalize-selection(); root.clear-drag(); }
+    changed count => { root.normalize-selection(); root.clear-drag(); }
+    changed behavior-ready => { root.normalize-selection(); }
+    changed selection-mode => { root.normalize-selection(); }
+    changed selected-ids => { root.normalize-selection(); root.selection-changed(); }
+    changed orientation => { root.restore-scroll(); }
+    changed rtl => { root.restore-scroll(); }
+    changed enabled => { if !root.enabled { root.clear-drag(); key.clear-focus(); } }
+
+    pure function item-x(index: int) -> length {
+        let column = root.column-major ? floor(index / root.lanes) : Math.mod(index, root.lanes);
+        let width = root.column-major ? root.main-content : list.visible-width;
+        return root.rtl ? width - root.cell-width - column * root.column-pitch : column * root.column-pitch;
+    }
+
+    pure function item-y(index: int) -> length {
+        let row = root.column-major ? Math.mod(index, root.lanes) : floor(index / root.lanes);
+        return row * root.row-pitch;
+    }
+
+    function normalize-selection() {
+        if GridViewBehavior.ready {
+            root.selected-ids = GridViewBehavior.reconcile(root.items, root.selected-ids, root.selection-mode);
+        }
+    }
+
+    public function scroll-into-view(index: int) {
+        if index < 0 || index >= root.count { return; }
+        if root.column-major {
+            let x = root.item-x(index);
+            if x < -list.content-x { list.content-x = -x; }
+            else if x + root.cell-width > list.visible-width - list.content-x {
+                list.content-x = min(0px, list.visible-width - x - root.cell-width);
+            }
+        } else {
+            let y = root.item-y(index);
+            if y < -list.content-y { list.content-y = -y; }
+            else if y + root.cell-height > list.visible-height - list.content-y {
+                list.content-y = min(0px, list.visible-height - y - root.cell-height);
+            }
+        }
+    }
+
+    function restore-scroll() {
+        list.content-y = 0px;
+        list.content-x = root.column-major && root.rtl ? list.visible-width - root.main-content : 0px;
+        if root.active >= 0 { root.scroll-into-view(root.active); }
+    }
+
+    function focus-item(index: int) {
+        if index >= 0 && index < root.count && !root.items[index].disabled {
+            root.active-id = root.items[index].id;
+            root.scroll-into-view(index);
+        }
+    }
+
+    function set-selection(index: int, extend: bool, toggle: bool) {
+        if root.selection-mode == GridViewSelectionMode.none || index < 0 || index >= root.count || root.items[index].disabled {
+            return;
+        }
+        let anchor = root.anchor-id == "" ? -1 : GridViewBehavior.index-of(root.items, root.anchor-id);
+        if extend && root.selection-mode == GridViewSelectionMode.extended && anchor >= 0 {
+            root.selected-ids = GridViewBehavior.range(root.items, toggle ? root.selected-ids : [], anchor, index);
+        } else {
+            root.anchor-id = root.items[index].id;
+            if toggle && root.selection-mode != GridViewSelectionMode.single {
+                let marked = root.selected-ids.index-of(root.anchor-id) < 0;
+                root.selected-ids = GridViewBehavior.mark(root.selected-ids, root.anchor-id, marked);
+            } else {
+                root.selected-ids = GridViewBehavior.reconcile(root.items, [root.anchor-id], root.selection-mode);
+            }
+        }
+    }
+
+    function click-item(index: int, modifiers: KeyboardModifiers) {
+        if root.dragged-ids.length > 0 || !root.enabled || root.items[index].disabled { return; }
+        root.keyboard-focus = false;
+        root.focus-item(index);
+        key.focus();
+        root.set-selection(index, modifiers.shift, root.selection-mode == GridViewSelectionMode.multiple || modifiers.control);
+        if root.item-click-enabled { root.item-clicked(root.items[index]); }
+    }
+
+    function update-drag(index: int, x: length, y: length, dx: length, dy: length) {
+        if !root.reorder-enabled || (root.dragged-ids.length == 0 && max(abs(dx), abs(dy)) < 8px) { return; }
+        if root.dragged-ids.length == 0 {
+            let id = root.items[index].id;
+            root.dragged-ids = root.selected-ids.index-of(id) >= 0 ? root.selected-ids : [id];
+        }
+        let local-x = x + list.content-x;
+        let local-y = y + list.content-y;
+        root.insertion = -1;
+        if local-x < 0px || local-x >= list.visible-width || local-y < 0px || local-y >= list.visible-height { return; }
+        let grid-x = root.rtl ? (root.column-major ? root.main-content : list.visible-width) - x : x;
+        let column = max(0, floor(grid-x / root.column-pitch));
+        let row = max(0, floor(y / root.row-pitch));
+        let candidate = root.column-major ? column * root.lanes + row : row * root.lanes + column;
+        if (root.column-major ? row : column) >= root.lanes { return; }
+        let target = min(root.count - 1, candidate);
+        let after = root.column-major ? y - root.item-y(target) >= root.cell-height / 2
+            : root.rtl ? x - root.item-x(target) < root.cell-width / 2 : x - root.item-x(target) >= root.cell-width / 2;
+        root.insertion = target + (after ? 1 : 0);
+        root.insertion-x = root.item-x(target) + (!root.column-major && (after != root.rtl) ? root.cell-width : 0px);
+        root.insertion-y = root.item-y(target) + (root.column-major && after ? root.cell-height : 0px);
+    }
+
+    function clear-drag() {
+        root.dragged-ids = [];
+        root.insertion = -1;
+    }
+
+    function finish-drag() {
+        if root.insertion >= 0 && root.dragged-ids.length > 0 {
+            let ids = root.dragged-ids;
+            let target = root.insertion;
+            root.items = GridViewBehavior.reorder(root.items, ids, target);
+            root.items-reordered(ids, target);
+            if root.active >= 0 { root.scroll-into-view(root.active); }
+        }
+        root.clear-drag();
+    }
+
+    list := ScrollView {
+        x: 0px; y: 0px;
+        width: root.width;
+        height: root.height;
+        horizontal-scrollbar-policy: root.column-major ? as-needed : always-off;
+        vertical-scrollbar-policy: root.column-major ? always-off : as-needed;
+        content-width: root.column-major ? root.main-content : self.visible-width;
+        content-height: root.column-major ? self.visible-height : root.main-content;
+
+        for slot in root.realized-count: GridViewTile {
+            index: root.first-index + slot;
+            count: root.count;
+            item: root.items[self.index];
+            x: root.item-x(self.index);
+            y: root.item-y(self.index);
+            width: root.cell-width;
+            height: root.cell-height;
+            enabled: root.enabled && !self.item.disabled;
+            selectable: root.selection-mode != GridViewSelectionMode.none;
+            selected: self.selectable && root.selected-ids.index-of(self.item.id) >= 0;
+            focused: root.keyboard-focus && root.focused-index == self.index;
+            z: self.focused ? 1 : 0;
+            show-check: root.multi-select-check-box-enabled && (root.selection-mode == GridViewSelectionMode.multiple
+                || root.selection-mode == GridViewSelectionMode.extended);
+            accent: root.accent;
+            rtl: root.rtl;
+            presentation: root.presentation;
+            dragging: root.dragged-ids.index-of(self.item.id) >= 0;
+
+            invoked(modifiers) => { root.click-item(self.index, modifiers); }
+            requested-selection => {
+                if self.enabled {
+                    root.focus-item(self.index);
+                    key.focus();
+                    if self.selectable {
+                        if root.selection-mode == GridViewSelectionMode.single { root.set-selection(self.index, false, false); }
+                        else { root.selected-ids = GridViewBehavior.mark(root.selected-ids, self.item.id, true); }
+                    } else if root.item-click-enabled { root.item-clicked(self.item); }
+                }
+            }
+            pressed => { root.clear-drag(); }
+            dragged(x, y, dx, dy) => { root.update-drag(self.index, self.x + x, self.y + y, dx, dy); }
+            released => { root.finish-drag(); }
+            cancelled => { root.clear-drag(); }
+        }
+        if root.insertion >= 0: Rectangle {
+            x: root.insertion-x - (!root.column-major ? 2px : 0px);
+            y: root.insertion-y - (root.column-major ? 2px : 0px);
+            width: root.column-major ? root.cell-width : 4px;
+            height: root.column-major ? 4px : root.cell-height;
+            background: root.accent;
+        }
+    }
+
+    key := FocusScope {
+        x: 0px; width: 0px;
+        enabled: root.enabled && root.count > 0;
+        focus-gained(reason) => {
+            if reason == FocusReason.tab-navigation {
+                root.keyboard-focus = true;
+                if root.active < 0 {
+                    let selected = root.selected-ids.length > 0 ? GridViewBehavior.index-of(root.items, root.selected-ids[0]) : -1;
+                    root.focus-item(selected >= 0 && !root.items[selected].disabled ? selected
+                        : GridViewBehavior.adjacent(root.items, -1, root.lanes, 1, 0));
+                }
+            }
+        }
+        key-pressed(event) => {
+            let pressed = event.text;
+            if event.modifiers.control && (pressed == "a" || pressed == "A")
+                && (root.selection-mode == GridViewSelectionMode.multiple || root.selection-mode == GridViewSelectionMode.extended) {
+                root.selected-ids = GridViewBehavior.range(root.items, [], 0, root.count - 1);
+                return accept;
+            }
+            if (pressed == Key.Space || pressed == Key.Return) && root.active >= 0 {
+                if !event.repeat && !root.items[root.active].disabled {
+                    if pressed == Key.Space || !root.item-click-enabled {
+                        root.set-selection(root.active, event.modifiers.shift,
+                            root.selection-mode == GridViewSelectionMode.multiple || event.modifiers.control);
+                    }
+                    if pressed == Key.Return && root.item-click-enabled { root.item-clicked(root.items[root.active]); }
+                }
+                return accept;
+            }
+            let horizontal = pressed == Key.LeftArrow || pressed == Key.RightArrow;
+            let vertical = pressed == Key.UpArrow || pressed == Key.DownArrow;
+            let page = pressed == Key.PageUp || pressed == Key.PageDown;
+            let end = pressed == Key.Home || pressed == Key.End;
+            if !horizontal && !vertical && !page && !end { return reject; }
+            let forward = pressed == Key.DownArrow || pressed == Key.PageDown || pressed == Key.Home
+                || pressed == (root.rtl ? Key.LeftArrow : Key.RightArrow);
+            let direction = forward ? 1 : -1;
+            let cross = !page && !end && (root.column-major ? vertical : horizontal);
+            let distance = page ? max(1, floor(root.main-viewport / root.main-pitch)) : 1;
+            let origin = end ? (pressed == Key.Home ? -1 : root.count) : root.active;
+            let next = GridViewBehavior.adjacent(root.items, origin, root.lanes,
+                cross || end ? direction : 0, cross || end ? 0 : direction * distance);
+            root.keyboard-focus = true;
+            if next >= 0 {
+                if root.anchor-id == "" && root.active >= 0 { root.anchor-id = root.active-id; }
+                root.focus-item(next);
+                if root.selection-mode == GridViewSelectionMode.extended
+                    || (root.selection-mode == GridViewSelectionMode.single && root.single-selection-follows-focus) {
+                    if !event.modifiers.control || event.modifiers.shift {
+                        root.set-selection(next, event.modifiers.shift, event.modifiers.control);
+                    }
+                }
+            }
+            return accept;
+        }
+    }
+}

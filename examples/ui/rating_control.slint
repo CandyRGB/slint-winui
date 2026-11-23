@@ -1,0 +1,82 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { RatingControl } from "../../ui/components/basic-input/rating_control.slint";
+
+export component RatingControlExample inherits Window {
+    title: "WinUI RatingControl";
+    preferred-width: 640px;
+    preferred-height: 356px;
+    private property <string> result: "No user changes";
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        alignment: start;
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            can-clear := CheckBox { text: "Allow clear"; checked: true; }
+            read-only := CheckBox { text: "Read only"; }
+            disabled := CheckBox { text: "Disabled"; }
+            rtl := CheckBox { text: "RTL"; }
+        }
+
+        Rectangle {
+            height: 120px;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Palette.foreground.with-alpha(0.08);
+            VerticalLayout {
+                padding: 16px;
+                spacing: 8px;
+                alignment: center;
+                HorizontalLayout {
+                    alignment: start;
+                    rating := RatingControl {
+                        caption: "312 ratings";
+                        accessible-name: "Your rating";
+                        placeholder-value: 3.5;
+                        initial-set-value: 2;
+                        is-clear-enabled: can-clear.checked;
+                        is-read-only: read-only.checked;
+                        enabled: !disabled.checked;
+                        rtl: rtl.checked;
+                        value-changed(value) => { root.result = "User value: " + "\{value}"; }
+                    }
+                }
+                Text {
+                    text: "Value: " + "\{rating.value}" + " / " + "\{rating.max-rating}";
+                    color: Palette.foreground;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Reset"; clicked => { rating.value = -1; rating.max-rating = 5; } }
+            Button { text: "Set 2.5"; clicked => { rating.value = 2.5; } }
+            Button { text: "3 stars"; clicked => { rating.max-rating = 3; } }
+            Button { text: "Focus rating"; clicked => { rating.focus(); } }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            RatingControl {
+                accessible-name: "Custom image rating";
+                caption: "Custom images";
+                value: 2.5;
+                is-read-only: true;
+                colorize-images: true;
+                item-info: {
+                    selected: { image: @image-url("../../ui/icons/heart_circle_16_regular.svg") },
+                    unset: { image: @image-url("../../ui/icons/heart_16_regular.svg") },
+                };
+            }
+        }
+        Text { text: root.result; color: Palette.foreground; }
+    }
+}

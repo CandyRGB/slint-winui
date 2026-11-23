@@ -1,0 +1,447 @@
+import { Palette } from "std-widgets.slint";
+import { ScrollingTextInput, TextBoxField } from "text_box_field.slint";
+
+export enum NumberBoxSpinPlacement { hidden, compact, inline }
+export enum NumberBoxValidationMode { invalid-input-overwritten, disabled }
+
+export struct NumberBoxValue { number: float, has-value: bool }
+export struct NumberBoxParseResult { valid: bool, value: NumberBoxValue }
+
+export global NumberBoxMath {
+    pure callback parse(string, bool, string) -> NumberBoxParseResult;
+    pure callback step(float, float) -> float;
+}
+
+component NumberBoxStepButton inherits Rectangle {
+    in property <bool> up: true;
+    in property <bool> enabled;
+    callback stepped();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> repeated;
+
+    border-radius: 4px;
+    background: !root.enabled ? transparent
+        : hit.pressed ? (root.dark ? #ffffff0a : #00000006)
+        : hit.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+
+    accessible-role: button;
+    accessible-label: root.up ? @tr("Increase value") : @tr("Decrease value");
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.stepped(); } }
+
+    Image {
+        width: 12px;
+        height: 12px;
+        source: root.up ? @image-url("../../icons/chevron_up_16_regular.svg")
+            : @image-url("../../icons/chevron_down_16_regular.svg");
+        colorize: root.enabled ? Palette.foreground : Palette.foreground.with-alpha(0.36);
+        accessible-role: none;
+    }
+
+    hit := TouchArea {
+        enabled: root.enabled;
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                root.repeated = false;
+                delay.start();
+            }
+            if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
+                delay.stop();
+                repeat.stop();
+            }
+        }
+        clicked => {
+            if (!root.repeated) {
+                root.stepped();
+            }
+        }
+    }
+
+    delay := Timer {
+        interval: 500ms;
+        running: false;
+        triggered => {
+            self.stop();
+            if (hit.pressed && root.enabled) {
+                root.repeated = true;
+                root.stepped();
+                repeat.start();
+            }
+        }
+    }
+    repeat := Timer {
+        interval: 33ms;
+        running: false;
+        triggered => {
+            if (hit.pressed && root.enabled) {
+                root.stepped();
+            } else {
+                self.stop();
+            }
+        }
+    }
+}
+
+export component NumberBox inherits Rectangle {
+    in-out property <NumberBoxValue> value;
+    in-out property <string> text;
+    // Slint float limits (f32::MAX in decimal, as Slint literals omit e-notation).
+    in-out property <float> minimum: -340282346638528859811704183484516925440.0;
+    in-out property <float> maximum: 340282346638528859811704183484516925440.0;
+    in property <float> small-change: 1;
+    in property <float> large-change: 10;
+    in property <bool> wrap-enabled;
+    in property <bool> accepts-expression;
+    in property <bool> enabled: true;
+    in property <string> header;
+    in property <string> description;
+    in property <string> placeholder-text;
+    in property <string> accessible-name: root.header != "" ? root.header : root.placeholder-text;
+    in property <TextHorizontalAlignment> text-alignment: left;
+    in property <Size> popup-viewport;
+    in property <NumberBoxSpinPlacement> spin-placement: NumberBoxSpinPlacement.hidden;
+    in property <NumberBoxValidationMode> validation-mode: NumberBoxValidationMode.invalid-input-overwritten;
+    out property <bool> has-focus: editor.has-focus;
+
+    callback value-changed(old-value: NumberBoxValue, new-value: NumberBoxValue);
+    pure callback parse-text(string, bool) -> NumberBoxParseResult;
+    pure callback format-number(float) -> string;
+
+    private property <string> draft;
+    private property <string> published-text;
+    private property <NumberBoxValue> published-value;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> inline: root.spin-placement == NumberBoxSpinPlacement.inline;
+    private property <bool> compact: root.spin-placement == NumberBoxSpinPlacement.compact;
+    private property <bool> bounded: root.validation-mode == NumberBoxValidationMode.invalid-input-overwritten;
+    private property <bool> can-step: root.enabled && root.value.has-value;
+    private property <bool> can-increment: root.can-step
+        && (root.wrap-enabled || !root.bounded || root.value.number < root.maximum);
+    private property <bool> can-decrement: root.can-step
+        && (root.wrap-enabled || !root.bounded || root.value.number > root.minimum);
+    private property <color> text-color: root.enabled ? Palette.foreground : Palette.foreground.with-alpha(0.36);
+
+    min-width: root.inline ? 120px : 64px;
+    preferred-width: 192px;
+    preferred-height: layout.preferred-height;
+    min-height: layout.min-height;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    forward-focus: editor;
+
+    parse-text(text, expression) => { return NumberBoxMath.parse(text, expression, Platform.decimal-separator); }
+    format-number(number) => { return number; }
+
+    init => {
+        if (root.maximum < root.minimum) {
+            root.maximum = root.minimum;
+        }
+        root.published-value = root.bounded-value(root.value);
+        if (root.value != root.published-value) {
+            root.value = root.published-value;
+        }
+        if (root.value.has-value || root.text == "") {
+            root.restore-text();
+        } else {
+            root.draft = root.text;
+            initial-text.start();
+        }
+    }
+
+    changed value => {
+        if (root.value != root.published-value) {
+            root.apply(root.value);
+        }
+    }
+    changed text => {
+        if (root.text != root.published-text) {
+            root.published-text = root.text;
+            root.draft = root.text;
+            root.commit();
+        }
+    }
+    changed minimum => {
+        if (root.maximum < root.minimum) {
+            root.maximum = root.minimum;
+        }
+        if (root.bounded-value(root.value) != root.published-value) {
+            root.apply(root.value);
+        }
+    }
+    changed maximum => {
+        if (root.minimum > root.maximum) {
+            root.minimum = root.maximum;
+        }
+        if (root.bounded-value(root.value) != root.published-value) {
+            root.apply(root.value);
+        }
+    }
+    changed validation-mode => { root.commit(); }
+
+    initial-text := Timer {
+        interval: 0ms;
+        running: false;
+        triggered => {
+            self.stop();
+            root.commit();
+        }
+    }
+
+    pure function bounded-value(value: NumberBoxValue) -> NumberBoxValue {
+        if (!value.has-value || value.number != value.number) {
+            return {};
+        }
+        return {
+            has-value: true,
+            number: root.bounded ? max(root.minimum, min(root.maximum, value.number)) : value.number,
+        };
+    }
+
+    function restore-text() {
+        root.published-text = root.value.has-value ? root.format-number(root.value.number) : "";
+        root.text = root.published-text;
+        root.draft = root.published-text;
+    }
+
+    function apply(value: NumberBoxValue) {
+        let old = root.published-value;
+        root.published-value = root.bounded-value(value);
+        if (root.published-value != root.value) {
+            root.value = root.published-value;
+        }
+        root.restore-text();
+        if (root.published-value != old) {
+            root.value-changed(old, root.published-value);
+        }
+    }
+
+    public function set-value(value: NumberBoxValue) { root.apply(value); }
+
+    public function commit() {
+        let parsed = root.parse-text(root.draft, root.accepts-expression);
+        if (parsed.valid) {
+            root.apply(parsed.value);
+        } else if (root.bounded) {
+            root.restore-text();
+        }
+    }
+
+    function advance(change: float) {
+        if (root.enabled) {
+            root.commit();
+            if (root.value.has-value) {
+                let next = NumberBoxMath.step(root.value.number, change);
+                let wrapped = root.wrap-enabled && next > root.maximum ? root.minimum
+                    : root.wrap-enabled && next < root.minimum ? root.maximum : next;
+                root.apply({ number: wrapped, has-value: true });
+                editor.select-all();
+                editor.clear-selection();
+            }
+        }
+    }
+
+    layout := VerticalLayout {
+        spacing: 8px;
+
+        if root.header != "" : Text {
+            text: root.header;
+            font-size: 14px;
+            color: root.text-color;
+            accessible-role: none;
+        }
+
+        field := TextBoxField {
+            private property <bool> clear-visible: root.enabled && root.has-focus && root.draft != "" && !root.inline;
+            private property <length> accessory-width: root.inline ? 76px : (root.compact ? 28px : 0px)
+                + (self.clear-visible ? 32px : 0px);
+            enabled: root.enabled;
+            editing: root.has-focus;
+
+            TouchArea {
+                enabled: root.enabled;
+                clicked => { editor.focus(); }
+                scroll-event(event) => {
+                    if (root.has-focus && event.delta-y != 0px) {
+                        root.advance(event.delta-y > 0px ? root.small-change : -root.small-change);
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+
+            Rectangle {
+                x: 12px;
+                y: 0px;
+                width: max(1px, parent.width - self.x - field.accessory-width - 8px);
+                height: parent.height;
+                clip: true;
+
+                Text {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.draft == "" && editor.preedit-text == "";
+                    text: root.placeholder-text;
+                    color: Palette.foreground.with-alpha(root.enabled ? 0.60 : 0.36);
+                    font-size: 14px;
+                    horizontal-alignment: root.text-alignment;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+
+                editor := ScrollingTextInput {
+                    viewport-width: parent.width;
+                    height: parent.height;
+                    text <=> root.draft;
+                    enabled: root.enabled;
+                    horizontal-alignment: root.text-alignment;
+                    color: root.text-color;
+
+                    accessible-role: spinbox;
+                    accessible-label: root.accessible-name;
+                    accessible-placeholder-text: root.placeholder-text;
+                    accessible-enabled: root.enabled;
+                    accessible-value: self.text;
+                    accessible-value-minimum: root.minimum;
+                    accessible-value-maximum: root.maximum;
+                    accessible-value-step: root.small-change;
+                    accessible-action-increment => { if (root.can-increment) { root.advance(root.small-change); } }
+                    accessible-action-decrement => { if (root.can-decrement) { root.advance(-root.small-change); } }
+                    accessible-action-set-value(value) => {
+                        if (root.enabled) {
+                            root.draft = value;
+                            root.commit();
+                        }
+                    }
+
+                    changed has-focus => {
+                        if (self.has-focus) {
+                            self.select-all();
+                        } else {
+                            root.commit();
+                        }
+                    }
+
+                    key-pressed(event) => {
+                        if (event.text == Key.UpArrow || event.text == Key.DownArrow) {
+                            root.advance(event.text == Key.UpArrow ? root.small-change : -root.small-change);
+                            return accept;
+                        }
+                        if (event.text == Key.PageUp || event.text == Key.PageDown) {
+                            root.advance(event.text == Key.PageUp ? root.large-change : -root.large-change);
+                            return accept;
+                        }
+                        if (event.text == Key.Return || event.text == Key.Escape) {
+                            return accept;
+                        }
+                        return reject;
+                    }
+                    key-released(event) => {
+                        if (event.text == Key.Return) {
+                            root.commit();
+                            return accept;
+                        }
+                        if (event.text == Key.Escape) {
+                            root.restore-text();
+                            return accept;
+                        }
+                        return reject;
+                    }
+                }
+            }
+
+            if root.inline : HorizontalLayout {
+                x: parent.width - 72px;
+                y: 4px;
+                width: 68px;
+                height: parent.height - 8px;
+                spacing: 4px;
+
+                NumberBoxStepButton {
+                    enabled: root.can-increment;
+                    stepped => { root.advance(root.small-change); }
+                }
+                NumberBoxStepButton {
+                    up: false;
+                    enabled: root.can-decrement;
+                    stepped => { root.advance(-root.small-change); }
+                }
+            }
+
+            if root.compact : Image {
+                x: parent.width - 20px;
+                width: 12px;
+                height: 12px;
+                source: @image-url("../../icons/chevron_up_down_16_regular.svg");
+                colorize: root.text-color;
+                accessible-role: none;
+            }
+
+            if field.clear-visible : Rectangle {
+                x: parent.width - (root.compact ? 56px : 32px);
+                y: 4px;
+                width: 28px;
+                height: parent.height - 8px;
+                border-radius: 4px;
+                background: clear.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+                accessible-role: button;
+                accessible-label: @tr("Clear");
+                accessible-action-default => { clear.clicked(); }
+
+                Image {
+                    width: 12px;
+                    height: 12px;
+                    source: @image-url("../../icons/dismiss_16_regular.svg");
+                    colorize: root.text-color;
+                    accessible-role: none;
+                }
+                clear := TouchArea {
+                    clicked => { root.draft = ""; editor.focus(); }
+                }
+            }
+
+            if root.compact && root.has-focus && root.enabled : Rectangle {
+                private property <Point> ideal: { x: parent.width - 22px, y: -28px };
+                x: root.popup-viewport.width > 0px ? max(0px,
+                    min(root.popup-viewport.width - self.width, parent.absolute-position.x + self.ideal.x))
+                    - parent.absolute-position.x : self.ideal.x;
+                y: root.popup-viewport.height > 0px ? max(0px,
+                    min(root.popup-viewport.height - self.height, parent.absolute-position.y + self.ideal.y))
+                    - parent.absolute-position.y : self.ideal.y;
+                width: 48px;
+                height: 88px;
+                z: 1;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: root.dark ? #00000033 : #0000000f;
+                background: root.dark ? #2c2c2c : #f9f9f9;
+                drop-shadow-color: root.dark ? #00000042 : #00000024;
+                drop-shadow-blur: 16px;
+                drop-shadow-offset-y: 8px;
+
+                VerticalLayout {
+                    padding: 6px;
+                    spacing: 4px;
+                    NumberBoxStepButton {
+                        enabled: root.can-increment;
+                        stepped => { root.advance(root.small-change); }
+                    }
+                    NumberBoxStepButton {
+                        up: false;
+                        enabled: root.can-decrement;
+                        stepped => { root.advance(-root.small-change); }
+                    }
+                }
+            }
+        }
+
+        if root.description != "" : Text {
+            text: root.description;
+            font-size: 12px;
+            color: Palette.foreground.with-alpha(root.enabled ? 0.60 : 0.36);
+        }
+    }
+}

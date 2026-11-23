@@ -1,0 +1,129 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { SelectorBar, SelectorBarBehavior, SelectorBarItem } from "../../ui/components/navigation/selector_bar.slint";
+
+export { SelectorBarBehavior, SelectorBarItem }
+
+export component SelectorBarExample inherits Window {
+    title: "SelectorBar";
+    min-width: 712px;
+    preferred-height: 474px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI";
+
+    in property <brush> accent: Palette.accent-background;
+    private property <bool> rtl;
+    private property <bool> narrow;
+    private property <bool> disable-shared;
+    private property <bool> reverse;
+    private property <bool> remove-shared;
+    private property <int> changes;
+    private property <SelectorBarItem> recent: { id: "recent", text: "Recent", icon: @image-url("../../ui/icons/clock_16_regular.svg") };
+    private property <SelectorBarItem> shared: { id: "shared", text: "Shared", disabled: root.disable-shared, icon: @image-url("../../ui/icons/share_16_regular.svg") };
+    private property <SelectorBarItem> favorites: { id: "favorites", text: "Favorites", icon: @image-url("../../ui/icons/star_16_regular.svg") };
+    private property <color> swatch-color: collections.selected-index == 0 ? #ffc0cb
+        : collections.selected-index == 1 ? #dda0dd : #b0e0e6;
+    private property <int> swatch-count: collections.selected-index == 0 ? 5 : collections.selected-index == 1 ? 7 : 4;
+
+    HorizontalLayout {
+        x: 24px;
+        y: 16px;
+        width: parent.width - 48px;
+        height: 32px;
+        spacing: 8px;
+        alignment: start;
+        Button { text: "Narrow"; clicked => { root.narrow = !root.narrow; } }
+        Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+        Button { text: "Focus bar"; clicked => { basic.focus-selected(); } }
+        Button { text: "Clear"; clicked => { basic.selected-id = ""; } }
+        Button { text: "Disable Shared"; clicked => { root.disable-shared = !root.disable-shared; } }
+        Button { text: "Reverse"; clicked => { root.reverse = !root.reverse; } }
+        Button { text: "Remove Shared"; clicked => { root.remove-shared = !root.remove-shared; } }
+    }
+
+    basic := SelectorBar {
+        x: 24px;
+        y: 72px;
+        width: root.narrow ? 172px : self.preferred-width;
+        height: 48px;
+        accessible-name: "File filters";
+        rtl: root.rtl;
+        indicator-color: root.accent;
+        items: root.remove-shared ? (root.reverse ? [root.favorites, root.recent] : [root.recent, root.favorites])
+            : root.reverse ? [root.favorites, root.shared, root.recent] : [root.recent, root.shared, root.favorites];
+        selection-changed(id) => { root.changes += 1; }
+    }
+    Text {
+        x: 24px;
+        y: 132px;
+        text: "Selection: \{basic.selected-id} · Focus: \{basic.focused-id} · Changes: \{root.changes}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+
+    pages := SelectorBar {
+        x: 24px;
+        y: 168px;
+        width: self.preferred-width;
+        height: 48px;
+        accessible-name: "Pages";
+        rtl: root.rtl;
+        selected-id: "page1";
+        indicator-color: root.accent;
+        items: [
+            { id: "page1", text: "Page1" }, { id: "page2", text: "Page2" },
+            { id: "page3", text: "Page3" }, { id: "page4", text: "Page4" },
+            { id: "page5", text: "Page5" },
+        ];
+    }
+    Rectangle {
+        x: 24px;
+        y: 220px;
+        width: parent.width - 48px;
+        height: 80px;
+        background: #f9f9f9;
+        Text {
+            text: "Page \{pages.selected-index + 1}";
+            font-size: 20px;
+            color: #1b1b1b;
+            accessible-label: self.text;
+        }
+    }
+
+    collections := SelectorBar {
+        x: 24px;
+        y: 316px;
+        width: self.preferred-width;
+        height: 48px;
+        accessible-name: "Color collections";
+        rtl: root.rtl;
+        selected-id: "pink";
+        indicator-color: root.accent;
+        items: [
+            { id: "pink", text: "Pink" }, { id: "plum", text: "Plum" },
+            { id: "powder-blue", text: "PowderBlue" },
+        ];
+    }
+    Rectangle {
+        x: 24px;
+        y: 364px;
+        width: parent.width - 48px;
+        height: 88px;
+        clip: true;
+        Flickable {
+            width: parent.width;
+            height: parent.height;
+            content-width: max(self.width, root.swatch-count * 120px);
+            content-height: self.height;
+            for card in root.swatch-count: Rectangle {
+                x: card * 120px + 4px;
+                y: 4px;
+                width: 112px;
+                height: 82px;
+                background: root.swatch-color;
+                accessible-role: text;
+                accessible-label: "\{collections.items[collections.selected-index].text} \{card + 1}";
+            }
+        }
+    }
+}

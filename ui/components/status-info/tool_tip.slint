@@ -1,0 +1,170 @@
+import { Palette } from "std-widgets.slint";
+import { ContrastTheme, SystemContrastColors } from "../contrast_theme.slint";
+import { FlyoutLayout, FlyoutPlacement, FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+
+export enum ToolTipPlacement { top, bottom, left, right, pointer }
+
+// Also used inside Slint's input-transparent Tooltip for attached labels.
+export component ToolTipSurface inherits Rectangle {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <length> limit-width: 320px;
+    out property <bool> has-content: root.text != "" || custom-content.preferred-width > 0px;
+    private property <bool> has-custom-content: custom-content.preferred-width > 0px;
+    private property <SystemContrastColors> contrast: ContrastTheme.colors;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    width: self.preferred-width;
+    height: self.preferred-height;
+    preferred-width: min(root.limit-width, root.even(root.has-custom-content ? custom-content.preferred-width : label.preferred-width) + 20px);
+    preferred-height: root.even(root.has-custom-content ? custom-content.preferred-height : label.preferred-height) + 16px;
+    border-width: 1px;
+    border-radius: 4px;
+    background: root.contrast.active ? root.contrast.window : root.dark ? #2c2c2c : #f9f9f9;
+    border-color: root.contrast.active ? root.contrast.window-text : root.dark ? #00000033 : #0000000f;
+    clip: true;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.accessible-name;
+
+    pure function even(value: length) -> length {
+        return round(value / 2px) * 2px;
+    }
+
+    label := Text {
+        x: 10px;
+        y: 6px + root.border-width;
+        width: max(0px, parent.width - 20px);
+        visible: !root.has-custom-content;
+        text: root.text;
+        font-family: "Segoe UI Variable Text";
+        font-size: 12px;
+        color: root.contrast.active ? root.contrast.window-text : Palette.foreground;
+        wrap: word-wrap;
+        accessible-role: none;
+    }
+
+    custom-content := VerticalLayout {
+        x: 10px;
+        y: 6px + root.border-width;
+        width: max(0px, parent.width - 20px);
+        height: max(0px, parent.height - 16px);
+        alignment: start;
+        @children
+    }
+}
+
+// Mount last in the host so the tip can extend past its target without taking input.
+export component ToolTip inherits Rectangle {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <bool> enabled: true;
+    in property <bool> target-enabled: true;
+    in property <bool> show-on-disabled: false;
+    in property <bool> target-hovered: false;
+    in property <bool> target-keyboard-focused: false;
+    in property <bool> target-pressed: false;
+    in property <FlyoutRect> target;
+    in property <FlyoutRect> placement-rect;
+    in property <ToolTipPlacement> placement: ToolTipPlacement.top;
+    in property <Point> pointer-position;
+    in property <bool> anchor-to-pointer: false;
+    in property <bool> rtl: false;
+    in property <length> horizontal-offset: root.automatic ? root.target-hovered ? 20px : 12px : 0px;
+    in property <length> vertical-offset: root.automatic ? root.target-hovered ? 20px : 12px : 0px;
+    in property <duration> show-delay: 800ms;
+    in property <duration> show-duration: 5000ms;
+    in-out property <bool> open: false;
+    out property <bool> presented: root.open && root.available && root.bounds.width > 0px && root.bounds.height > 0px;
+    out property <FlyoutRect> panel-bounds: root.presented ? root.bounds : { x: 0px, y: 0px, width: 0px, height: 0px };
+    callback opened();
+    callback closed();
+
+    private property <bool> available: root.enabled && (root.target-enabled || root.show-on-disabled) && surface.has-content;
+    private property <bool> requested: root.available && (root.target-hovered || root.target-keyboard-focused);
+    private property <bool> automatic;
+    private property <bool> use-rect: root.placement-rect.width > 0px && root.placement-rect.height > 0px;
+    private property <bool> use-pointer: !root.use-rect && root.target-hovered && root.anchor-to-pointer;
+    private property <FlyoutRect> dock: root.use-rect ? root.placement-rect : root.use-pointer
+        ? { x: root.pointer-position.x, y: root.pointer-position.y, width: 0px, height: 0px } : root.target;
+    private property <FlyoutPlacement> preferred-side: root.placement == ToolTipPlacement.bottom ? FlyoutPlacement.bottom
+        : root.placement == ToolTipPlacement.left ? (root.rtl ? FlyoutPlacement.right : FlyoutPlacement.left)
+        : root.placement == ToolTipPlacement.right ? (root.rtl ? FlyoutPlacement.left : FlyoutPlacement.right)
+        : root.placement == ToolTipPlacement.pointer && root.use-pointer ? FlyoutPlacement.bottom-edge-aligned-left
+        : FlyoutPlacement.top;
+    private property <Size> tip-size: { width: surface.preferred-width, height: surface.preferred-height };
+    private property <FlyoutRect> bounds: FlyoutLayout.place-with-offsets(root.preferred-side, root.dock,
+        { x: 0px, y: 0px, width: root.width, height: root.height }, root.tip-size, root.tip-size,
+        { x: root.horizontal-offset, y: root.vertical-offset });
+
+    init => { root.update-request(); }
+    changed requested => { root.update-request(); }
+    changed available => { if !root.available { root.dismiss(); } }
+    changed target-pressed => { if root.target-pressed { root.dismiss(); } }
+    changed presented => {
+        if root.presented {
+            root.opened();
+        } else {
+            root.closed();
+        }
+    }
+    changed open => {
+        if !root.open {
+            expiry.stop();
+            root.automatic = false;
+        }
+    }
+
+    public function show() {
+        delay.stop();
+        expiry.stop();
+        root.automatic = false;
+        root.open = root.available;
+    }
+
+    public function dismiss() {
+        delay.stop();
+        expiry.stop();
+        root.open = false;
+        root.automatic = false;
+    }
+
+    function update-request() {
+        if root.requested {
+            if !root.open && !root.target-pressed {
+                delay.start();
+            }
+        } else {
+            delay.stop();
+            if root.automatic { root.dismiss(); }
+        }
+    }
+
+    delay := Timer {
+        interval: max(0ms, root.show-delay);
+        running: false;
+        triggered => {
+            self.stop();
+            if root.requested && !root.target-pressed && !root.open {
+                root.automatic = true;
+                root.open = true;
+                if root.show-duration > 0ms { expiry.start(); }
+            }
+        }
+    }
+    expiry := Timer {
+        interval: root.show-duration;
+        running: false;
+        triggered => { root.dismiss(); }
+    }
+
+    surface := ToolTipSurface {
+        visible: root.presented;
+        x: root.bounds.x;
+        y: root.bounds.y;
+        height: root.bounds.height;
+        limit-width: max(0px, floor(min(320px, root.width) / 2px) * 2px);
+        text: root.text;
+        accessible-name: root.accessible-name;
+        @children
+    }
+}

@@ -1,0 +1,56 @@
+import { Button, Palette } from "std-widgets.slint";
+import { BreadcrumbBar, Crumb } from "../../ui/components/navigation/breadcrumb_bar.slint";
+export { BreadcrumbBarBehavior, BreadcrumbLayout, BreadcrumbMeasurement, BreadcrumbRow, Crumb } from "../../ui/components/navigation/breadcrumb_bar.slint";
+
+export component BreadcrumbBarExample inherits Window {
+    title: "BreadcrumbBar";
+    preferred-width: 600px;
+    preferred-height: 360px;
+    min-width: 120px;
+    background: Palette.background;
+
+    private property <[Crumb]> full-path: [
+        { label: "Home" }, { label: "Documents" }, { label: "Design" }, { label: "Northwind" },
+        { label: "Images" }, { label: "Folder1" }, { label: "Folder2" }, { label: "Folder3" },
+    ];
+    in-out property <[Crumb]> path: root.full-path;
+    in-out property <int> selected-index: -1;
+    in-out property <bool> rtl;
+    callback navigate(int);
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        alignment: start;
+        padding: 16px;
+        spacing: 16px;
+
+        BreadcrumbBar {
+            items: root.path;
+            rtl: root.rtl;
+            select(index) => {
+                root.selected-index = index;
+                root.navigate(index);
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button {
+                text: "Reset";
+                clicked => {
+                    root.path = root.full-path;
+                    root.selected-index = -1;
+                }
+            }
+            Button {
+                text: "RTL";
+                clicked => { root.rtl = !root.rtl; }
+            }
+        }
+        Text {
+            text: root.selected-index < 0 ? "" : "Selected index: " + root.selected-index;
+            color: Palette.foreground;
+        }
+    }
+}

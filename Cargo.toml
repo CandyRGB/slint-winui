@@ -1,0 +1,57 @@
+[package]
+name = "slint-winui"
+version = "0.1.0"
+edition = "2024"
+description = "Reusable WinUI-inspired components for Slint"
+publish = false
+
+[features]
+default = ["windows-platform"]
+windows-platform = [
+    "dep:chrono",
+    "dep:windows",
+    "dep:windows-collections",
+    "dep:windows-core",
+    "dep:windows-numerics",
+]
+
+[target.'cfg(windows)'.dependencies]
+chrono = { version = "0.4", optional = true }
+windows = { version = "0.62", optional = true, features = [
+    "Globalization_DateTimeFormatting",
+    "UI_Text",
+    "UI_ViewManagement",
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_UI_Controls_RichEdit",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+windows-collections = { version = "0.3", optional = true }
+windows-core = { version = "0.62", optional = true }
+windows-numerics = { version = "0.3", optional = true }
+
+[dev-dependencies]
+arboard = { version = "3.7", default-features = false }
+quick-xml = "0.41"
+raw-window-handle = "0.6"
+serde_json = "1.0.154"
+slint = { version = "=1.18.1", features = ["raw-window-handle-06"] }
+tempfile = "3.27"
+
+[profile.release]
+opt-level = 2

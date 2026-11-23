@@ -1,0 +1,76 @@
+import { Border, BorderInsets } from "border.slint";
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../collections/items_repeater.slint";
+
+export struct StackPanelChild { size: ItemsRepeaterSize, collapsed: bool }
+export enum StackPanelSnapAlignment { near, center, far }
+export struct StackPanelSnapPoints {
+    available: bool,
+    regular: bool,
+    offset: length,
+    interval: length,
+    positions: [length],
+}
+export struct StackPanelOptions {
+    orientation: Orientation,
+    available: ItemsRepeaterSize,
+    spacing: length,
+    rtl: bool,
+}
+
+export global StackPanelBehavior {
+    pure callback layout([StackPanelChild], StackPanelOptions) -> ItemsRepeaterGeometry;
+    pure callback snap-points([StackPanelChild], Orientation, bool, BorderInsets, StackPanelSnapAlignment) -> StackPanelSnapPoints;
+    pure callback snap-key([StackPanelChild], Orientation, bool, BorderInsets) -> string;
+}
+
+export component StackPanel inherits Border {
+    in property <[StackPanelChild]> items;
+    in property <Orientation> orientation: Orientation.vertical;
+    in property <length> spacing;
+    in property <bool> are-scroll-snap-points-regular;
+    in property <BorderInsets> snap-margin;
+    out property <[ItemsRepeaterPlacement]> placements: root.arrangement.placements;
+    callback snap-points-changed(Orientation);
+
+    private property <ItemsRepeaterGeometry> desired: StackPanelBehavior.layout(root.items, {
+        orientation: root.orientation,
+        available: { width: -1px, height: -1px },
+        spacing: root.spacing,
+    });
+    private property <ItemsRepeaterGeometry> arrangement: StackPanelBehavior.layout(root.items, {
+        orientation: root.orientation,
+        available: { width: root.content-width, height: root.content-height },
+        spacing: root.spacing,
+        rtl: root.rtl,
+    });
+    private property <string> snap-key: StackPanelBehavior.snap-key(
+        root.items, root.orientation, root.are-scroll-snap-points-regular, root.snap-margin);
+    private property <string> previous-snap-key;
+    private property <Orientation> previous-orientation: Orientation.vertical;
+
+    init => {
+        root.previous-orientation = root.orientation;
+        root.previous-snap-key = root.snap-key;
+    }
+    changed snap-key => {
+        let previous = root.previous-orientation;
+        let had-points = root.previous-snap-key != "";
+        root.previous-snap-key = root.snap-key;
+        root.previous-orientation = root.orientation;
+        if had-points { root.snap-points-changed(previous); }
+    }
+
+    public pure function snap-points(axis: Orientation, alignment: StackPanelSnapAlignment) -> StackPanelSnapPoints {
+        return axis == root.orientation
+            ? StackPanelBehavior.snap-points(root.items, root.orientation, root.are-scroll-snap-points-regular, root.snap-margin, alignment)
+            : {};
+    }
+
+    Rectangle {
+        preferred-width: root.desired.width;
+        preferred-height: root.desired.height;
+        horizontal-stretch: 1;
+        vertical-stretch: 1;
+        @children
+    }
+}

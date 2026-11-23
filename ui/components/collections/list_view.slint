@@ -1,0 +1,205 @@
+import { Palette } from "std-widgets.slint";
+import { ItemsView, ItemsViewItem, ItemsViewSelectionMode } from "items_view.slint";
+import { ItemsRepeaterPlacement, ItemsRepeaterSize } from "items_repeater.slint";
+import { ListViewItem } from "list_view_item.slint";
+
+export struct ListViewEntry {
+    key: string,
+    label: string,
+    detail: string,
+    group: string,
+    enabled: bool,
+    height: length,
+}
+
+export struct ListViewHeaderPosition { index: int, y: length }
+
+export global ListViewBehavior {
+    pure callback source([ListViewEntry]) -> [ItemsViewItem];
+    pure callback sizes([ListViewEntry], length, length, length) -> [ItemsRepeaterSize];
+    pure callback groups([ListViewEntry]) -> [int];
+    pure callback sticky-header([ItemsRepeaterPlacement], [int], length, length) -> ListViewHeaderPosition;
+    pure callback insertion([ItemsRepeaterPlacement], length) -> int;
+    pure callback reorder([ListViewEntry], [string], int) -> [ListViewEntry];
+}
+
+component ListViewGroupLabel inherits Rectangle {
+    in property <string> label;
+    in property <bool> rtl;
+    accessible-role: none;
+    Text {
+        x: 16px;
+        width: max(0px, parent.width - 28px);
+        height: parent.height;
+        text: root.label;
+        font-family: "Segoe UI Variable Display";
+        font-size: 28px;
+        font-weight: 600;
+        horizontal-alignment: root.rtl ? right : left;
+        vertical-alignment: center;
+        color: Palette.foreground;
+        overflow: elide;
+        accessible-role: none;
+    }
+}
+
+export component ListView inherits ItemsView {
+    in-out property <[ListViewEntry]> entries;
+    in property <bool> is-item-click-enabled;
+    in property <bool> is-multi-select-check-box-enabled: true;
+    in property <bool> are-sticky-group-headers-enabled;
+    in property <bool> custom-template;
+    in property <bool> can-drag-items;
+    in property <bool> can-reorder-items;
+    in property <bool> allow-drop;
+    in property <length> row-height: 40px;
+    in property <length> group-header-height: 42px;
+    in property <brush> group-header-background: Palette.background;
+    in property <color> accent: Palette.accent-background;
+
+    out property <bool> show-multi-select-check: root.is-multi-select-check-box-enabled
+        && root.selection-mode == ItemsViewSelectionMode.multiple;
+    out property <bool> show-selection-indicator: root.selection-mode == ItemsViewSelectionMode.single
+        || root.selection-mode == ItemsViewSelectionMode.extended;
+    callback item-click(int);
+    callback items-reordered([string], int);
+
+    private property <[int]> group-starts: ListViewBehavior.groups(root.entries);
+    private property <ListViewHeaderPosition> sticky: root.are-sticky-group-headers-enabled
+        ? ListViewBehavior.sticky-header(root.placements, root.group-starts, root.vertical-offset, root.group-header-height)
+        : { index: -1, y: 0px };
+    private property <[string]> dragged-keys;
+    private property <int> insertion-index: -1;
+    private property <bool> reorder-enabled: root.enabled && root.can-drag-items
+        && root.can-reorder-items && root.allow-drop;
+
+    items: ListViewBehavior.source(root.entries);
+    item-width: root.viewport-width;
+    item-height: max(40px, root.row-height);
+    item-sizes: ListViewBehavior.sizes(root.entries, root.viewport-width, root.item-height, root.group-header-height);
+    list-view-interaction: true;
+    is-item-invoked-enabled: root.is-item-click-enabled;
+    accessible-orientation: Orientation.vertical;
+    item-invoked(index) => { root.item-click(index); }
+
+    changed entries => { root.cancel-reorder(); }
+    changed reorder-enabled => { if !root.reorder-enabled { root.cancel-reorder(); } }
+
+    public pure function header-height(index: int) -> length {
+        return index >= 0 && index < root.entries.length && root.entries[index].group != ""
+            && (index == 0 || root.entries[index - 1].group != root.entries[index].group)
+            ? root.group-header-height : 0px;
+    }
+
+    public function scroll-into-view(index: int, leading: bool) {
+        if leading { root.bring-item-to-top(index); }
+        else { root.bring-item-into-view(index); }
+    }
+
+    public pure function is-dragging(index: int) -> bool {
+        return index >= 0 && index < root.entries.length
+            && root.dragged-keys.index-of(root.entries[index].key) >= 0;
+    }
+
+    public function update-reorder(index: int, x: length, y: length, dy: length) {
+        if !root.reorder-enabled || index < 0 || index >= root.entries.length
+            || root.entries[index].group != "" || (!root.is-dragging(index) && abs(dy) < 8px) { return; }
+        if root.dragged-keys.length == 0 {
+            root.dragged-keys = root.is-selected(index) ? root.selected-keys : [root.entries[index].key];
+        }
+        root.insertion-index = x >= root.horizontal-offset && x < root.horizontal-offset + root.viewport-width
+            && y >= root.vertical-offset && y < root.vertical-offset + root.viewport-height
+            ? ListViewBehavior.insertion(root.placements, y) : -1;
+    }
+
+    public function finish-reorder() {
+        if root.insertion-index >= 0 && root.dragged-keys.length > 0 {
+            let index = root.insertion-index;
+            let keys = root.dragged-keys;
+            let updated = ListViewBehavior.reorder(root.entries, keys, index);
+            root.cancel-reorder();
+            if updated.length > 0 {
+                root.entries = updated;
+                root.items-reordered(keys, index);
+            }
+        }
+        root.cancel-reorder();
+    }
+
+    public function cancel-reorder() {
+        root.dragged-keys = [];
+        root.insertion-index = -1;
+    }
+
+    for rect in root.realized: ListViewGroupLabel {
+        visible: root.header-height(rect.index) > 0px;
+        x: rect.x;
+        y: rect.y;
+        width: rect.width;
+        height: root.header-height(rect.index);
+        label: root.entries[rect.index].group;
+        rtl: root.rtl;
+    }
+
+    for rect in (root.custom-template ? [] : root.realized): row := ListViewItem {
+        x: rect.x;
+        y: rect.y + root.header-height(rect.index);
+        width: rect.width;
+        height: rect.height - root.header-height(rect.index);
+        enabled: root.enabled && root.entries[rect.index].enabled;
+        label: root.entries[rect.index].label;
+        item-index: rect.index;
+        item-count: root.entries.length;
+        selected: root.is-selected(rect.index);
+        show-indicator: root.show-selection-indicator;
+        selectable: root.selection-mode != ItemsViewSelectionMode.none;
+        show-check: root.show-multi-select-check;
+        focused: root.current-item-index == rect.index && root.keyboard-focused;
+        rtl: root.rtl;
+        accent: root.accent;
+        dragging: root.is-dragging(rect.index);
+        activated(mods) => { root.tap-item(rect.index, mods); }
+        automation-action => { root.automation-item(rect.index); }
+        drag-moved(x, y, dy) => { root.update-reorder(rect.index, self.x + x, self.y + y, dy); }
+        drag-released => { root.finish-reorder(); }
+        drag-canceled => { root.cancel-reorder(); }
+
+        Text {
+            width: row.content-width;
+            height: row.content-height;
+            text: root.entries[rect.index].label;
+            font-family: "Segoe UI Variable Text";
+            font-size: 14px;
+            color: Palette.foreground;
+            vertical-alignment: center;
+            horizontal-alignment: root.rtl ? right : left;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+
+    if root.sticky.index >= 0 && root.entries[root.sticky.index].group != "": ListViewGroupLabel {
+        z: 2;
+        x: root.horizontal-offset;
+        y: root.sticky.y;
+        width: root.viewport-width;
+        height: root.group-header-height;
+        label: root.entries[root.sticky.index].group;
+        background: root.group-header-background;
+        rtl: root.rtl;
+        TouchArea {}
+    }
+
+    if root.insertion-index >= 0 && root.placements.length > 0: Rectangle {
+        z: 1;
+        private property <ItemsRepeaterPlacement> item: root.placements[min(root.insertion-index, root.placements.length - 1)];
+        x: item.x + 4px;
+        y: max(0px, item.y + (root.insertion-index >= root.placements.length ? item.height : 0px) - 2px);
+        width: max(0px, item.width - 8px);
+        height: 2px;
+        border-radius: 2px;
+        background: root.accent;
+    }
+
+    @children
+}

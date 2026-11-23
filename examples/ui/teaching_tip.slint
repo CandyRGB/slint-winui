@@ -1,0 +1,113 @@
+import { Button, CheckBox, Palette, LineEdit } from "std-widgets.slint";
+import { TeachingTip, TeachingTipPlacement, TeachingTipHeroPlacement, TeachingTipTailVisibility, TeachingTipCloseReason } from "../../ui/components/dialogs-flyouts/teaching_tip.slint";
+export { TeachingTipLayout, TeachingTipGeometry, TeachingTipSide, TeachingTipPlacementInput, TeachingTipPlacement, FlyoutRect } from "../../ui/components/dialogs-flyouts/teaching_tip.slint";
+
+export component TeachingTipExample inherits Window {
+    title: "WinUI TeachingTip";
+    preferred-width: 840px;
+    preferred-height: 560px;
+    in-out property <bool> edge;
+    private property <string> result: "Ready";
+    private property <TeachingTipPlacement> placement: TeachingTipPlacement.top;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    FocusScope {
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            if (event.text == Key.F6 && tip.toggle-keyboard-focus()) { return accept; }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            HorizontalLayout {
+                height: 32px;
+                alignment: start;
+                spacing: 12px;
+                untargeted := CheckBox { text: "Untargeted"; }
+                light := CheckBox { text: "Light dismiss"; }
+                prevent := CheckBox { text: "Cancel closing"; }
+                footer := CheckBox { text: "Close label"; checked: true; }
+                rtl := CheckBox { text: "RTL"; }
+                delay-close := CheckBox { text: "Defer closing"; }
+                Button { text: "Resolve close"; clicked => { tip.complete-close(false); } }
+            }
+            HorizontalLayout {
+                height: 32px;
+                alignment: start;
+                spacing: 12px;
+                hero-option := CheckBox { text: "Hero content"; }
+                tail := CheckBox { text: "Hide tail"; }
+                tall := CheckBox { text: "Scrollable"; }
+                Button { text: "Top"; clicked => { root.placement = TeachingTipPlacement.top; } }
+                Button { text: "Bottom"; clicked => { root.placement = TeachingTipPlacement.bottom; } }
+                Button { text: "Top right"; clicked => { root.placement = TeachingTipPlacement.top-right; } }
+                Button { text: "Right"; clicked => { root.placement = TeachingTipPlacement.right; } }
+            }
+            Rectangle { vertical-stretch: 1; }
+            Text { text: root.result; height: 22px; color: Palette.foreground; }
+        }
+
+        target := Button {
+            x: root.edge ? round((parent.width - self.width) / 4px) * 2px : 408px;
+            y: root.edge ? 100px : 300px;
+            width: 122px;
+            height: 32px;
+            text: "Show teaching tip";
+            clicked => { self.focus(); tip.show(); }
+        }
+
+        tip := TeachingTip {
+            width: parent.width;
+            height: parent.height;
+            title: "Pin a favorite";
+            subtitle: "Pin something you use often so you can get back to it quickly.";
+            icon-source: @image-url("../../ui/icons/star_16_regular.svg");
+            action-button-content: "Pin";
+            close-button-content: footer.checked ? "Dismiss" : "";
+            is-light-dismiss-enabled: light.checked;
+            targeted: !untargeted.checked;
+            target: { x: target.x, y: target.y, width: target.width, height: target.height };
+            preferred-placement: root.placement;
+            tail-visibility: tail.checked ? TeachingTipTailVisibility.collapsed : TeachingTipTailVisibility.auto;
+            rtl: rtl.checked;
+            action-button-click => { root.result = "Pin invoked"; }
+            opened => { root.result = "Opened"; }
+            closing(reason) => {
+                if (prevent.checked) { root.result = "Closing canceled"; return true; }
+                if (delay-close.checked) { root.result = "Closing deferred"; tip.defer-close(); }
+                return false;
+            }
+            closed(reason) => {
+                root.result = reason == TeachingTipCloseReason.light-dismiss ? "Light dismissed"
+                    : reason == TeachingTipCloseReason.close-button ? "Closed by button"
+                    : reason == TeachingTipCloseReason.escape ? "Closed by Escape" : "Closed";
+            }
+            restore-focus => { target.focus(); }
+            hero << VerticalLayout {
+                if hero-option.checked : Rectangle {
+                    height: 80px;
+                    background: Palette.accent-background;
+                    Image {
+                        width: 32px;
+                        height: 32px;
+                        source: @image-url("../../ui/icons/star_16_regular.svg");
+                        colorize: Palette.accent-foreground;
+                        accessible-role: none;
+                    }
+                }
+            }
+            VerticalLayout {
+                spacing: 8px;
+                if tall.checked : Text {
+                    height: 480px;
+                    text: "More settings";
+                    color: Palette.foreground;
+                }
+                if tall.checked : LineEdit { placeholder-text: "Example field"; }
+            }
+        }
+    }
+}

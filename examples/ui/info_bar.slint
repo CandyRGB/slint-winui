@@ -1,0 +1,121 @@
+import { CheckBox, Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { HyperlinkButton, HyperlinkButtonTheme, HyperlinkButtonAccentColors } from "../../ui/components/basic-input/hyperlink_button.slint";
+import { InfoBar, InfoBarCloseReason, InfoSeverity } from "../../ui/components/status-info/info_bar.slint";
+export { HyperlinkButtonTheme, HyperlinkButtonAccentColors }
+
+export component InfoBarExample inherits Window {
+    title: "WinUI InfoBar";
+    preferred-width: 840px;
+    min-width: 820px;
+    preferred-height: 684px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+
+    out property <int> actions;
+    out property <int> close-requests;
+    out property <int> closes;
+    out property <string> close-reason;
+    out property <bool> sample-open: sample.open;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+            narrow := CheckBox { text: "Narrow"; }
+            long := CheckBox { text: "Long message"; }
+            link := CheckBox { text: "Hyperlink"; }
+            mirror := CheckBox { text: "RTL"; }
+            hide-icon := CheckBox { text: "Hide icon"; }
+            hide-close := CheckBox { text: "Hide close"; }
+            cancel := CheckBox { text: "Cancel close"; }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+            Button { text: "Open"; clicked => { sample.open = true; } }
+            Button { text: "Close by code"; clicked => { sample.open = false; } }
+            Text {
+                vertical-alignment: center;
+                text: "Actions \{root.actions}   Closing \{root.close-requests}   Closed \{root.closes}   \{root.close-reason}";
+                color: Palette.foreground;
+                accessible-label: self.text;
+            }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            sample := InfoBar {
+                open: true;
+                width: narrow.checked ? 316px : 676px;
+                accessible-name: "Update bar";
+                close-button-accessible-name: "Dismiss update";
+                close-button-tooltip: "Dismiss this update notification";
+                title: "Update available";
+                message: long.checked
+                    ? "Install the latest update to get reliability improvements. Your current settings and files will be preserved."
+                    : "Install the latest update.";
+                rtl: mirror.checked;
+                is-closable: !hide-close.checked;
+                is-icon-visible: !hide-icon.checked;
+                action-is-hyperlink: link.checked;
+                action-label: "Fallback action";
+                action => { root.actions += 100; }
+                action-button << HorizontalLayout {
+                    if link.checked : HyperlinkButton {
+                        text: "See details";
+                        clicked => { root.actions += 1; }
+                    }
+                    if !link.checked : Button {
+                        text: "Update";
+                        clicked => { root.actions += 1; }
+                    }
+                }
+                closing(reason) => {
+                    root.close-requests += 1;
+                    root.close-reason = reason == InfoBarCloseReason.close-button ? "Close button" : "Programmatic";
+                    return cancel.checked;
+                }
+                closed(reason) => { root.closes += 1; }
+            }
+        }
+
+        for state in [
+            { title: "Changes saved", message: "Your display preset is ready to use.", severity: InfoSeverity.success },
+            { title: "Display disconnected", message: "Reconnect the display to apply its profile.", severity: InfoSeverity.warning },
+            { title: "Save failed", message: "Check that the destination is writable.", severity: InfoSeverity.error },
+        ] : InfoBar {
+            open: true;
+            title: state.title;
+            message: state.message;
+            severity: state.severity;
+            is-closable: false;
+        }
+        InfoBar {
+            open: true;
+            title: "Connection restored";
+            action-label: "Retry";
+            is-closable: false;
+            action => { root.actions += 1; }
+        }
+        InfoBar {
+            open: true;
+            is-icon-visible: false;
+            is-closable: false;
+            Text {
+                text: "Extra content with no title or message.";
+                vertical-alignment: center;
+                color: Palette.foreground;
+                accessible-label: self.text;
+            }
+        }
+    }
+}

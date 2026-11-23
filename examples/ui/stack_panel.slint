@@ -1,0 +1,181 @@
+import { CheckBox, ComboBox, LineEdit, Slider } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { BorderInsets } from "../../ui/components/layout/border.slint";
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../../ui/components/collections/items_repeater.slint";
+import {
+    StackPanel, StackPanelBehavior, StackPanelChild, StackPanelOptions, StackPanelSnapAlignment, StackPanelSnapPoints
+} from "../../ui/components/layout/stack_panel.slint";
+import { ScrollMode, ScrollView } from "../../ui/components/scrolling/scroll_view.slint";
+import { ScrollSnapAlignment } from "../../ui/components/scrolling/scroll_snap.slint";
+
+export {
+    StackPanelBehavior, StackPanelChild, StackPanelOptions, StackPanelSnapAlignment, StackPanelSnapPoints,
+    BorderInsets, ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize
+}
+
+component ExampleHeading inherits Text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #000000e4;
+}
+
+export component StackPanelExample inherits Window {
+    title: "WinUI StackPanel";
+    min-width: 748px;
+    min-height: 464px;
+    preferred-width: 748px;
+    preferred-height: 464px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI";
+    default-font-size: 14px;
+
+    private property <bool> horizontal;
+    private property <bool> rtl;
+    private property <bool> hide-second;
+    private property <bool> padded;
+    private property <bool> regular;
+    private property <int> notifications;
+    private property <int> target-index;
+    private property <length> current-spacing: round(spacing-control.value / 2) * 2px;
+    private property <StackPanelSnapAlignment> alignment: snap-alignment.current-index == 1 ? StackPanelSnapAlignment.center
+        : snap-alignment.current-index == 2 ? StackPanelSnapAlignment.far : StackPanelSnapAlignment.near;
+    private property <StackPanelSnapPoints> snaps: scroll-stack.snap-points(Orientation.vertical, root.alignment);
+    private property <ScrollSnapAlignment> scroll-alignment: root.alignment == StackPanelSnapAlignment.center ? ScrollSnapAlignment.center
+        : root.alignment == StackPanelSnapAlignment.far ? ScrollSnapAlignment.far : ScrollSnapAlignment.near;
+    private property <[color]> colors: [#ff0000, #0000ff, #008000, #ffff00];
+    private property <[string]> color-names: ["Red", "Blue", "Green", "Yellow"];
+    private property <[string]> row-labels: ["Item 1", "Item 2", "Item 3", "Item 4", "Item 5", "Item 6"];
+    private property <[StackPanelChild]> items: [
+        { size: { width: 40px, height: 40px } },
+        { size: { width: 40px, height: 40px }, collapsed: root.hide-second },
+        { size: { width: 40px, height: 40px } },
+        { size: { width: 40px, height: 40px } },
+    ];
+    private property <[StackPanelChild]> rows: [
+        { size: { width: 220px, height: 56px } },
+        { size: { width: 220px, height: 74px }, collapsed: root.hide-second },
+        { size: { width: 220px, height: 48px } },
+        { size: { width: 220px, height: 96px } },
+        { size: { width: 220px, height: 52px } },
+        { size: { width: 220px, height: 88px } },
+    ];
+
+    function go-to(index: int) {
+        root.target-index = clamp(index, 0, root.rows.length - 1);
+        let coordinate = root.regular ? root.snaps.offset + root.target-index * root.snaps.interval
+            : root.snaps.positions[root.target-index];
+        let anchor = root.alignment == StackPanelSnapAlignment.center ? scroller.viewport-height / 2
+            : root.alignment == StackPanelSnapAlignment.far ? scroller.viewport-height : 0px;
+        scroller.scroll-to(0px, coordinate - anchor);
+    }
+
+    ExampleHeading { x: 24px; y: 24px; text: "StackPanel"; }
+    HorizontalLayout {
+        x: 24px; y: 56px; width: 330px; height: 32px; spacing: 10px; alignment: start;
+        CheckBox { text: "Horizontal"; checked <=> root.horizontal; }
+        CheckBox { text: "RTL"; checked <=> root.rtl; }
+        CheckBox { text: "Border and padding"; checked <=> root.padded; }
+    }
+    CheckBox { x: 24px; y: 88px; height: 32px; text: "Collapse second item"; checked <=> root.hide-second; }
+    Text { x: 24px; y: 128px; text: "Spacing · " + round(root.current-spacing / 1px); }
+    spacing-control := Slider {
+        x: 24px; y: 152px; width: 260px; height: 26px;
+        accessible-label: "Spacing";
+        minimum: 0; maximum: 16; value: 8;
+    }
+    gallery := StackPanel {
+        x: 24px; y: 198px;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        orientation: root.horizontal ? Orientation.horizontal : Orientation.vertical;
+        spacing: root.current-spacing;
+        rtl: root.rtl;
+        items: root.items;
+        content-padding: root.padded ? { left: 12px, top: 8px, right: 16px, bottom: 12px } : {};
+        thickness: root.padded ? { left: 2px, top: 2px, right: 2px, bottom: 2px } : {};
+        border-brush: #00000038;
+        background-brush: root.padded ? #fdfdfd : transparent;
+        accessible-role: groupbox;
+        accessible-label: "Gallery stack";
+        for shade[index] in root.colors: Rectangle {
+            property <ItemsRepeaterPlacement> slot: gallery.placements[index];
+            x: slot.x; y: slot.y;
+            width: slot.width; height: slot.height;
+            visible: !root.items[index].collapsed;
+            background: shade;
+            accessible-role: groupbox;
+            accessible-label: root.color-names[index];
+        }
+    }
+
+    ExampleHeading { x: 372px; y: 24px; text: "Scroll snap points"; }
+    HorizontalLayout {
+        x: 372px; y: 56px; width: 350px; height: 34px; spacing: 12px;
+        snap-alignment := ComboBox {
+            accessible-label: "Snap alignment";
+            model: ["Near", "Center", "Far"];
+        }
+        CheckBox { text: "Regular points"; checked <=> root.regular; }
+    }
+    HorizontalLayout {
+        x: 372px; y: 100px; width: 350px; height: 34px; spacing: 8px; alignment: start;
+        Button { text: "Previous point"; clicked => { root.go-to(root.target-index - 1); } }
+        Button { text: "Next point"; clicked => { root.go-to(root.target-index + 1); } }
+    }
+    Text {
+        x: 372px; y: 150px;
+        text: "Point " + (root.target-index + 1) + " · Offset " + round(scroller.vertical-offset / 1px)
+            + " · Changes " + root.notifications;
+    }
+    scroller := ScrollView {
+        x: 372px; y: 182px;
+        width: 350px; height: 242px;
+        background: #f9f9f9;
+        label: "Snapping stack";
+        is-tab-stop: true;
+        horizontal-scroll-mode: ScrollMode.disabled;
+        extent-width: self.width;
+        extent-height: scroll-stack.preferred-height;
+        vertical-snap-points: {
+            aligned-points: root.regular ? [] : root.snaps.positions,
+            alignment: root.scroll-alignment,
+            ranges: root.regular && root.snaps.interval > 0px ? [{
+                offset: root.snaps.offset,
+                interval: root.snaps.interval,
+                start: 0px,
+                end: self.extent-height,
+                alignment: root.scroll-alignment,
+            }] : [],
+        };
+
+        scroll-stack := StackPanel {
+            width: scroller.width;
+            height: self.preferred-height;
+            items: root.rows;
+            spacing: root.current-spacing;
+            are-scroll-snap-points-regular: root.regular;
+            snap-points-changed(axis) => {
+                if axis == Orientation.vertical { root.notifications += 1; }
+            }
+            for label[index] in root.row-labels: Rectangle {
+                property <ItemsRepeaterPlacement> slot: scroll-stack.placements[index];
+                x: slot.x; y: slot.y;
+                width: slot.width; height: slot.height;
+                visible: !root.rows[index].collapsed;
+                background: index == 0 ? #e7f0f9 : #ededed;
+                if index != 0: Text {
+                    x: 12px; height: parent.height;
+                    text: label;
+                    vertical-alignment: center;
+                    color: #000000e4;
+                }
+                if index == 0: LineEdit {
+                    x: 12px; y: 10px;
+                    width: 214px; height: 36px;
+                    accessible-label: "Stack editor";
+                    placeholder-text: "Type before changing spacing";
+                }
+            }
+        }
+    }
+}

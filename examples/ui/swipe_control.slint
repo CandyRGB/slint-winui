@@ -1,0 +1,214 @@
+import { Button, Palette } from "std-widgets.slint";
+import { SwipeControl, SwipeSide, SwipeMode, SwipeItems, SwipeBehaviorOnInvoked } from "../../ui/components/menus-toolbars/swipe_control.slint";
+
+component SwipeSample inherits SwipeControl {
+    in property <string> label;
+    in property <bool> large-label;
+    in property <bool> list-row;
+
+    height: 68px;
+    preferred-width: 500px;
+    keyboard-tab-stop: true;
+    content-background: #f3f3f3;
+    content-border-width: self.list-row ? 0px : 1px;
+    content-border-color: #fbfbfb;
+    content << Rectangle {
+        if root.list-row: Rectangle { width: parent.width; height: 1px; background: #0000001a; }
+        Text {
+            x: root.large-label ? 12px : 0px;
+            width: parent.width - self.x;
+            height: parent.height;
+            text: root.label;
+            font-size: root.large-label ? 24px : 14px;
+            horizontal-alignment: root.large-label ? left : center;
+            vertical-alignment: center;
+            color: #1a1a1a;
+        }
+    }
+}
+
+export component SwipeControlExample inherits Window {
+    title: "SwipeControl";
+    min-width: 560px;
+    preferred-width: 860px;
+    min-height: 440px;
+    preferred-height: 672px;
+    default-font-family: "Segoe UI Variable Text";
+    background: #f3f3f3;
+    in property <color> accent: #005fb8;
+    in property <image> coffee-icon: @image-url("../../ui/icons/drink_coffee_16_regular.svg");
+
+    private property <bool> accepted;
+    private property <bool> flagged;
+    private property <bool> archived;
+    private property <bool> animations: true;
+    private property <bool> remain-open;
+    private property <bool> vertical-sample;
+    private property <int> active-row: -1;
+    private property <int> invoked-count;
+    private property <string> last-action: "None";
+    in property <[int]> initial-rows: [1, 2, 3, 4];
+    in-out property <[int]> rows: root.initial-rows;
+    callback remove-row(int);
+
+    private property <SwipeItems> mail-reveal: { items: [
+        { id: "reply", text: "Reply All", icon: @image-url("../../ui/icons/mail_arrow_double_back_16_regular.svg"), colorize-icon: true,
+            use-background: true, background: #3e6fa7, use-foreground: true, foreground: white },
+        { id: "open", text: "Open", icon: @image-url("../../ui/icons/mail_16_regular.svg"), colorize-icon: true,
+            use-background: true, background: #ff9501, use-foreground: true, foreground: white },
+    ] };
+    private property <SwipeItems> mail-delete: { mode: SwipeMode.execute, items: [
+        { id: "delete", text: "Delete", icon: @image-url("../../ui/icons/delete_16_regular.svg"), colorize-icon: true,
+            use-background: true, background: red },
+    ] };
+
+    function did-invoke(action: string) {
+        root.last-action = action;
+        root.invoked-count += 1;
+    }
+
+    function outside() { root.active-row = -1; }
+
+    Flickable {
+        x: 24px;
+        y: 68px;
+        width: parent.width - self.x - 24px;
+        height: parent.height - self.y - 24px;
+        visible: !root.vertical-sample;
+        content-width: self.width;
+        content-height: max(self.height, samples.preferred-height);
+
+        TouchArea { clicked => { root.outside(); } }
+
+        samples := VerticalLayout {
+            width: parent.width;
+            height: self.preferred-height;
+            alignment: start;
+            spacing: 12px;
+
+            Text { text: "Swipe right to reveal actions"; font-size: 16px; font-weight: 600; }
+            reveal := SwipeSample {
+                width: 500px;
+                accessible-name: "Reveal actions";
+                label: "Swipe Right" + (root.accepted || root.flagged ? " - " : "")
+                    + (root.accepted ? "Accepted" : "") + (root.accepted && root.flagged ? " & " : "") + (root.flagged ? "Flagged" : "");
+                animations-enabled: root.animations;
+                left-items: { items: [
+                    { id: "accept", text: root.accepted ? "Cancel" : "Accept", colorize-icon: true, use-background: true, background: #b6b6b6b3,
+                        icon: root.accepted ? @image-url("../../ui/icons/dismiss_16_regular.svg") : @image-url("../../ui/icons/checkmark_16_regular.svg") },
+                    { id: "flag", text: root.flagged ? "Unmark" : "Flag", colorize-icon: true, use-background: true, background: #b6b6b6b3,
+                        icon: @image-url("../../ui/icons/flag_16_regular.svg") },
+                ] };
+                interaction-started => { root.active-row = 0; }
+                item-invoked(side, item) => {
+                    root.did-invoke(item.text);
+                    if item.id == "accept" { root.accepted = !root.accepted; }
+                    if item.id == "flag" { root.flagged = !root.flagged; }
+                }
+                changed is-open => { if !self.is-open && root.active-row == 0 { root.outside(); } }
+                property <bool> current: root.active-row == 0;
+                changed current => { if !self.current { self.dismiss(); } }
+            }
+
+            Text { text: "Swipe left to execute an action"; font-size: 16px; font-weight: 600; }
+            execute := SwipeSample {
+                width: 500px;
+                accessible-name: "Execute action";
+                label: root.archived ? "Archived - Swipe Left" : "Swipe Left";
+                animations-enabled: root.animations;
+                execute-accent: root.accent;
+                right-items: { mode: SwipeMode.execute, items: [
+                    { id: "archive", text: "Archive", icon: @image-url("../../ui/icons/archive_16_regular.svg"), colorize-icon: true,
+                        behavior-on-invoked: root.remain-open ? SwipeBehaviorOnInvoked.remain-open : SwipeBehaviorOnInvoked.close },
+                ] };
+                interaction-started => { root.active-row = -2; }
+                item-invoked(side, item) => { root.archived = !root.archived; root.did-invoke(item.text); }
+                property <bool> current: root.active-row == -2;
+                changed current => { if !self.current { self.dismiss(); } }
+            }
+
+            Text { text: "Swipe in a list"; font-size: 16px; font-weight: 600; }
+            Rectangle {
+                width: min(800px, parent.width);
+                height: 300px;
+                background: #f9f9f9;
+                Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    content-width: self.width;
+                    content-height: max(self.height, mail.preferred-height);
+
+                    mail := VerticalLayout {
+                        width: parent.width;
+                        height: self.preferred-height;
+                        for row in root.rows: SwipeSample {
+                            label: "Swipe Item \{row}";
+                            accessible-name: self.label;
+                            large-label: true;
+                            list-row: true;
+                            animations-enabled: root.animations;
+                            left-items: root.mail-reveal;
+                            right-items: root.mail-delete;
+                            interaction-started => { root.active-row = row; }
+                            item-invoked(side, item) => {
+                                root.did-invoke("\{item.text} \{row}");
+                                if item.id == "delete" { root.remove-row(row); }
+                            }
+                            property <bool> current: root.active-row == row;
+                            changed current => { if !self.current { self.dismiss(); } }
+                        }
+                    }
+                }
+            }
+
+        }
+    }
+
+    Rectangle {
+        x: 24px;
+        y: 68px;
+        width: parent.width - 48px;
+        height: parent.height - self.y - 24px;
+        visible: root.vertical-sample;
+        TouchArea { clicked => { root.outside(); } }
+        Text { text: "Vertical swipe, bitmap icon and gradient action"; font-size: 16px; font-weight: 600; }
+        SwipeSample {
+            y: 34px;
+            width: 500px;
+            height: 200px;
+            accessible-name: "Vertical actions";
+            label: "Swipe Down or Up";
+            animations-enabled: root.animations;
+            top-items: { items: [{ id: "coffee", text: "Coffee", icon: root.coffee-icon, colorize-icon: true }] };
+            bottom-items: { mode: SwipeMode.execute, items: [{ id: "lock", text: "Lock", icon: @image-url("../../ui/icons/lock_closed_16_regular.svg"),
+                colorize-icon: true, use-background: true, background: @linear-gradient(90deg, #8990f9 0%, #5b66fb 50%, #5c1df4 100%) }] };
+            interaction-started => { root.active-row = -3; }
+            item-invoked(side, item) => { root.did-invoke(item.text); }
+            property <bool> current: root.active-row == -3;
+            changed current => { if !self.current { self.dismiss(); } }
+        }
+    }
+
+    HorizontalLayout {
+        x: 24px;
+        y: 16px;
+        width: parent.width - 48px;
+        height: 32px;
+        spacing: 8px;
+        alignment: start;
+        Button { text: "Dismiss"; clicked => { root.outside(); } }
+        Button { text: "Close archive"; clicked => { execute.close(); } }
+        Button { text: "Keep archive open"; checkable: true; checked <=> root.remain-open; }
+        Button { text: "Animate"; checkable: true; checked <=> root.animations; }
+        Button { text: "Reset rows"; clicked => { root.outside(); root.rows = root.initial-rows; } }
+        Button { text: "Vertical sample"; checkable: true; checked <=> root.vertical-sample; clicked => { root.outside(); } }
+    }
+    Text {
+        x: 24px;
+        y: parent.height - 24px;
+        height: 24px;
+        text: "Last action: \{root.last-action} · Invocations: \{root.invoked-count}";
+        vertical-alignment: center;
+        color: Palette.foreground;
+    }
+}

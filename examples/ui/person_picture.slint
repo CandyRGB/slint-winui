@@ -1,0 +1,79 @@
+import { Button, CheckBox, LineEdit, Palette } from "std-widgets.slint";
+import { PersonPicture } from "../../ui/components/media/person_picture.slint";
+export { PersonPictureBehavior } from "../../ui/components/media/person_picture.slint";
+
+export component PersonPictureExample inherits Window {
+    title: "WinUI PersonPicture";
+    preferred-width: 640px;
+    preferred-height: 360px;
+    in property <image> profile-photo;
+    in property <image> small-photo;
+    in property <image> badge-photo;
+    private property <image> empty-photo;
+    private property <int> badge-count;
+    private property <length> avatar-size: 96px;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            profile := CheckBox { text: "Profile photo"; }
+            contact := CheckBox { text: "Contact"; }
+            small := CheckBox { text: "Prefer small image"; }
+            group := CheckBox { text: "Group"; }
+            rtl := CheckBox { text: "RTL"; }
+        }
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            name := LineEdit { text: "Jane Doe"; width: 180px; placeholder-text: "Display name"; }
+            initials := LineEdit { width: 112px; placeholder-text: "Initials"; }
+            Button { text: "48 px"; clicked => { root.avatar-size = 48px; } }
+            Button { text: "96 px"; clicked => { root.avatar-size = 96px; } }
+            Button { text: "144 px"; clicked => { root.avatar-size = 144px; } }
+        }
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            Button { text: "No count"; clicked => { root.badge-count = 0; } }
+            Button { text: "One"; clicked => { root.badge-count = 1; } }
+            Button { text: "120"; clicked => { root.badge-count = 120; } }
+            glyph := CheckBox { text: "Badge glyph"; }
+            image := CheckBox { text: "Badge photo"; }
+            custom-label := CheckBox { text: "Badge text"; }
+            no-contact-photo := CheckBox { text: "Hide contact photos"; }
+        }
+        HorizontalLayout {
+            alignment: center;
+            spacing: 32px;
+            VerticalLayout {
+                alignment: center;
+                picture := PersonPicture {
+                    size: root.avatar-size;
+                    display-name: name.text;
+                    initials: initials.text;
+                    profile-picture: profile.checked ? root.profile-photo : root.empty-photo;
+                    contact: contact.checked
+                        ? { display-name: "Alex Morgan", first-name: "Alex", last-name: "Morgan",
+                            large-picture: no-contact-photo.checked ? root.empty-photo : root.profile-photo,
+                            small-picture: no-contact-photo.checked ? root.empty-photo : root.small-photo }
+                        : {};
+                    prefer-small-image: small.checked;
+                    is-group: group.checked;
+                    badge-number: root.badge-count;
+                    badge-glyph: glyph.checked ? "\u{E73E}" : "";
+                    badge-image-source: image.checked ? root.badge-photo : root.empty-photo;
+                    badge-text: custom-label.checked ? "messages" : "";
+                    rtl: rtl.checked;
+                }
+            }
+        }
+    }
+}

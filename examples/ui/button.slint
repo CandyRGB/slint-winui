@@ -1,0 +1,104 @@
+import { Button as SlintButton, CheckBox, Palette } from "std-widgets.slint";
+import { Button, ButtonStyle, ButtonClickMode, FlyoutRect } from "../../ui/components/basic-input/button.slint";
+import { Flyout, FlyoutPlacement } from "../../ui/components/dialogs-flyouts/flyout.slint";
+
+export component ButtonExample inherits Window {
+    title: "WinUI Button";
+    preferred-width: 620px;
+    preferred-height: 300px;
+    background: #f3f3f3;
+    in property <color> accent: Palette.accent-background;
+    private property <ButtonClickMode> mode: ButtonClickMode.release;
+    private property <int> count;
+    private property <string> last-action;
+    private property <FlyoutRect> target;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    function record(label: string) {
+        root.count += 1;
+        root.last-action = label;
+    }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            disabled := CheckBox { text: "Disable buttons"; }
+            SlintButton { text: "Release mode"; clicked => { root.mode = ButtonClickMode.release; } }
+            SlintButton { text: "Press mode"; clicked => { root.mode = ButtonClickMode.press; } }
+            SlintButton { text: "Hover mode"; clicked => { root.mode = ButtonClickMode.hover; } }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+
+            Button {
+                text: "Standard XAML button";
+                enabled: !disabled.checked;
+                click-mode: root.mode;
+                clicked => { root.record("Standard"); }
+            }
+            Button {
+                text: "Accent style button";
+                enabled: !disabled.checked;
+                appearance: ButtonStyle.accent;
+                accent: root.accent;
+                clicked => { root.record("Accent"); }
+            }
+            Button {
+                text: "Subtle style button";
+                enabled: !disabled.checked;
+                appearance: ButtonStyle.subtle;
+                clicked => { root.record("Subtle"); }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            icon := Button {
+                accessible-name: "Pin";
+                enabled: !disabled.checked;
+                min-width: 50px;
+                min-height: 50px;
+                clicked => { root.record("Pin"); }
+                Image {
+                    width: 20px;
+                    height: 20px;
+                    source: @image-url("../../ui/icons/pin_16_regular.svg");
+                    colorize: icon.foreground;
+                    accessible-role: none;
+                }
+            }
+            Button {
+                text: "Open details";
+                enabled: !disabled.checked;
+                has-flyout: true;
+                clicked => { root.record("Open details"); }
+                open-flyout(anchor) => {
+                    root.target = anchor;
+                    dropdown.show();
+                }
+            }
+        }
+
+        Text { text: "Activations \{root.count}"; color: Palette.foreground; }
+        if root.last-action != "": Text { text: root.last-action; color: Palette.foreground; }
+    }
+
+    dropdown := Flyout {
+        anchor: root.target;
+        placement: FlyoutPlacement.bottom-edge-aligned-left;
+        VerticalLayout {
+            spacing: 8px;
+            Text { text: "Details after \{root.last-action}"; color: Palette.foreground; }
+            SlintButton { text: "Close details"; clicked => { dropdown.hide(); } }
+        }
+    }
+}

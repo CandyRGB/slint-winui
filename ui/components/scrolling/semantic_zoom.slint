@@ -1,0 +1,244 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput } from "../basic-input/button_input.slint";
+
+export enum SemanticZoomReason { programmatic, item, button, keyboard, wheel, pinch, back }
+
+export struct SemanticZoomLocation {
+    item-key: string,
+    group-key: string,
+}
+
+export struct SemanticZoomViewChange {
+    source-is-zoomed-in: bool,
+    source: SemanticZoomLocation,
+    destination: SemanticZoomLocation,
+    reason: SemanticZoomReason,
+}
+
+export component SemanticZoom inherits Rectangle {
+    slot zoomed-in-view;
+    slot zoomed-out-view;
+
+    in-out property <bool> is-zoomed-in-view-active: true;
+    in property <bool> can-change-views: true;
+    in property <bool> is-zoom-out-button-enabled;
+    in property <bool> zoom-gestures-enabled;
+    in property <bool> rtl;
+    in property <string> accessible-name: @tr("Semantic zoom");
+    in property <SemanticZoomLocation> zoomed-in-location;
+    in property <SemanticZoomLocation> zoomed-out-location;
+    out property <bool> zoomed-in-active: root.active;
+
+    pure callback location-at(bool, Point) -> SemanticZoomLocation;
+    pure callback map-destination(bool, SemanticZoomLocation, SemanticZoomReason) -> SemanticZoomLocation;
+    callback view-change-started(SemanticZoomViewChange);
+    callback focus-destination(SemanticZoomViewChange);
+    callback view-change-completed(SemanticZoomViewChange);
+
+    private property <bool> active: true;
+    private property <bool> switching;
+    private property <bool> button-revealed;
+    private property <SemanticZoomViewChange> current-change;
+    private property <bool> began-in;
+    private property <float> last-scale: 1;
+    private property <SemanticZoomLocation> pinch-location;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    preferred-width: 400px;
+    preferred-height: 500px;
+    clip: true;
+    accessible-role: groupbox;
+    accessible-label: root.accessible-name;
+
+    init => { root.active = root.is-zoomed-in-view-active; }
+    changed is-zoomed-in-view-active => {
+        if root.is-zoomed-in-view-active != root.active {
+            if !root.switch-view(root.is-zoomed-in-view-active, root.current-location(), SemanticZoomReason.programmatic) {
+                root.is-zoomed-in-view-active = root.active;
+            }
+        }
+    }
+    changed is-zoom-out-button-enabled => {
+        if !root.is-zoom-out-button-enabled { root.button-revealed = false; }
+    }
+
+    public function zoom-out() {
+        root.switch-view(false, root.current-location(), SemanticZoomReason.programmatic);
+    }
+
+    public function zoom-in() {
+        root.switch-view(true, root.current-location(), SemanticZoomReason.programmatic);
+    }
+
+    public function activate-item(location: SemanticZoomLocation) {
+        if !pinch.active && !settle-pinch.running {
+            root.switch-view(!root.active, location, SemanticZoomReason.item);
+        }
+    }
+
+    public function go-back() -> bool {
+        return root.switch-view(true, root.current-location(), SemanticZoomReason.back);
+    }
+
+    public function notify-pointer-moved() {
+        if root.active && root.can-change-views && root.is-zoom-out-button-enabled {
+            root.button-revealed = true;
+            hide-button.restart();
+        }
+    }
+
+    public function handle-wheel(event: PointerScrollEvent, point: Point) -> EventResult {
+        if root.zoom-gestures-enabled && event.modifiers.control && event.delta-y != 0px && root.can-change-views {
+            root.switch-view(event.delta-y > 0px, root.pointer-location(point), SemanticZoomReason.wheel);
+            return accept;
+        }
+        return reject;
+    }
+
+    pure function current-location() -> SemanticZoomLocation {
+        return root.active ? root.zoomed-in-location : root.zoomed-out-location;
+    }
+
+    pure function pointer-location(point: Point) -> SemanticZoomLocation {
+        let at = root.location-at(root.active, point);
+        return at.item-key != "" || at.group-key != "" ? at : root.current-location();
+    }
+
+    function switch-view(to-zoomed-in: bool, location: SemanticZoomLocation, reason: SemanticZoomReason) -> bool {
+        if root.switching || !root.can-change-views || root.active == to-zoomed-in { return false; }
+        root.switching = true;
+        let destination = root.map-destination(to-zoomed-in, location, reason);
+        root.current-change = {
+            source-is-zoomed-in: root.active,
+            source: location,
+            destination: destination.item-key != "" || destination.group-key != "" ? destination : location,
+            reason: reason,
+        };
+        root.view-change-started(root.current-change);
+        root.active = to-zoomed-in;
+        root.is-zoomed-in-view-active = root.active;
+        root.button-revealed = false;
+        hide-button.stop();
+        settle.start();
+        return true;
+    }
+
+    settle := Timer {
+        interval: 0ms;
+        running: false;
+        triggered => {
+            self.stop();
+            let change = root.current-change;
+            root.focus-destination(change);
+            root.switching = false;
+            root.view-change-completed(change);
+        }
+    }
+
+    hide-button := Timer {
+        interval: 3000ms;
+        running: false;
+        triggered => {
+            self.stop();
+            if !zoom-out-input.has-hover { root.button-revealed = false; }
+        }
+    }
+
+    settle-pinch := Timer {
+        interval: 0ms;
+        running: false;
+        triggered => {
+            self.stop();
+            let passed = root.began-in ? root.last-scale < 0.90 : root.last-scale > 1.20;
+            if root.zoom-gestures-enabled && root.active == root.began-in && passed {
+                root.switch-view(!root.active, root.pinch-location, SemanticZoomReason.pinch);
+            }
+        }
+    }
+
+    FocusScope {
+        width: root.width;
+        height: root.height;
+        focus-on-tab-navigation: false;
+        focus-on-click: false;
+        capture-key-pressed(event) => {
+            if event.modifiers.control && (event.text == "-" || event.text == "=" || event.text == "+") {
+                let to-zoomed-in = event.text != "-";
+                if root.active != to-zoomed-in && root.can-change-views {
+                    if !event.repeat { root.switch-view(to-zoomed-in, root.current-location(), SemanticZoomReason.keyboard); }
+                    return accept;
+                }
+            }
+            return reject;
+        }
+
+        pinch := ScaleRotateGestureHandler {
+            width: parent.width;
+            height: parent.height;
+            enabled: root.zoom-gestures-enabled && root.can-change-views;
+            started => {
+                root.began-in = root.active;
+                root.last-scale = 1;
+                root.pinch-location = root.pointer-location(self.center);
+            }
+            updated => { root.last-scale = self.scale; }
+            ended => { settle-pinch.start(); }
+
+            TouchArea {
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.move && event.touch-finger-id == 0 { root.notify-pointer-moved(); }
+                }
+                scroll-event(event) => { return root.handle-wheel(event, { x: self.mouse-x, y: self.mouse-y }); }
+            }
+
+            Rectangle {
+                width: parent.width;
+                height: parent.height;
+                visible: root.active;
+                zoomed-in-view { }
+            }
+            Rectangle {
+                width: parent.width;
+                height: parent.height;
+                visible: !root.active;
+                zoomed-out-view { }
+            }
+
+            // Slint sends a new press for the finger left down at the end of a pinch.
+            TouchArea {
+                enabled: settle-pinch.running || self.pressed;
+            }
+        }
+    }
+
+    Rectangle {
+        x: root.rtl ? 20px : parent.width - 32px;
+        y: parent.height - 32px;
+        width: 12px;
+        height: 12px;
+        visible: root.active && root.button-revealed && root.can-change-views && root.is-zoom-out-button-enabled;
+        border-radius: 2px;
+        border-width: 1px;
+        border-color: root.dark ? #ffffff28 : #00000019;
+        background: zoom-out-input.pressed ? Palette.control-background.with-alpha(0.6)
+            : zoom-out-input.has-hover ? Palette.control-background : Palette.background;
+        accessible-role: button;
+        accessible-label: @tr("Zoom out");
+        accessible-action-default => { root.switch-view(false, root.current-location(), SemanticZoomReason.button); }
+        Image {
+            width: 6px;
+            height: 6px;
+            source: @image-url("../../icons/subtract_16_regular.svg");
+            colorize: Palette.foreground;
+            accessible-role: none;
+        }
+        zoom-out-input := ButtonInput {
+            enabled: parent.visible;
+            tab-stop: false;
+            clicked => { root.switch-view(false, root.current-location(), SemanticZoomReason.button); }
+            changed has-hover => {
+                if !self.has-hover && parent.visible { hide-button.restart(); }
+            }
+        }
+    }
+}

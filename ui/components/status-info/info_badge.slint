@@ -1,0 +1,98 @@
+import { Palette } from "std-widgets.slint";
+
+export enum InfoBadgeTone { accent, attention, informational, success, caution, critical }
+
+export struct InfoBadgeContent {
+    visible: bool,
+    value: int,
+    icon-source: image,
+    preserve-icon-colors: bool,
+    show-tone-icon: bool,
+    glyph: string,
+    tone: InfoBadgeTone,
+    accessible-name: string,
+}
+
+export component InfoBadge inherits Rectangle {
+    in property <int> value: -1;
+    in property <image> icon-source;
+    in property <bool> preserve-icon-colors;
+    in property <bool> show-tone-icon;
+    in property <string> glyph;
+    in property <string> glyph-font-family: "Segoe Fluent Icons";
+    in property <InfoBadgeTone> tone;
+    in property <length> corner-radius: self.height / 2;
+    in property <brush> foreground: Palette.accent-foreground;
+    in property <string> accessible-name;
+    in property <bool> decorative;
+    out property <string> status-text: root.accessible-name != "" ? root.accessible-name
+        : root.has-value ? number.text : "";
+
+    private property <bool> has-value: root.value >= 0;
+    private property <string> tone-glyph: root.tone == InfoBadgeTone.attention ? "\u{EA38}"
+        : root.tone == InfoBadgeTone.informational ? "\u{F13F}"
+        : root.tone == InfoBadgeTone.success ? "\u{E8FB}"
+        : root.tone == InfoBadgeTone.caution ? "\u{E8C9}"
+        : root.tone == InfoBadgeTone.critical ? "\u{E711}" : "";
+    private property <bool> has-image: !root.has-value && root.glyph == "" && root.icon-source.width > 0;
+    private property <bool> has-glyph: !root.has-value && !root.has-image && symbol.text != "";
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <length> image-width: root.has-image ? max(0px, round((8px * root.icon-source.width / max(1, root.icon-source.height)) / 2px) * 2px) : 0px;
+    private property <length> natural-height: root.has-value || root.has-glyph || root.has-image ? 16px : 4px;
+
+    preferred-width: root.has-value ? max(root.natural-height, round((number.preferred-width + 8px) / 2px) * 2px)
+        : root.has-glyph ? max(root.natural-height, round((symbol.preferred-width + 8px) / 2px) * 2px)
+        : root.has-image ? max(root.natural-height, root.image-width + 8px) : root.natural-height;
+    preferred-height: root.natural-height;
+    min-height: root.natural-height;
+    min-width: 4px;
+    max-height: root.natural-height;
+    max-width: self.preferred-width;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: root.corner-radius;
+    background: root.tone == InfoBadgeTone.attention ? (root.dark ? #4cc2ff : #0067c0)
+        : root.tone == InfoBadgeTone.informational ? (root.dark ? #9d9d9d : #8a8a8a)
+        : root.tone == InfoBadgeTone.success ? (root.dark ? #6ccb5f : #0f7b0f)
+        : root.tone == InfoBadgeTone.caution ? (root.dark ? #fce100 : #9d5d00)
+        : root.tone == InfoBadgeTone.critical ? (root.dark ? #ff99a4 : #c42b1c)
+        : Palette.accent-background;
+
+    if !root.decorative && root.status-text != "" : Rectangle {
+        accessible-role: text;
+        accessible-label: root.status-text;
+    }
+    number := Text {
+        y: -1px;
+        height: parent.height;
+        text: root.has-value ? "\{root.value}" : "";
+        visible: root.has-value;
+        color: root.foreground;
+        font-family: "Segoe UI";
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+        accessible-role: none;
+    }
+    symbol := Text {
+        y: -1px;
+        height: parent.height;
+        text: root.glyph != "" ? root.glyph : root.show-tone-icon ? root.tone-glyph : "";
+        visible: root.has-glyph;
+        color: root.foreground;
+        font-family: root.glyph-font-family;
+        font-size: root.glyph == "" ? 8px : 10px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: clip;
+        accessible-role: none;
+    }
+    if root.has-image : Image {
+        width: max(0px, min(root.image-width, root.width - 8px));
+        height: max(0px, min(8px, root.height - 8px));
+        source: root.icon-source;
+        colorize: root.preserve-icon-colors ? transparent : root.foreground;
+        accessible-role: none;
+    }
+}

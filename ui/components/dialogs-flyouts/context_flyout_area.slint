@@ -1,0 +1,55 @@
+import { FlyoutRect } from "flyout_layout.slint";
+
+export component ContextFlyoutArea inherits FocusScope {
+    in property <bool> context-enabled: true;
+    callback context-requested(FlyoutRect);
+    callback context-requested-at(Point);
+    private property <bool> right-pressed;
+
+    // Children handling pointer events can forward their right click in area-local coordinates.
+    public function request-at(position: Point) {
+        if (root.context-enabled) {
+            root.context-requested-at({
+                x: root.absolute-position.x + position.x,
+                y: root.absolute-position.y + position.y,
+            });
+        }
+    }
+
+    key-pressed(event) => {
+        if (root.context-enabled && (event.text == Key.Menu || (event.text == Key.F10
+            && event.modifiers.shift && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta))) {
+            if (!event.repeat) {
+                root.context-requested({
+                    x: root.absolute-position.x, y: root.absolute-position.y,
+                    width: root.width, height: root.height,
+                });
+            }
+            return accept;
+        }
+        return reject;
+    }
+
+    TouchArea {
+        enabled: root.context-enabled;
+        clicked => { root.focus(); }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.cancel) {
+                root.right-pressed = false;
+            } else if (event.button == PointerEventButton.right) {
+                if (event.kind == PointerEventKind.down) {
+                    root.right-pressed = true;
+                } else if (event.kind == PointerEventKind.up) {
+                    let request = root.right-pressed && self.mouse-x >= 0px && self.mouse-x < self.width
+                        && self.mouse-y >= 0px && self.mouse-y < self.height;
+                    root.right-pressed = false;
+                    if (request) {
+                        root.request-at({ x: self.mouse-x, y: self.mouse-y });
+                    }
+                }
+            }
+        }
+    }
+
+    @children
+}

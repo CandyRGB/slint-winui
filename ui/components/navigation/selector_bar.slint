@@ -1,0 +1,253 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual, ButtonInput } from "../basic-input/button_input.slint";
+
+export struct SelectorBarItem {
+    id: string,
+    text: string,
+    icon: image,
+    accessible-name: string,
+    icon-in-original-colors: bool,
+    disabled: bool,
+}
+
+export global SelectorBarBehavior {
+    in-out property <bool> ready;
+    pure callback index-of([SelectorBarItem], string, bool) -> int;
+    pure callback navigate([SelectorBarItem], int, bool) -> int;
+}
+
+component SelectorBarEntry inherits Rectangle {
+    in property <SelectorBarItem> item;
+    in property <int> index;
+    in property <int> count;
+    in property <bool> selected;
+    in property <bool> enabled: true;
+    in property <bool> tab-stop;
+    in property <bool> rtl;
+    in property <brush> indicator-color;
+    callback selected-by-user();
+    callback focus-changed(bool);
+    callback navigation-key(KeyEvent) -> EventResult;
+    out property <bool> has-focus: input.has-focus;
+
+    private property <bool> has-icon: root.item.icon.width > 0;
+    private property <bool> has-text: root.item.text != "";
+    private property <length> icon-width: root.has-icon ? 16px : 0px;
+    private property <length> text-start: 12px + root.icon-width + (root.has-icon && root.has-text ? 8px : 0px);
+    private property <length> text-width: root.has-text ? round(label.preferred-width / 2px) * 2px : 0px;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> foreground: !root.enabled ? (root.dark ? #ffffff5c : #0000005c)
+        : input.pressed && !root.selected ? (root.dark ? #ffffff88 : #00000072)
+        : input.has-hover || input.pressed
+            ? (root.dark ? #ffffffc5 : #0000009e) : (root.dark ? white : #000000e4);
+
+    width: root.text-start + root.text-width + 12px;
+    height: 40px;
+    forward-focus: input;
+    accessible-role: list-item;
+    accessible-label: root.item.accessible-name != "" ? root.item.accessible-name
+        : root.has-text ? root.item.text : @tr("Selector bar item");
+    accessible-enabled: root.enabled;
+    accessible-item-index: root.index;
+    accessible-item-count: root.count;
+    accessible-item-selected: root.selected;
+    accessible-item-selectable: true;
+    accessible-action-default => { if root.enabled { root.selected-by-user(); } }
+
+    changed has-focus => { root.focus-changed(root.has-focus); }
+
+    Image {
+        x: root.rtl ? parent.width - 12px - root.icon-width : 12px;
+        y: 12px;
+        width: root.icon-width;
+        height: 16px;
+        source: root.item.icon;
+        visible: root.has-icon;
+        colorize: root.item.icon-in-original-colors ? transparent : root.foreground;
+        accessible-role: none;
+    }
+
+    label := Text {
+        x: root.rtl ? 12px : root.text-start;
+        y: 10px;
+        width: root.text-width;
+        height: 20px;
+        visible: root.has-text;
+        text: root.item.text;
+        font-family: "Segoe UI";
+        font-size: 14px;
+        color: root.foreground;
+        vertical-alignment: center;
+        horizontal-alignment: root.rtl ? right : left;
+        accessible-role: none;
+    }
+
+    if root.selected: Rectangle {
+        y: parent.height - self.height;
+        height: 4px;
+        width: 16px;
+        border-radius: 2px;
+        background: root.enabled ? root.indicator-color : Palette.foreground.with-alpha(0.22);
+    }
+
+    input := ButtonInput {
+        enabled: root.enabled;
+        tab-stop: root.tab-stop;
+        clicked => { root.selected-by-user(); }
+        unhandled-key-pressed(event) => { return root.navigation-key(event); }
+    }
+
+    if input.keyboard-focused: ButtonFocusVisual {
+        control-width: parent.width;
+        control-height: parent.height;
+        horizontal-margin: 0px;
+        vertical-margin: 2px;
+    }
+}
+
+export component SelectorBar inherits Rectangle {
+    in property <[SelectorBarItem]> items;
+    in property <bool> rtl;
+    in property <bool> enabled: true;
+    in property <string> accessible-name: @tr("Selector bar");
+    in property <brush> indicator-color: Palette.accent-background;
+    in-out property <string> selected-id;
+    out property <int> selected-index: SelectorBarBehavior.ready
+        ? SelectorBarBehavior.index-of(root.items, root.selected-id, false) : -1;
+    out property <string> focused-id;
+    callback selection-changed(string);
+
+    private property <string> selection: root.selected-index >= 0 ? root.items[root.selected-index].id : "";
+    private property <string> current-id;
+    private property <int> current-index: SelectorBarBehavior.ready
+        ? SelectorBarBehavior.index-of(root.items, root.current-id, true) : -1;
+    private property <int> selected-focus-index: SelectorBarBehavior.ready
+        ? SelectorBarBehavior.index-of(root.items, root.selected-id, true) : -1;
+    private property <int> tab-index: !root.enabled || !SelectorBarBehavior.ready ? -1
+        : root.current-index >= 0 ? root.current-index
+        : root.selected-focus-index >= 0 ? root.selected-focus-index
+        : SelectorBarBehavior.navigate(root.items, -1, true);
+    private property <int> focus-request;
+    private property <int> reveal-request;
+    private property <int> reveal-index: root.focused-id != "" ? root.current-index : root.selected-index;
+
+    preferred-width: strip.preferred-width;
+    preferred-height: 48px;
+    min-width: 0px;
+    accessible-role: list;
+    accessible-label: root.accessible-name;
+    accessible-item-count: root.items.length;
+
+    changed selection => {
+        if root.selected-id != root.selection { root.selected-id = root.selection; }
+        root.reveal-request += 1;
+        root.selection-changed(root.selection);
+    }
+    changed selected-id => {
+        if SelectorBarBehavior.ready && root.selected-id != root.selection { root.selected-id = root.selection; }
+    }
+    changed width => { root.view-size-changed(); }
+    changed rtl => {
+        view.content-x = root.rtl ? root.width - view.content-width : 0px;
+        root.reveal-request += 1;
+    }
+
+    public function focus-selected() {
+        if root.tab-index >= 0 {
+            root.current-id = root.items[root.tab-index].id;
+            root.focus-request += 1;
+        }
+    }
+
+    public function select(index: int) {
+        if index >= 0 && index < root.items.length { root.selected-id = root.items[index].id; }
+    }
+
+    function view-size-changed() {
+        let minimum = min(0px, root.width - view.content-width);
+        view.content-x = root.rtl && root.reveal-index < 0 ? minimum : clamp(view.content-x, minimum, 0px);
+        root.reveal-request += 1;
+    }
+
+    function handle-key(origin: int, event: KeyEvent) -> EventResult {
+        let horizontal = event.text == Key.LeftArrow || event.text == Key.RightArrow;
+        let edge = event.text == Key.Home || event.text == Key.End;
+        if !horizontal && !edge { return reject; }
+        let forward = horizontal ? event.text == (root.rtl ? Key.LeftArrow : Key.RightArrow) : event.text == Key.Home;
+        let start = horizontal ? origin : forward ? -1 : root.items.length;
+        let target = SelectorBarBehavior.navigate(root.items, start, forward);
+        if target >= 0 {
+            root.current-id = root.items[target].id;
+            root.focus-request += 1;
+            if !event.modifiers.control { root.select(target); }
+        }
+        return accept;
+    }
+
+    function reveal(x: length, width: length) {
+        let minimum = min(0px, root.width - view.content-width);
+        let start = -view.content-x;
+        if width > root.width || x < start {
+            view.content-x = clamp(root.rtl && width > root.width ? root.width - x - width : -x, minimum, 0px);
+        } else if x + width > start + root.width {
+            view.content-x = clamp(root.width - x - width, minimum, 0px);
+        }
+    }
+
+    view := Flickable {
+        width: root.width;
+        height: root.height;
+        content-width: max(self.width, strip.preferred-width);
+        content-height: self.height;
+        interactive: root.enabled && self.content-width > self.width;
+
+        TouchArea {
+            x: -view.content-x;
+            width: view.width;
+            height: view.height;
+            enabled: view.interactive;
+            scroll-event(event) => {
+                let delta = abs(event.delta-x) > abs(event.delta-y) ? event.delta-x
+                    : root.rtl ? -event.delta-y : event.delta-y;
+                let prior = view.content-x;
+                view.content-x = clamp(prior + delta, root.width - view.content-width, 0px);
+                return prior != view.content-x ? accept : reject;
+            }
+        }
+
+        strip := HorizontalLayout {
+            y: 4px;
+            width: view.content-width;
+            height: 40px;
+            alignment: root.rtl ? end : start;
+            changed preferred-width => { root.view-size-changed(); }
+
+            for entry[order] in root.items: SelectorBarEntry {
+                index: root.rtl ? root.items.length - 1 - order : order;
+                count: root.items.length;
+                item: root.rtl ? root.items[self.index] : entry;
+                enabled: root.enabled && !self.item.disabled;
+                selected: self.index == root.selected-index;
+                tab-stop: self.index == root.tab-index;
+                indicator-color: root.indicator-color;
+                rtl: root.rtl;
+                private property <int> focus-ticket: root.focus-request;
+                private property <int> reveal-ticket: root.reveal-request;
+                changed focus-ticket => { if root.current-index == self.index && self.enabled { self.focus(); } }
+                changed reveal-ticket => { if root.reveal-index == self.index { root.reveal(self.x, self.width); } }
+                focus-changed(focused) => {
+                    if focused {
+                        root.current-id = self.item.id;
+                        root.focused-id = self.item.id;
+                        root.reveal(self.x, self.width);
+                        if root.selected-focus-index < 0 { root.select(self.index); }
+                    } else if root.focused-id == self.item.id {
+                        root.focused-id = "";
+                    }
+                }
+                navigation-key(event) => { return root.handle-key(self.index, event); }
+                selected-by-user => { root.select(self.index); }
+            }
+        }
+    }
+}

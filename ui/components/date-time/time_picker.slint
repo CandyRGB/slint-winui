@@ -1,0 +1,210 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "../basic-input/button_input.slint";
+import { ButtonSurface } from "../basic-input/button_surface.slint";
+import { PickerPopup } from "picker_popup.slint";
+import { PickerWheel, PickerWheelRow } from "picker_wheel.slint";
+
+export { PickerWheelRow }
+export enum TimePickerPart { hour, minute, period }
+export struct TimePickerColumn { part: TimePickerPart, text: string, rows: [PickerWheelRow] }
+export struct TimePickerOptions {
+    time: int, now: int, minute-increment: int, language: string, clock: string, rtl: bool,
+}
+export struct TimePickerState {
+    time: int, initial: int, twelve-hour: bool, rtl: bool, value-text: string, columns: [TimePickerColumn],
+}
+
+export global TimePickerBehavior {
+    in property <bool> ready;
+    pure callback state(TimePickerOptions) -> TimePickerState;
+    pure callback step(int, TimePickerPart, int, int, bool) -> int;
+}
+
+export component TimePicker inherits Rectangle {
+    in property <string> header;
+    in property <string> description;
+    in property <string> accessible-name: root.header != "" ? root.header : @tr("Time picker");
+    in property <string> language;
+    in property <string> clock-identifier;
+    in property <int> minute-increment: 1;
+    in property <int> now: -1;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <Size> popup-viewport;
+    in property <color> accent: Palette.accent-background;
+    // Minutes from midnight. -1 is the unselected value.
+    in-out property <int> selected-time: -1;
+    out property <bool> is-open: popup.is-open;
+    callback selected-time-changed(int, int);
+    callback opened();
+    callback closed();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <int> draft;
+    private property <int> reported: -1;
+    private property <bool> was-open;
+    private property <bool> open-state: popup.is-open;
+    private property <TimePickerOptions> options: { time: root.selected-time, now: root.now,
+        minute-increment: root.minute-increment, language: root.language, clock: root.clock-identifier, rtl: root.rtl };
+    private property <TimePickerState> committed: TimePickerBehavior.ready ? TimePickerBehavior.state(root.options)
+        : { time: root.selected-time, initial: 0, twelve-hour: false, rtl: root.rtl, value-text: "", columns: [] };
+    private property <TimePickerState> pending: TimePickerBehavior.ready ? TimePickerBehavior.state({ time: root.draft, now: root.now,
+        minute-increment: root.minute-increment, language: root.language, clock: root.clock-identifier, rtl: root.rtl })
+        : root.committed;
+    private property <int> effective-time: root.committed.time;
+
+    min-width: 132px;
+    preferred-width: 242px;
+    preferred-height: round(content.preferred-height / 2px) * 2px;
+    min-height: content.min-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: input;
+
+    init => { root.sync-time(); }
+    changed effective-time => { root.sync-time(); }
+    changed selected-time => { root.sync-time(); }
+    changed enabled => { if !root.enabled { root.close-picker(); } }
+    changed visible => { if !root.visible { root.close-picker(); } }
+    changed open-state => {
+        if root.open-state { root.was-open = true; root.opened(); }
+        else if root.was-open { root.was-open = false; root.closed(); }
+    }
+
+    function sync-time() {
+        if !TimePickerBehavior.ready { return; }
+        if root.selected-time != root.effective-time { root.selected-time = root.effective-time; }
+        if root.reported != root.effective-time {
+            let old = root.reported;
+            root.reported = root.effective-time;
+            if root.is-open { root.draft = root.committed.initial; }
+            root.selected-time-changed(old, root.reported);
+        }
+    }
+
+    public function open-picker() {
+        if root.enabled && root.visible && !root.is-open && root.committed.columns.length > 0 {
+            root.draft = root.committed.initial;
+            input.focus();
+            popup.show();
+        }
+    }
+
+    public function close-picker() {
+        if popup.is-open { popup.close(); if root.enabled { input.focus(); } }
+    }
+
+    pure function title(part: TimePickerPart) -> string {
+        return part == TimePickerPart.hour ? @tr("Hour") : part == TimePickerPart.minute ? @tr("Minute") : @tr("Period");
+    }
+
+    function step(index: int, amount: int) {
+        if index >= 0 && index < root.pending.columns.length && amount != 0 {
+            root.draft = TimePickerBehavior.step(root.pending.initial, root.pending.columns[index].part, amount,
+                root.minute-increment, root.pending.twelve-hour);
+        }
+    }
+
+    content := VerticalLayout {
+        spacing: 4px;
+        alignment: start;
+        if root.header != "": Text {
+            text: root.header;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            color: surface.foreground;
+            horizontal-alignment: root.committed.rtl ? right : left;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+        field := Rectangle {
+            height: 30px;
+            accessible-role: button;
+            accessible-label: root.accessible-name;
+            accessible-description: root.description;
+            accessible-value: root.committed.value-text;
+            accessible-read-only: true;
+            accessible-enabled: root.enabled;
+            accessible-action-default => { root.open-picker(); }
+
+            surface := ButtonSurface {
+                width: parent.width; height: parent.height;
+                enabled: root.enabled;
+                hovered: input.has-hover;
+                pressed: input.pressed;
+            }
+            Rectangle {
+                for col[i] in root.committed.columns: Rectangle {
+                    x: round(parent.width * i / root.committed.columns.length / 2px) * 2px;
+                    y: 0px;
+                    width: round(parent.width * (i + 1) / root.committed.columns.length / 2px) * 2px - self.x;
+                    height: parent.height;
+                    if i > 0: Rectangle {
+                        x: 0px;
+                        width: 1px;
+                        height: parent.height;
+                        background: root.dark ? #ffffff18 : #00000018;
+                    }
+                    Text {
+                        width: parent.width;
+                        height: parent.height - 2px;
+                        text: root.effective-time >= 0 || col.part == TimePickerPart.period ? col.text
+                            : col.part == TimePickerPart.hour ? @tr("hour") : @tr("minute");
+                        font-family: "Segoe UI";
+                        font-size: 14px;
+                        color: !root.enabled || root.effective-time >= 0 ? surface.foreground
+                            : root.dark ? #ffffffc5 : #0000009e;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                        accessible-role: none;
+                    }
+                }
+            }
+            input := ButtonInput {
+                enabled: root.enabled;
+                clicked => { root.open-picker(); }
+                unhandled-key-pressed(event) => {
+                    if event.modifiers.alt && (event.text == Key.DownArrow || event.text == Key.UpArrow) {
+                        root.open-picker(); return accept;
+                    }
+                    return reject;
+                }
+            }
+            if input.keyboard-focused && root.enabled: ButtonFocusVisual {
+                control-width: field.width;
+                control-height: field.height;
+            }
+        }
+        if root.description != "": Text {
+            text: root.description;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            color: root.dark ? #ffffffc5 : #0000009e;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+    }
+
+    popup := PickerPopup {
+        viewport: root.popup-viewport;
+        anchor-x: root.absolute-position.x;
+        anchor-y: root.absolute-position.y;
+        anchor-width: root.width;
+        field-middle: field.y + field.height / 2;
+        column-count: root.pending.columns.length;
+        accent: root.accent;
+        accepted => { root.close-picker(); root.selected-time = root.pending.initial; }
+        dismissed => { root.close-picker(); }
+        step(index, amount) => { root.step(index, amount); }
+
+        for col[i] in root.pending.columns: PickerWheel {
+            label: root.title(col.part);
+            rows: col.rows;
+            divider-visible: i > 0;
+            focused: popup.focused-column == i;
+            activate => { popup.activate-column(i); }
+            step(amount) => { root.step(i, amount); }
+        }
+    }
+}

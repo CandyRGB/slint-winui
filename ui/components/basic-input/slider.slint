@@ -1,0 +1,332 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual } from "button_input.slint";
+
+export enum SliderSnapsTo { step-values, ticks }
+export enum SliderTickPlacement { none, top-left, bottom-right, outside, inline }
+
+export component Slider inherits Rectangle {
+    in property <string> header;
+    in property <string> accessible-name: root.header;
+    in property <float> minimum;
+    in property <float> maximum: 100;
+    in property <float> step-frequency: 1;
+    in property <float> tick-frequency: 1;
+    in property <float> small-change: 1;
+    in property <SliderSnapsTo> snaps-to: SliderSnapsTo.step-values;
+    in property <SliderTickPlacement> tick-placement: SliderTickPlacement.none;
+    in property <Orientation> orientation: Orientation.horizontal;
+    in property <bool> direction-reversed;
+    in property <bool> rtl;
+    in property <bool> enabled: true;
+    in property <bool> thumb-tooltip-enabled: true;
+    in property <bool> animations-enabled: true;
+    in property <color> accent: Palette.accent-background;
+    in-out property <float> value: root.minimum;
+    out property <bool> has-focus: keyboard.has-focus && root.interactive;
+    callback value-changed(float, float);
+    callback released(float);
+    pure callback format-value(float) -> string;
+
+    private property <bool> vertical: root.orientation == Orientation.vertical;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> interactive: root.enabled && root.visible;
+    private property <bool> forward: root.vertical ? root.direction-reversed : root.rtl == root.direction-reversed;
+    private property <float> upper: max(root.minimum, root.maximum);
+    private property <float> span: root.upper - root.minimum;
+    private property <float> pointer-step: root.snaps-to == SliderSnapsTo.ticks ? root.tick-frequency : root.step-frequency;
+    private property <float> key-step: root.snaps-to == SliderSnapsTo.ticks ? root.tick-frequency : root.small-change;
+    private property <float> last-value;
+    private property <bool> pointer-focus;
+    private property <bool> tracking;
+    private property <length> grab-offset;
+    private property <float> pointer-value;
+    private property <length> header-height: root.header == "" ? 0px : round(heading.preferred-height / 2px) * 2px + 4px;
+    private property <length> length: root.vertical ? rail.height : rail.width;
+    private property <length> travel: max(0px, root.length - 18px);
+    private property <length> cross: root.vertical && root.rtl ? rail.width - 16px : 16px;
+    private property <float> fraction: root.span > 0 ? (root.clamped(root.tracking ? root.pointer-value : root.value) - root.minimum) / root.span : 0;
+    private property <length> position: 9px + root.travel * (root.forward ? root.fraction : 1 - root.fraction);
+    private property <length> fill-length: root.travel * root.fraction;
+    private property <length> pointer-axis: root.vertical ? hit.mouse-y : hit.mouse-x;
+    private property <length> pointer-cross: root.vertical ? hit.mouse-x : hit.mouse-y;
+    private property <bool> thumb-hover: hit.has-hover && abs(root.pointer-axis - root.position) <= 9px
+        && abs(root.pointer-cross - root.cross) <= 9px;
+    private property <bool> keyboard-focus: root.has-focus && !root.pointer-focus;
+    private property <bool> tooltip-open: root.interactive && root.thumb-tooltip-enabled && (root.tracking || root.keyboard-focus);
+    private property <color> rail-fill: root.dark
+        ? (root.enabled ? #ffffff8b : #ffffff3f) : (root.enabled ? #00000072 : #00000051);
+    private property <color> fill-color: !root.enabled ? (root.dark ? #ffffff28 : #00000037)
+        : root.accent.with-alpha(root.tracking ? 0.8 : hit.has-hover ? 0.9 : 1);
+    private property <float> tick-interval-count: root.tick-frequency > 0 ? max(1, root.span / root.tick-frequency) : 1;
+    private property <length> tick-pitch: max(1px, root.travel / root.tick-interval-count);
+    private property <int> tick-stride: ceil(4px / root.tick-pitch);
+    private property <int> tick-count: root.tick-frequency > 0 && root.span > 0 && root.tick-placement != SliderTickPlacement.none
+        ? min(floor(root.travel / (root.tick-pitch * root.tick-stride)), floor(floor(root.tick-interval-count) / root.tick-stride)) + 1 : 0;
+
+    min-width: max(root.vertical ? 32px : 18px, heading.min-width);
+    min-height: root.header-height + (root.vertical ? 18px : 32px);
+    preferred-width: max(root.vertical ? 32px : 200px, round(heading.preferred-width / 2px) * 2px);
+    preferred-height: root.header-height + (root.vertical ? 100px : 32px);
+    horizontal-stretch: root.vertical ? 0 : 1;
+    vertical-stretch: root.vertical ? 1 : 0;
+    forward-focus: keyboard;
+
+    accessible-role: slider;
+    accessible-enabled: root.enabled;
+    accessible-label: root.accessible-name;
+    accessible-orientation: root.orientation;
+    accessible-value: root.clamped(root.value);
+    accessible-value-minimum: root.minimum;
+    accessible-value-maximum: root.upper;
+    accessible-value-step: max(0, root.key-step);
+    accessible-action-set-value(input) => {
+        if root.interactive && input.is-float() {
+            root.commit(input.to-float());
+        }
+    }
+    accessible-action-increment => { if root.interactive { root.step(true); } }
+    accessible-action-decrement => { if root.interactive { root.step(false); } }
+
+    format-value(v) => {
+        let step = root.step-frequency;
+        let scale = root.whole(step) ? 1 : root.whole(step * 10) ? 10
+            : root.whole(step * 100) ? 100 : root.whole(step * 1000) ? 1000 : 10000;
+        return "\{round(v * scale) / scale}";
+    }
+    init => {
+        let initial = root.clamped(root.value);
+        if initial != root.value { root.value = initial; }
+        root.last-value = initial;
+    }
+    changed value => { root.commit(root.value); }
+    changed minimum => { root.commit(root.value); }
+    changed upper => { root.commit(root.value); }
+    changed interactive => { if !root.interactive { root.tracking = false; } }
+
+    pure function clamped(v: float) -> float {
+        return v != v ? root.minimum : clamp(v, root.minimum, root.upper);
+    }
+
+    pure function whole(v: float) -> bool {
+        return abs(v - round(v)) <= 0.00001;
+    }
+
+    pure function closest(v: float, step: float) -> float {
+        let bounded = root.clamped(v);
+        if step <= 0 || step != step || root.span <= 0 {
+            return bounded;
+        }
+        let before = max(root.minimum, floor(bounded / step) * step);
+        let after = min(root.upper, ceil(bounded / step) * step);
+        return after - bounded < bounded - before ? after : before;
+    }
+
+    function commit(input: float) {
+        let next = root.clamped(input);
+        if root.value != next {
+            root.value = next;
+        }
+        if root.last-value != next {
+            let previous = root.last-value;
+            root.last-value = next;
+            root.value-changed(previous, next);
+        }
+    }
+
+    function step(up: bool) {
+        let delta = root.key-step;
+        if delta > 0 {
+            let actual = root.clamped(root.value);
+            let previous-step = floor(actual / delta) * delta;
+            if !up && actual == root.upper && actual - previous-step > abs(actual) * 0.000001 {
+                root.commit(previous-step);
+            } else {
+                root.commit(root.closest(actual + (up ? delta : -delta), delta));
+            }
+        }
+    }
+
+    function track-pointer() {
+        if root.travel > 0px {
+            let amount = (root.pointer-axis - root.grab-offset - 9px) / root.travel;
+            root.pointer-value = root.clamped(root.minimum + root.span * (root.forward ? amount : 1 - amount));
+            root.commit(root.closest(root.pointer-value, root.pointer-step));
+        }
+    }
+
+    heading := Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: max(0px, root.header-height - 4px);
+        text: root.header;
+        font-family: "Segoe UI Variable Text";
+        font-size: 14px;
+        wrap: word-wrap;
+        horizontal-alignment: root.rtl ? right : left;
+        color: root.enabled ? (root.dark ? white : #000000e4) : (root.dark ? #ffffff5d : #0000005c);
+        accessible-role: none;
+    }
+
+    rail := Rectangle {
+        x: 0px;
+        y: root.header-height;
+        width: root.width;
+        height: max(0px, root.height - root.header-height);
+
+        Rectangle {
+            x: root.vertical ? root.cross - 2px : 0px;
+            y: root.vertical ? 0px : root.cross - 2px;
+            width: root.vertical ? 4px : parent.width;
+            height: root.vertical ? parent.height : 4px;
+            border-radius: 2px;
+            background: root.rail-fill;
+        }
+        Rectangle {
+            x: root.vertical ? root.cross - 2px : root.forward ? 0px : parent.width - root.fill-length;
+            y: root.vertical ? (root.forward ? 0px : parent.height - root.fill-length) : root.cross - 2px;
+            width: root.vertical ? 4px : root.fill-length;
+            height: root.vertical ? root.fill-length : 4px;
+            border-radius: 2px;
+            background: root.fill-color;
+        }
+
+        for idx in root.tick-count: Rectangle {
+            private property <length> offset: min(root.travel, root.tick-stride * idx * root.tick-pitch);
+            private property <length> axis: (root.forward ? 9px + self.offset : root.length - 9px - self.offset);
+            x: root.vertical ? root.cross : self.axis;
+            y: root.vertical ? self.axis : root.cross;
+            width: 0px;
+            height: 0px;
+
+            if root.tick-placement == SliderTickPlacement.top-left || root.tick-placement == SliderTickPlacement.outside: Rectangle {
+                x: root.vertical ? -10px : 0px;
+                y: root.vertical ? 0px : -10px;
+                width: root.vertical ? 4px : 1px;
+                height: root.vertical ? 1px : 4px;
+                background: root.rail-fill;
+            }
+            if root.tick-placement == SliderTickPlacement.bottom-right || root.tick-placement == SliderTickPlacement.outside: Rectangle {
+                x: root.vertical ? 6px : 0px;
+                y: root.vertical ? 0px : 6px;
+                width: root.vertical ? 4px : 1px;
+                height: root.vertical ? 1px : 4px;
+                background: root.rail-fill;
+            }
+            if root.tick-placement == SliderTickPlacement.inline: Rectangle {
+                x: root.vertical ? -2px : 0px;
+                y: root.vertical ? 0px : -2px;
+                width: root.vertical ? 4px : 1px;
+                height: root.vertical ? 1px : 4px;
+                background: root.dark ? #1e1e1eb3 : white;
+            }
+        }
+
+        Rectangle {
+            width: 22px;
+            height: 22px;
+            x: (root.vertical ? root.cross : root.position) - 11px;
+            y: (root.vertical ? root.position : root.cross) - 11px;
+            border-radius: 12px;
+            background: root.dark ? #454545 : white;
+            border-width: 1px;
+            border-color: root.dark ? @linear-gradient(180deg, #ffffff18 92%, #ffffff12 100%)
+                : @linear-gradient(180deg, #0000000f 92%, #00000029 100%);
+
+            Rectangle {
+                width: root.tracking ? 10px : root.thumb-hover ? 14px : 12px;
+                height: self.width;
+                border-radius: 8px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: root.fill-color;
+                animate width {
+                    duration: !root.animations-enabled ? 0ms : root.thumb-hover ? 250ms : 167ms;
+                    easing: cubic-bezier(0, 0, 0, 1);
+                }
+            }
+        }
+
+        hit := TouchArea {
+            enabled: root.interactive;
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    let on-thumb = root.thumb-hover;
+                    root.grab-offset = on-thumb ? root.pointer-axis - root.position : 0px;
+                    root.pointer-value = root.clamped(root.value);
+                    root.tracking = true;
+                    root.pointer-focus = true;
+                    keyboard.focus();
+                    if !on-thumb { root.track-pointer(); }
+                }
+                if event.kind == PointerEventKind.move && root.tracking {
+                    root.track-pointer();
+                }
+                if event.kind == PointerEventKind.up && event.button == PointerEventButton.left && root.tracking {
+                    root.tracking = false;
+                    root.released(root.value);
+                }
+                if event.kind == PointerEventKind.cancel {
+                    root.tracking = false;
+                }
+            }
+        }
+
+        keyboard := FocusScope {
+            x: 0px;
+            width: 0px;
+            enabled: root.interactive;
+            key-pressed(event) => {
+                let key = event.text;
+                if key == Key.Home || key == Key.End {
+                    root.pointer-focus = false;
+                    root.commit(key == Key.Home ? root.minimum : root.upper);
+                    return accept;
+                }
+                if key == Key.LeftArrow || key == Key.RightArrow || key == Key.UpArrow || key == Key.DownArrow {
+                    let forward-key = key == Key.UpArrow || key == (root.rtl && !root.vertical ? Key.LeftArrow : Key.RightArrow);
+                    root.pointer-focus = false;
+                    root.step(forward-key != root.direction-reversed);
+                    return accept;
+                }
+                return reject;
+            }
+            focus-lost(reason) => {
+                root.tracking = false;
+                root.pointer-focus = false;
+            }
+        }
+
+        if root.keyboard-focus: ButtonFocusVisual {
+            control-width: parent.width;
+            control-height: parent.height;
+            horizontal-margin: 8px;
+            vertical-margin: 0px;
+        }
+
+        if root.tooltip-open: Rectangle {
+            x: root.vertical ? root.cross - 16px - self.width : root.position - self.width / 2;
+            y: root.vertical ? root.position - self.height / 2 : root.cross - 22px - self.height;
+            width: max(32px, round(tooltip-text.preferred-width / 2px) * 2px + 16px);
+            height: 28px;
+            border-width: 1px;
+            border-radius: 4px;
+            border-color: root.dark ? #00000033 : #0000000f;
+            background: root.dark ? #2c2c2c : #f9f9f9;
+            drop-shadow-blur: 6px;
+            drop-shadow-offset-y: 2px;
+            drop-shadow-color: #00000020;
+            accessible-role: none;
+
+            tooltip-text := Text {
+                text: root.format-value(root.value);
+                font-family: "Segoe UI Variable Text";
+                font-size: 14px;
+                color: root.dark ? white : #000000e4;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+        }
+    }
+}

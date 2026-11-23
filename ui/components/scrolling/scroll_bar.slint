@@ -1,0 +1,173 @@
+import { Palette } from "std-widgets.slint";
+import { RepeatButtonInput } from "../basic-input/repeat_button.slint";
+
+component ScrollArrow inherits RepeatButtonInput {
+    in property <image> icon;
+    in property <color> glyph-color;
+    tab-stop: false;
+    accepts-return: false;
+    accepts-space: false;
+    accessible-role: none;
+    Image {
+        width: 8px;
+        height: 8px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.icon;
+        colorize: root.glyph-color;
+        transform-scale-x: root.pressed ? 0.875 : 1;
+        transform-scale-y: self.transform-scale-x;
+    }
+}
+
+export component ScrollBar inherits Rectangle {
+    in property <Orientation> orientation: Orientation.vertical;
+    in property <string> label;
+    in property <length> offset;
+    in property <length> viewport;
+    in property <length> extent;
+    in property <length> small-change: 16px;
+    in property <bool> enabled: true;
+    in property <bool> reversed;
+    in property <bool> near-edge;
+    in property <bool> always-show;
+    in property <bool> indicator-active;
+    callback offset-requested(length);
+    callback interaction-finished();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> horizontal: root.orientation == Orientation.horizontal;
+    private property <length> along: root.horizontal ? self.width : self.height;
+    private property <length> across: root.horizontal ? self.height : self.width;
+    private property <length> limit: max(0px, root.extent - root.viewport);
+    private property <bool> can-scroll: root.enabled && root.limit > 0px;
+    private property <bool> expanded: root.always-show || (root.can-scroll
+        && (probe.has-hover || thumb.has-hover || thumb.pressed || decrease.has-hover || increase.has-hover));
+    private property <length> end-space: min(12px, root.along / 2);
+    private property <length> track: max(0px, root.along - 2 * root.end-space);
+    private property <length> thumb-size: root.track == 0px ? 0px : root.limit == 0px ? root.track
+        : clamp(round((root.track * root.viewport / root.extent) / 2px) * 2px, min(root.track, 30px), root.track);
+    private property <length> travel: max(0px, root.track - root.thumb-size);
+    private property <float> fraction: root.limit > 0px ? clamp(root.offset / root.limit, 0, 1) : 0;
+    private property <length> physical-thumb: root.end-space + root.travel * (root.reversed ? 1 - root.fraction : root.fraction);
+    private property <length> thumb-width: root.expanded ? 8px : 2px;
+    private property <length> thumb-cross: root.expanded ? (root.across - root.thumb-width) / 2
+        : root.near-edge ? 2px : root.across - root.thumb-width - 2px;
+    private property <color> thumb-color: !root.can-scroll ? (root.dark ? #ffffff28 : #00000037)
+        : root.dark ? #ffffff8b : #00000072;
+
+    accessible-role: slider;
+    accessible-label: root.label;
+    accessible-orientation: root.orientation;
+    accessible-enabled: root.can-scroll;
+    accessible-value: root.offset / 1px;
+    accessible-value-minimum: 0;
+    accessible-value-maximum: root.limit / 1px;
+    accessible-value-step: root.small-change / 1px;
+    accessible-action-set-value(input) => {
+        if root.can-scroll && input.is-float() {
+            root.request(input.to-float() * 1px);
+            root.interaction-finished();
+        }
+    }
+    accessible-action-increment => { root.accessible-step(1); }
+    accessible-action-decrement => { root.accessible-step(-1); }
+
+    function request(next: length) {
+        if root.can-scroll { root.offset-requested(clamp(next, 0px, root.limit)); }
+    }
+
+    function accessible-step(direction: int) {
+        root.request(root.offset + direction * root.small-change);
+        root.interaction-finished();
+    }
+
+    function arrow(increase: bool) {
+        root.request(root.offset + (increase != root.reversed ? 1 : -1) * root.small-change);
+    }
+
+    opacity: root.expanded || (root.indicator-active && root.can-scroll) ? 1 : 0;
+    animate opacity { duration: 100ms; }
+
+    if root.expanded: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: root.dark ? #2c2c2cf2 : #f9f9f9f2;
+        border-radius: 6px;
+    }
+
+    probe := TouchArea {
+        enabled: root.can-scroll;
+        clicked => {
+            let position = root.horizontal ? self.mouse-x : self.mouse-y;
+            if position >= root.end-space && position < root.along - root.end-space {
+                let after = position > root.physical-thumb + root.thumb-size;
+                if after || position < root.physical-thumb {
+                    root.request(root.offset + (after != root.reversed ? 1 : -1) * root.viewport);
+                    root.interaction-finished();
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        x: root.horizontal ? root.physical-thumb : root.thumb-cross;
+        y: root.horizontal ? root.thumb-cross : root.physical-thumb;
+        width: root.horizontal ? root.thumb-size : root.thumb-width;
+        height: root.horizontal ? root.thumb-width : root.thumb-size;
+        border-radius: root.expanded ? 4px : 2px;
+        background: root.thumb-color;
+    }
+
+    thumb := TouchArea {
+        x: root.horizontal ? root.physical-thumb : 0px;
+        y: root.horizontal ? 0px : root.physical-thumb;
+        width: root.horizontal ? root.thumb-size : root.across;
+        height: root.horizontal ? root.across : root.thumb-size;
+        enabled: root.can-scroll;
+        private property <length> grab-offset;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                self.grab-offset = root.horizontal ? self.mouse-x : self.mouse-y;
+            }
+            if event.kind == PointerEventKind.move && self.pressed && root.travel > 0px {
+                let position = root.physical-thumb + (root.horizontal ? self.mouse-x : self.mouse-y) - self.grab-offset;
+                let next = (position - root.end-space) / root.travel;
+                root.request(root.limit * (root.reversed ? 1 - next : next));
+            }
+            if event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel {
+                root.interaction-finished();
+            }
+        }
+    }
+
+    decrease := ScrollArrow {
+        x: 0px;
+        y: 0px;
+        width: root.horizontal ? root.end-space : root.across;
+        height: root.horizontal ? root.across : root.end-space;
+        visible: root.expanded;
+        enabled: root.can-scroll;
+        icon: root.horizontal ? @image-url("../../icons/chevron_left_16_regular.svg")
+            : @image-url("../../icons/chevron_up_16_regular.svg");
+        glyph-color: root.thumb-color;
+        clicked => { root.arrow(false); }
+        repeated => { root.arrow(false); }
+        changed pointer-held => { if !self.pointer-held { root.interaction-finished(); } }
+    }
+
+    increase := ScrollArrow {
+        x: root.horizontal ? root.along - root.end-space : 0px;
+        y: root.horizontal ? 0px : root.along - root.end-space;
+        width: root.horizontal ? root.end-space : root.across;
+        height: root.horizontal ? root.across : root.end-space;
+        visible: root.expanded;
+        enabled: root.can-scroll;
+        icon: root.horizontal ? @image-url("../../icons/chevron_right_16_regular.svg")
+            : @image-url("../../icons/chevron_down_16_regular.svg");
+        glyph-color: root.thumb-color;
+        clicked => { root.arrow(true); }
+        repeated => { root.arrow(true); }
+        changed pointer-held => { if !self.pointer-held { root.interaction-finished(); } }
+    }
+}

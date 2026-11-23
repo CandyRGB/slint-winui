@@ -1,0 +1,258 @@
+import { Palette, ScrollView } from "std-widgets.slint";
+
+export struct Crumb { label: string }
+export struct BreadcrumbMeasurement { label: string, width: length }
+export struct BreadcrumbRow { index: int, label: string, width: length, offset: length }
+export struct BreadcrumbLayout {
+    inline: [BreadcrumbRow],
+    overflow: [BreadcrumbRow],
+    overflow-width: length,
+}
+
+export global BreadcrumbBarBehavior {
+    in-out property <bool> ready;
+    pure callback measurements() -> [BreadcrumbMeasurement];
+    callback measure([BreadcrumbMeasurement], int, string, length);
+    pure callback layout([Crumb], [BreadcrumbMeasurement], length) -> BreadcrumbLayout;
+}
+
+component MeasureCrumb inherits Text {
+    in property <int> index;
+    in property <[BreadcrumbMeasurement]> measurements;
+    private property <BreadcrumbMeasurement> measured: { label: self.text, width: self.preferred-width };
+    font-family: "Segoe UI";
+    font-size: 14px;
+    visible: false;
+    init => { BreadcrumbBarBehavior.measure(root.measurements, root.index, self.text, self.preferred-width); }
+    changed measured => { BreadcrumbBarBehavior.measure(root.measurements, root.index, self.text, self.preferred-width); }
+}
+
+component CrumbRow inherits Rectangle {
+    in property <string> label;
+    in property <bool> ellipsis;
+    in property <bool> current;
+    in property <bool> dropdown;
+    in property <bool> interactive;
+    in property <bool> rtl;
+    in property <bool> tab-stop;
+    in property <bool> requested;
+    callback invoked();
+    callback navigated(bool) -> bool;
+    out property <bool> focused: key.has-focus;
+
+    accessible-role: button;
+    accessible-enabled: root.interactive;
+    accessible-label: root.label;
+    forward-focus: key;
+    accessible-action-default => { if (root.interactive && !root.current) { root.invoked(); } }
+
+    changed requested => { if (root.requested && key.enabled) { key.focus(); } }
+
+    private property <length> separator: root.current || root.dropdown ? 0px : 16px;
+    private property <length> hit-width: max(0px, root.width - root.separator);
+    private property <brush> foreground: !root.dropdown && hit.pressed ? Palette.foreground.with-alpha(0.45)
+        : !root.dropdown && hit.has-hover ? Palette.foreground.with-alpha(0.62) : Palette.foreground;
+
+    Rectangle {
+        x: root.rtl ? root.separator : 0px;
+        width: root.hit-width;
+        height: parent.height;
+        border-radius: 4px;
+        border-width: root.focused ? 2px : 0px;
+        border-color: Palette.foreground;
+        background: !root.dropdown ? transparent : hit.pressed ? Palette.foreground.with-alpha(0.025)
+            : hit.has-hover ? Palette.foreground.with-alpha(0.04) : transparent;
+
+        if !root.ellipsis : Text {
+            x: root.dropdown ? 12px : 2px;
+            width: max(0px, parent.width - 2 * self.x);
+            height: parent.height;
+            text: root.label;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            horizontal-alignment: root.rtl ? right : left;
+            vertical-alignment: center;
+            overflow: elide;
+            color: root.foreground;
+            accessible-role: none;
+        }
+        if root.ellipsis : Image {
+            width: 16px;
+            height: 16px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            source: @image-url("../../icons/more_horizontal_16_regular.svg");
+            colorize: root.foreground;
+            accessible-role: none;
+        }
+        hit := TouchArea {
+            enabled: root.interactive && !root.current;
+            clicked => {
+                key.focus();
+                root.invoked();
+            }
+        }
+    }
+
+    if root.separator > 0px && root.width >= root.separator : Image {
+        x: root.rtl ? 2px : root.hit-width + 2px;
+        y: (parent.height - self.height) / 2;
+        width: 12px;
+        height: 12px;
+        source: root.rtl ? @image-url("../../icons/chevron_left_16_regular.svg")
+            : @image-url("../../icons/chevron_right_16_regular.svg");
+        colorize: Palette.foreground;
+        accessible-role: none;
+    }
+
+    key := FocusScope {
+        enabled: root.interactive;
+        focus-on-click: false;
+        focus-on-tab-navigation: root.tab-stop;
+        key-pressed(event) => {
+            if ((event.text == Key.Return || event.text == Key.Space) && !root.current) {
+                if (!event.repeat) { root.invoked(); }
+                return accept;
+            }
+            if (event.text == (root.dropdown ? Key.DownArrow : root.rtl ? Key.LeftArrow : Key.RightArrow)) {
+                return root.navigated(true) ? accept : reject;
+            }
+            if (event.text == (root.dropdown ? Key.UpArrow : root.rtl ? Key.RightArrow : Key.LeftArrow)) {
+                return root.navigated(false) ? accept : reject;
+            }
+            return reject;
+        }
+    }
+}
+
+export component BreadcrumbBar inherits Rectangle {
+    in property <[Crumb]> items;
+    in property <bool> interactive: true;
+    in property <bool> rtl;
+    in property <string> overflow-label: "Show hidden breadcrumbs";
+    in property <length> bar-height: 26px;
+    callback select(int);
+
+    preferred-height: root.bar-height;
+    min-width: 0px;
+    accessible-role: groupbox;
+    accessible-label: "Breadcrumb";
+
+    private property <[BreadcrumbMeasurement]> measurements: BreadcrumbBarBehavior.ready ? BreadcrumbBarBehavior.measurements() : [];
+    private property <BreadcrumbLayout> layout: BreadcrumbBarBehavior.ready ? BreadcrumbBarBehavior.layout(root.items, root.measurements, root.width) : {};
+    private property <int> requested-inline: -1;
+    private property <int> requested-overflow: -1;
+    private property <length> popup-height: min(364px, 4px + 40px * root.layout.overflow.length);
+    private property <length> popup-width: min(max(96px, root.width), root.layout.overflow-width);
+    changed items => { if (popup.is-open) { popup.close(); } }
+    changed width => {
+        root.requested-inline = -1;
+        if (popup.is-open) { popup.close(); }
+    }
+    changed interactive => { if (!root.interactive && popup.is-open) { popup.close(); } }
+
+    for item[index] in (BreadcrumbBarBehavior.ready ? root.items : []) : MeasureCrumb {
+        text: item.label;
+        index: index;
+        measurements: root.measurements;
+    }
+
+    for row[position] in root.layout.inline : CrumbRow {
+        x: root.rtl ? root.width - row.offset - row.width : row.offset;
+        width: row.width;
+        height: min(26px, root.height);
+        y: (root.height - self.height) / 2;
+        label: row.index < 0 ? root.overflow-label : row.label;
+        current: row.index == root.items.length - 1;
+        ellipsis: row.index < 0;
+        rtl: root.rtl;
+        interactive: root.interactive;
+        tab-stop: position == 0;
+        requested: root.requested-inline == position;
+        invoked => {
+            if (self.ellipsis) {
+                root.requested-overflow = -1;
+                popup.show();
+            } else {
+                root.select(row.index);
+            }
+        }
+        navigated(forward) => {
+            let next = position + (forward ? 1 : -1);
+            if (next >= 0 && next < root.layout.inline.length) {
+                root.requested-inline = next;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    popup := PopupWindow {
+        x: root.rtl ? root.width - self.width : 0px;
+        y: root.absolute-position.y >= self.height + 4px ? -self.height - 4px : root.height + 4px;
+        width: root.popup-width;
+        height: root.popup-height;
+        close-policy: close-on-click-outside;
+        forward-focus: overflow-key;
+
+        overflow-key := FocusScope {
+            focus-on-tab-navigation: false;
+            focus-on-click: false;
+            focus-gained(reason) => {
+                if (root.requested-overflow < 0) { root.requested-overflow = 0; }
+            }
+            key-pressed(event) => {
+                if (event.text == Key.Escape) { popup.close(); return accept; }
+                if (event.text == Key.Tab || event.text == Key.Backtab) { popup.close(); return reject; }
+                if (event.text == Key.DownArrow || event.text == Key.UpArrow || event.text == Key.Return || event.text == Key.Space) {
+                    root.requested-overflow = event.text == Key.UpArrow ? root.layout.overflow.length - 1 : 0;
+                    return accept;
+                }
+                return reject;
+            }
+
+            Rectangle {
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: Palette.foreground.with-alpha(0.06);
+                background: Palette.color-scheme == ColorScheme.dark ? #2c2c2c : #f9f9f9;
+                ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+                    horizontal-scrollbar-policy: always-off;
+                    content-width: self.visible-width;
+                    content-height: root.layout.overflow.length * 40px + 4px;
+                    private property <int> active-row: root.requested-overflow;
+                    changed active-row => {
+                        let top = 4px + 40px * self.active-row;
+                        let bottom = top + 32px;
+                        if (self.active-row >= 0 && top < -self.content-y) { self.content-y = -top; }
+                        if (self.active-row >= 0 && bottom > self.visible-height - self.content-y) {
+                            self.content-y = self.visible-height - bottom;
+                        }
+                    }
+
+                    for row[position] in root.layout.overflow : CrumbRow {
+                        x: 4px;
+                        y: 4px + position * 40px;
+                        width: max(0px, parent.width - 8px);
+                        height: 32px;
+                        label: row.label;
+                        dropdown: true;
+                        rtl: root.rtl;
+                        interactive: true;
+                        requested: root.requested-overflow == position;
+                        invoked => {
+                            root.select(row.index);
+                            popup.close();
+                        }
+                        navigated(forward) => {
+                            root.requested-overflow = Math.mod(position + (forward ? 1 : root.layout.overflow.length - 1), root.layout.overflow.length);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,261 @@
+import { Button, Palette } from "std-widgets.slint";
+import { AppBarLabelPosition, CommandBarBehavior, CommandBarEntry, CommandBarItem, CommandBarItemKind,
+    CommandBarLayout, CommandBarOverflowButtonVisibility } from "../../ui/components/menus-toolbars/command_bar.slint";
+import { CommandBarFlyoutKeyScope } from "../../ui/components/menus-toolbars/command_bar_flyout.slint";
+import { ContextFlyoutArea } from "../../ui/components/dialogs-flyouts/context_flyout_area.slint";
+import { FlyoutCloseReason, FlyoutRect, TextCommand, TextCommandBarFlyout, TextCommandTarget }
+    from "../../ui/components/text/text_command_bar_flyout.slint";
+import { ScrollingTextInput, TextBoxField } from "../../ui/components/text/text_box_field.slint";
+import { PasswordBox, PasswordBoxBehavior, PasswordEdit, PasswordMask } from "../../ui/components/text/password_box.slint";
+
+export { AppBarLabelPosition, CommandBarBehavior, CommandBarEntry, CommandBarItem, CommandBarItemKind,
+    CommandBarLayout, CommandBarOverflowButtonVisibility, PasswordBoxBehavior, PasswordEdit, PasswordMask }
+
+export struct TextEditSnapshot {
+    text: string,
+    anchor: int,
+    cursor: int,
+}
+
+struct DemoSelection {
+    anchor: int,
+    cursor: int,
+}
+
+component DemoTextField inherits ContextFlyoutArea {
+    in-out property <string> text <=> input.text;
+    in property <string> label;
+    in property <bool> read-only;
+    out property <bool> focused: input.has-focus;
+    out property <bool> selected: root.text != "" && root.selection.anchor != root.selection.cursor;
+    out property <DemoSelection> selection: { anchor: max(0, input.anchor-position-byte-offset),
+        cursor: max(0, input.cursor-position-byte-offset) };
+    out property <FlyoutRect> bounds: { x: root.absolute-position.x, y: root.absolute-position.y,
+        width: root.width, height: root.height };
+    out property <TextEditSnapshot> snapshot: { text: root.text, anchor: root.selection.anchor,
+        cursor: root.selection.cursor };
+    callback edited(TextEditSnapshot);
+    callback editor-key-pressed(KeyEvent) -> EventResult;
+
+    forward-focus: input;
+
+    public function apply(snapshot: TextEditSnapshot) {
+        root.text = snapshot.text;
+        input.set-selection-offsets(snapshot.anchor, snapshot.cursor);
+    }
+
+    public function select-range(selection: DemoSelection) {
+        input.set-selection-offsets(selection.anchor, selection.cursor);
+    }
+
+    public function run-command(command: TextCommand) {
+        if (command == TextCommand.select-all) {
+            input.select-all();
+        } else if (command == TextCommand.copy) {
+            input.copy();
+        } else if (command == TextCommand.cut && !root.read-only) {
+            input.cut();
+        } else if (command == TextCommand.paste && !root.read-only) {
+            input.paste();
+        }
+    }
+
+    TextBoxField {
+        width: parent.width;
+        height: parent.height;
+        editing: input.has-focus;
+        Rectangle {
+            x: 10px;
+            width: parent.width - 18px;
+            height: parent.height - 2px;
+            clip: true;
+            input := ScrollingTextInput {
+                viewport-width: parent.width;
+                height: parent.height;
+                color: Palette.foreground;
+                read-only: root.read-only;
+                accessible-role: text-input;
+                accessible-label: root.label;
+                accessible-value: root.text;
+                edited => { root.edited(root.snapshot); }
+                key-pressed(event) => { return root.editor-key-pressed(event); }
+            }
+        }
+    }
+}
+
+export component TextCommandBarFlyoutExample inherits Window {
+    title: "TextCommandBarFlyout";
+    preferred-width: 480px;
+    preferred-height: 420px;
+    min-width: 320px;
+    min-height: 360px;
+    callback has-clipboard-text() -> bool;
+    callback record-edit(TextEditSnapshot);
+    callback move-history(bool) -> TextEditSnapshot;
+    out property <TextEditSnapshot> editable-snapshot: normal.snapshot;
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+    private property <bool> clipboard-has-text;
+    private property <TextCommandTarget> target;
+    private property <DemoSelection> menu-selection;
+    private property <bool> editor-focused: root.target == TextCommandTarget.text-box ? normal.focused
+        : root.target == TextCommandTarget.text-block ? read-only.focused : password.has-focus;
+    private property <DemoSelection> live-selection: root.target == TextCommandTarget.text-box ? normal.selection
+        : root.target == TextCommandTarget.text-block ? read-only.selection
+        : { anchor: password.selection-anchor, cursor: password.selection-cursor };
+    private property <bool> has-editor-text: root.target == TextCommandTarget.text-box ? normal.text != ""
+        : root.target == TextCommandTarget.text-block ? read-only.text != "" : password.password != "";
+    private property <DemoSelection> command-selection: root.editor-focused ? root.live-selection : root.menu-selection;
+
+    changed live-selection => {
+        if (flyout.is-open && root.editor-focused) { root.menu-selection = root.live-selection; }
+    }
+
+    // Moving focus within a Slint window clears the editor's selection. Keep the range visible while the menu is focused.
+    changed editor-focused => {
+        if (flyout.is-open && !root.editor-focused) { root.apply-selection(); }
+    }
+
+    function apply-selection() {
+        if (root.target == TextCommandTarget.text-box) { normal.select-range(root.menu-selection); }
+        else if (root.target == TextCommandTarget.text-block) { read-only.select-range(root.menu-selection); }
+        else { password.set-selection-offsets(root.menu-selection.anchor, root.menu-selection.cursor); }
+    }
+
+    function change-history(reapply: bool) {
+        if (reapply ? root.can-redo : root.can-undo) { normal.apply(root.move-history(reapply)); }
+    }
+
+    function prepare(target: TextCommandTarget) {
+        if (flyout.is-open) { flyout.hide(); }
+        root.target = target;
+        root.clipboard-has-text = root.has-clipboard-text();
+        root.menu-selection = root.live-selection;
+    }
+
+    CommandBarFlyoutKeyScope {
+        width: parent.width;
+        height: parent.height;
+        dismiss-enabled: flyout.is-open;
+        dismiss => { flyout.dismiss(FlyoutCloseReason.escape); }
+
+        VerticalLayout {
+            x: 24px;
+            y: 44px;
+            width: parent.width - 48px;
+            height: self.preferred-height;
+            spacing: 8px;
+
+            Text { text: "Editable text"; }
+            normal := DemoTextField {
+                height: 32px;
+                label: "Editable text";
+                text: "The quick brown fox";
+                edited(snapshot) => { root.record-edit(snapshot); }
+                editor-key-pressed(event) => {
+                    if (event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta) {
+                        if (event.text.to-lowercase() == "z") {
+                            root.change-history(event.modifiers.shift);
+                            return accept;
+                        }
+                        if (!event.modifiers.shift && event.text.to-lowercase() == "y") {
+                            root.change-history(true);
+                            return accept;
+                        }
+                    }
+                    return reject;
+                }
+                context-requested(anchor) => {
+                    root.prepare(TextCommandTarget.text-box);
+                    flyout.show-context(anchor);
+                }
+                context-requested-at(point) => {
+                    root.prepare(TextCommandTarget.text-box);
+                    self.focus();
+                    root.menu-selection = root.live-selection;
+                    flyout.show-context-at(point);
+                }
+            }
+            Button {
+                text: "Show selection tools";
+                clicked => {
+                    root.prepare(TextCommandTarget.text-box);
+                    normal.focus();
+                    if (!normal.selected) { normal.run-command(TextCommand.select-all); }
+                    root.menu-selection = root.live-selection;
+                    flyout.show-selection(normal.bounds);
+                }
+            }
+            Text { text: "Read-only text"; }
+            read-only := DemoTextField {
+                height: 32px;
+                label: "Read-only text";
+                text: "Selectable read-only text";
+                read-only: true;
+                context-requested(anchor) => {
+                    root.prepare(TextCommandTarget.text-block);
+                    flyout.show-context(anchor);
+                }
+                context-requested-at(point) => {
+                    root.prepare(TextCommandTarget.text-block);
+                    self.focus();
+                    root.menu-selection = root.live-selection;
+                    flyout.show-context-at(point);
+                }
+            }
+            Text { text: "Password"; }
+            password := PasswordBox {
+                height: 32px;
+                accessible-name: "Password";
+                password: "example";
+                context-requested(anchor) => {
+                    root.prepare(TextCommandTarget.password-box);
+                    flyout.show-context(anchor);
+                }
+                context-requested-at(point) => {
+                    root.prepare(TextCommandTarget.password-box);
+                    self.focus();
+                    root.menu-selection = root.live-selection;
+                    flyout.show-context-at(point);
+                }
+            }
+        }
+
+        flyout := TextCommandBarFlyout {
+            width: parent.width;
+            height: parent.height;
+            target-kind: root.target;
+            can-paste: root.clipboard-has-text;
+            can-undo: root.can-undo;
+            can-redo: root.can-redo;
+            has-text: root.has-editor-text;
+            has-selection: root.has-editor-text && root.command-selection.anchor != root.command-selection.cursor;
+            invoked(command) => {
+                if (root.target == TextCommandTarget.text-box) {
+                    normal.select-range(root.command-selection);
+                    if (command == TextCommand.undo || command == TextCommand.redo) {
+                        root.change-history(command == TextCommand.redo);
+                    } else {
+                        normal.run-command(command);
+                    }
+                } else if (root.target == TextCommandTarget.text-block) {
+                    read-only.select-range(root.command-selection);
+                    read-only.run-command(command);
+                } else {
+                    password.set-selection-offsets(root.command-selection.anchor, root.command-selection.cursor);
+                    if command == TextCommand.paste { password.paste(); }
+                    else if command == TextCommand.select-all { password.select-all(); }
+                }
+                root.menu-selection = root.live-selection;
+                root.clipboard-has-text = root.has-clipboard-text();
+            }
+            restore-focus => {
+                if (root.target == TextCommandTarget.text-box) { normal.focus(); }
+                else if (root.target == TextCommandTarget.text-block) { read-only.focus(); }
+                else { password.focus(); }
+                root.apply-selection();
+            }
+        }
+    }
+}

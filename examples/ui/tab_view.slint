@@ -1,0 +1,78 @@
+import { Button, CheckBox, ComboBox, LineEdit, Palette } from "std-widgets.slint";
+import { TabView, TabViewItem, TabViewWidthMode, TabViewCloseButtonOverlayMode } from "../../ui/components/navigation/tab_view.slint";
+export { TabViewBehavior, TabViewItem, TabViewLayout, TabViewMeasurement, TabViewRow, TabViewWidthMode } from "../../ui/components/navigation/tab_view.slint";
+
+export component TabViewExample inherits Window {
+    preferred-width: 840px;
+    preferred-height: 420px;
+    title: "WinUI TabView";
+    in-out property <bool> narrow;
+    in-out property <bool> slots-visible;
+    in-out property <[TabViewItem]> tabs: [
+        { id: "home", label: "Home", icon: @image-url("../../ui/icons/home_16_regular.svg"), non-closable: true },
+        { id: "projects", label: "My work and projects", icon: @image-url("../../ui/icons/folder_16_regular.svg") },
+        { id: "offline", label: "Offline", icon: @image-url("../../ui/icons/folder_16_regular.svg"), disabled: true },
+        { id: "documents", label: "Documents", icon: @image-url("../../ui/icons/document_16_regular.svg") },
+    ];
+    in-out property <string> selection: "home";
+    in-out property <string> last-action: "Ready";
+    private property <[TabViewWidthMode]> modes: [TabViewWidthMode.equal, TabViewWidthMode.size-to-content, TabViewWidthMode.compact];
+    callback add();
+    callback close-tab(string);
+    callback reorder(string, int);
+    callback load-document(string) -> string;
+    callback save-document(string, string);
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+    changed selection => { editor.text = root.load-document(root.selection); }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 16px;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            mode := ComboBox { width: 160px; model: ["Equal", "Size to content", "Compact"]; current-index: 0; }
+            hover-close := CheckBox { text: "Close on hover"; }
+            direction := CheckBox { text: "RTL"; }
+            CheckBox { text: "Slots"; checked <=> root.slots-visible; }
+        }
+        HorizontalLayout {
+            tabs := TabView {
+                max-width: root.narrow ? 300px : 100000px;
+                horizontal-stretch: 1;
+                items: root.tabs;
+                selected-id <=> root.selection;
+                width-mode: root.modes[max(0, mode.current-index)];
+                close-button-overlay-mode: hover-close.checked ? TabViewCloseButtonOverlayMode.on-pointer-over : TabViewCloseButtonOverlayMode.auto;
+                rtl: direction.checked;
+                can-drag-tabs: true;
+                add-tab-button-click => { root.add(); }
+                tab-close-requested(id) => { root.close-tab(id); }
+                tab-reorder-requested(id, index) => { root.reorder(id, index); }
+                tab-dropped-outside(id) => { root.last-action = "Dropped outside: " + id; }
+                tab-strip-header << HorizontalLayout {
+                    padding: root.slots-visible ? 4px : 0px;
+                    if root.slots-visible : Button { text: "Workspaces"; clicked => { root.last-action = "Workspace actions"; } }
+                }
+                tab-strip-footer << HorizontalLayout {
+                    padding: root.slots-visible ? 4px : 0px;
+                    if root.slots-visible : Button { text: "Tab actions"; clicked => { root.last-action = "Tab actions"; } }
+                }
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 12px;
+                    alignment: start;
+                    Text { text: "Selected: " + root.selection; color: Palette.foreground; font-size: 20px; }
+                    editor := LineEdit {
+                        enabled: root.selection != "";
+                        placeholder-text: "Type here, then press Ctrl+Tab";
+                        edited => { root.save-document(root.selection, self.text); }
+                    }
+                }
+            }
+            if root.narrow : Rectangle { horizontal-stretch: 1; }
+        }
+        Text { text: root.last-action; color: Palette.foreground; }
+    }
+}

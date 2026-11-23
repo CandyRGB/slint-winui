@@ -1,0 +1,57 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { RepeatButton, ButtonClickMode } from "../../ui/components/basic-input/repeat_button.slint";
+
+export component RepeatButtonExample inherits Window {
+    title: "WinUI RepeatButton";
+    preferred-width: 540px;
+    preferred-height: 224px;
+    background: #f3f3f3;
+    private property <int> count;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            disabled := CheckBox { text: "Disable RepeatButton"; }
+            fast := CheckBox { text: "Shorter delay"; }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            sample := RepeatButton {
+                text: "Click and hold";
+                delay: fast.checked ? 120ms : 500ms;
+                enabled: !disabled.checked;
+                clicked => { root.count += 1; }
+            }
+            Text {
+                text: "Activations \{root.count}";
+                color: Palette.foreground;
+                vertical-alignment: center;
+                accessible-live-region: polite;
+            }
+            Button { text: "Reset"; clicked => { root.count = 0; } }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Press"; clicked => { sample.click-mode = ButtonClickMode.press; } }
+            Button { text: "Release"; clicked => { sample.click-mode = ButtonClickMode.release; } }
+            Button { text: "Hover"; clicked => { sample.click-mode = ButtonClickMode.hover; } }
+            Text {
+                text: sample.click-mode == ButtonClickMode.press ? "Press mode"
+                    : sample.click-mode == ButtonClickMode.release ? "Release mode" : "Hover mode";
+                color: Palette.foreground;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

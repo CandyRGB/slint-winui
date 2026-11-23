@@ -1,0 +1,49 @@
+import { Palette } from "std-widgets.slint";
+
+export component TextBoxField inherits Rectangle {
+    in property <bool> enabled: true;
+    in property <bool> editing;
+    in property <bool> hovered;
+    in property <color> accent: Palette.accent-background;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    height: 32px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: root.dark
+        ? @linear-gradient(180deg, #ffffff14 96%, #ffffff8a 100%)
+        : @linear-gradient(180deg, #0000000f 96%, #00000073 100%);
+    background: !root.enabled ? (root.dark ? #ffffff0a : #f9f9f94d)
+        : root.editing ? (root.dark ? #1e1e1eb3 : #ffffff)
+        : root.hovered ? (root.dark ? #ffffff0f : #f9f9f980) : Palette.control-background;
+
+    Rectangle {
+        visible: root.editing;
+        x: 2px;
+        y: parent.height - 2px;
+        width: parent.width - 4px;
+        height: 2px;
+        border-radius: 1px;
+        background: root.accent;
+    }
+
+    @children
+}
+
+// Position this inside a clipped rectangle spanning the editable part of the field.
+export component ScrollingTextInput inherits TextInput {
+    in property <length> viewport-width;
+    private property <length> offset;
+
+    x: min(0px, max(root.viewport-width - self.width, self.offset));
+    width: max(root.viewport-width, self.preferred-width + self.text-cursor-width);
+    vertical-alignment: center;
+    font-size: 14px;
+    selection-background-color: Palette.selection-background;
+    selection-foreground-color: Palette.accent-foreground;
+
+    cursor-position-changed(position) => {
+        let trailing = root.viewport-width - self.text-cursor-width - position.x;
+        self.offset = min(0px, max(-position.x, min(self.offset, trailing)));
+    }
+}

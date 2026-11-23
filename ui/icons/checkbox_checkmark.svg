@@ -1,0 +1,4 @@
+<!-- Derived from Microsoft UI XAML AnimatedAcceptVisualSource.cpp, MIT License. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 48 48">
+  <path d="M-15.172 .016 -5 10.188 15.337 -10.337" transform="translate(24 25) scale(.735)" fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

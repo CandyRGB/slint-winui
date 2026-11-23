@@ -1,0 +1,73 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { ProgressBar } from "../../ui/components/status-info/progress_bar.slint";
+
+export component ProgressBarExample inherits Window {
+    title: "WinUI ProgressBar";
+    preferred-width: 640px;
+    preferred-height: 292px;
+    background: #f3f3f3;
+    in property <color> accent: Palette.accent-background;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            busy := CheckBox { text: "Indeterminate"; }
+            paused := CheckBox { text: "Paused"; }
+            error := CheckBox { text: "Error"; }
+            motion := CheckBox { text: "Animate"; checked: true; }
+            rtl := CheckBox { text: "RTL"; }
+            padded := CheckBox { text: "Inset"; }
+            wide := CheckBox { text: "Wide"; }
+        }
+
+        Rectangle {
+            height: 80px;
+            border-width: 1px;
+            border-color: Palette.foreground.with-alpha(0.08);
+            border-radius: 8px;
+
+            progress := ProgressBar {
+                width: wide.checked ? 320px : 130px;
+                value: 45;
+                is-indeterminate: busy.checked;
+                show-paused: paused.checked;
+                show-error: error.checked;
+                animations-enabled: motion.checked;
+                rtl: rtl.checked;
+                content-padding-left: padded.checked ? 12px : 0px;
+                content-padding-right: padded.checked ? 12px : 0px;
+                foreground: root.accent;
+                accessible-name: "Transfer progress";
+            }
+        }
+
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Set 0"; clicked => { progress.value = 0; } }
+            Button { text: "Set 45"; clicked => { progress.value = 45; } }
+            Button { text: "Set 100"; clicked => { progress.value = 100; } }
+            Button { text: "Set 120"; clicked => { progress.value = 120; } }
+            Text { text: "\{progress.effective-value} (\{progress.minimum}–\{progress.maximum})"; color: Palette.foreground; }
+        }
+
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Reset range"; clicked => { progress.minimum = 0; progress.maximum = 100; } }
+            Button { text: "Range 20–80"; clicked => { progress.minimum = 20; progress.maximum = 80; } }
+            Button { text: "Set minimum to 120"; clicked => { progress.minimum = 120; } }
+            Button { text: "Set maximum to 80"; clicked => { progress.maximum = 80; } }
+        }
+    }
+}

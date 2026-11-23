@@ -1,0 +1,126 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual } from "../basic-input/button_input.slint";
+
+export component ListViewItem inherits Rectangle {
+    in property <string> label;
+    in property <int> item-index;
+    in property <int> item-count;
+    in property <bool> enabled: true;
+    in property <bool> selectable: true;
+    in property <bool> selected;
+    in property <bool> show-indicator: true;
+    in property <bool> show-check;
+    in property <bool> focused;
+    in property <bool> rtl;
+    in property <bool> dragging;
+    in property <color> accent: Palette.accent-background;
+    out property <length> content-width: content.width;
+    out property <length> content-height: content.height;
+    callback activated(KeyboardModifiers);
+    callback automation-action();
+    callback drag-moved(length, length, length);
+    callback drag-released();
+    callback drag-canceled();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> hover-fill: root.dark ? #ffffff0f : #00000009;
+    private property <color> pressed-fill: root.dark ? #ffffff0a : #00000006;
+    private property <color> normal-check: root.dark ? #00000019 : #00000006;
+    private property <length> check-slot: root.show-check ? 28px : 0px;
+
+    min-height: 40px;
+    accessible-role: list-item;
+    accessible-label: root.label;
+    accessible-item-index: root.item-index;
+    accessible-item-count: root.item-count;
+    accessible-item-selectable: root.selectable;
+    accessible-item-selected: root.selected;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.automation-action(); } }
+
+    Rectangle {
+        x: 4px;
+        y: 2px;
+        width: max(0px, parent.width - 8px);
+        height: max(0px, parent.height - 4px);
+        border-radius: 4px;
+        opacity: root.enabled ? 1 : 0.3;
+        background: root.selected
+            ? (root.enabled && hit.has-hover && !hit.pressed ? root.pressed-fill : root.hover-fill)
+            : !root.enabled ? transparent : hit.pressed && hit.has-hover ? root.pressed-fill
+            : hit.has-hover ? root.hover-fill : transparent;
+        if root.selected && root.show-indicator: Rectangle {
+            x: root.rtl ? parent.width - self.width : 0px;
+            y: round((root.height - self.height) / 4px) * 2px - 2px;
+            width: 4px;
+            height: max(16px, root.height - 40px) - (hit.pressed && hit.has-hover ? 6px : 0px);
+            border-radius: 2px;
+            background: root.accent;
+        }
+    }
+
+    hit := TouchArea {
+        enabled: root.enabled;
+        private property <KeyboardModifiers> modifiers;
+        private property <length> origin-y;
+        private property <bool> left-held;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                self.modifiers = event.modifiers;
+                self.left-held = event.touch-finger-id == 0;
+                self.origin-y = self.mouse-y;
+            }
+            if self.left-held && event.kind == PointerEventKind.move && event.touch-finger-id == 0 {
+                root.drag-moved(self.mouse-x, self.mouse-y, self.mouse-y - self.origin-y);
+            }
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.up {
+                if self.left-held { root.drag-released(); }
+                self.left-held = false;
+            } else if event.kind == PointerEventKind.cancel {
+                self.left-held = false;
+                root.drag-canceled();
+            }
+        }
+        clicked => {
+            if !root.dragging { root.activated(self.modifiers); }
+        }
+    }
+
+    content := Rectangle {
+        x: root.rtl ? 12px : 16px + root.check-slot;
+        width: max(0px, parent.width - 28px - root.check-slot);
+        height: parent.height;
+        opacity: root.dragging ? 0.5 : root.enabled ? 1 : 0.3;
+        accessible-role: none;
+        @children
+    }
+
+    if root.show-check: Rectangle {
+        x: root.rtl ? parent.width - 34px : 14px;
+        y: (parent.height - self.height) / 2;
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border-width: 1px;
+        border-color: root.selected ? self.background : !root.enabled
+            ? (root.dark ? #ffffff28 : #00000037) : (root.dark ? #ffffff8b : #00000072);
+        background: root.selected ? root.accent.with-alpha(!root.enabled ? 0.22
+            : hit.pressed && hit.has-hover ? 0.8 : hit.has-hover ? 0.9 : 1) : root.normal-check;
+        if root.selected: Image {
+            x: 2px;
+            y: 2px;
+            width: 16px;
+            height: 16px;
+            source: @image-url("../../icons/checkbox_checkmark.svg");
+            colorize: root.dark ? black : white;
+            opacity: root.enabled ? 1 : 0.4;
+        }
+    }
+
+    if root.focused && root.enabled: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+        horizontal-margin: 0px;
+        vertical-margin: 0px;
+    }
+}

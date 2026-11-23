@@ -1,0 +1,31 @@
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement } from "../collections/items_repeater.slint";
+import { WrapLayoutBehavior, WrapLayoutChild, WrapPanelItemsStretch, WrapPanelPadding } from "wrap_layout.slint";
+
+export component WrapPanel inherits Rectangle {
+    in property <[WrapLayoutChild]> items;
+    in property <Orientation> orientation: Orientation.horizontal;
+    in property <WrapPanelPadding> content-padding;
+    in property <length> item-spacing;
+    in property <length> line-spacing;
+    in property <WrapPanelItemsStretch> items-stretch: WrapPanelItemsStretch.none;
+    in property <bool> rtl;
+    in property <length> available-width: root.width;
+    in property <length> available-height: root.height;
+
+    out property <[ItemsRepeaterPlacement]> placements: root.geometry.placements;
+    out property <length> extent-width: root.geometry.width;
+    out property <length> extent-height: root.geometry.height;
+
+    private property <ItemsRepeaterGeometry> geometry: WrapLayoutBehavior.wrap-panel(root.items, {
+        available: { width: root.available-width, height: root.available-height },
+        orientation: root.orientation,
+        padding: root.content-padding,
+        item-spacing: root.item-spacing,
+        line-spacing: root.line-spacing,
+        stretch: root.items-stretch,
+        rtl: root.rtl,
+    });
+
+    accessible-role: none;
+    @children
+}

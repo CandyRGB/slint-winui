@@ -1,0 +1,245 @@
+import { Palette } from "std-widgets.slint";
+
+export struct RatingItemArt { glyph: string, image: image }
+export struct RatingItemInfo {
+    selected: RatingItemArt,
+    unset: RatingItemArt,
+    placeholder: RatingItemArt,
+    pointer-over: RatingItemArt,
+    pointer-over-placeholder: RatingItemArt,
+    disabled: RatingItemArt,
+}
+
+component RatingItem inherits Rectangle {
+    in property <RatingItemArt> art;
+    in property <string> font-family;
+    in property <brush> foreground;
+    in property <bool> colorize-image;
+    if root.art.image.width > 0 : Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.art.image;
+        colorize: root.colorize-image ? root.foreground : transparent;
+        accessible-role: none;
+    }
+    if root.art.image.width == 0 : Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.art.glyph;
+        font-family: root.font-family;
+        font-size: root.width;
+        color: root.foreground;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+}
+
+export component RatingControl inherits Rectangle {
+    in-out property <int> max-rating: 5;
+    in-out property <float> value: -1;
+    in-out property <float> placeholder-value: -1;
+    in property <int> initial-set-value: 1;
+    in property <bool> is-clear-enabled: true;
+    in property <bool> is-read-only;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <string> caption;
+    in property <string> accessible-name: @tr("Rating");
+    in property <RatingItemInfo> item-info;
+    in property <bool> colorize-images;
+    in property <string> font-family: Platform.os == OperatingSystemType.windows ? "Segoe Fluent Icons" : "";
+    callback value-changed(float);
+
+    private property <int> count: max(1, root.max-rating);
+    private property <length> star-width: 24px * root.count - 8px;
+    private property <length> display-width: min(root.width, root.star-width);
+    private property <bool> user-editable: root.enabled && !root.is-read-only;
+    private property <bool> preview: root.user-editable && (hit.has-hover || hit.pressed);
+    private property <bool> set: root.value >= 0;
+    private property <float> rating: root.set ? clamp(root.value, 1, root.count) : -1;
+    private property <float> placeholder: root.placeholder-value >= 0 ? min(root.placeholder-value, root.count) : -1;
+    private property <float> shown-value: root.preview ? root.rating-at(hit.mouse-x) : root.set ? root.rating : root.placeholder;
+    private property <RatingItemArt> active-art: root.prefer(root.item-info.selected,
+        { glyph: Platform.os == OperatingSystemType.windows ? "\u{E735}" : "\u{2605}" });
+    private property <RatingItemArt> inactive-art: root.prefer(root.item-info.unset,
+        root.item-info.selected.image.width > 0 || root.item-info.selected.glyph != "" ? root.active-art
+        : { glyph: Platform.os == OperatingSystemType.windows ? "\u{E734}" : "\u{2606}" });
+    private property <RatingItemArt> placeholder-art: root.prefer(root.item-info.placeholder, root.active-art);
+    private property <RatingItemArt> foreground-art: !root.enabled ? root.prefer(root.item-info.disabled, root.active-art)
+        : root.preview ? (root.set ? root.prefer(root.item-info.pointer-over, root.active-art)
+            : root.prefer(root.item-info.pointer-over-placeholder, root.placeholder-art))
+        : root.set ? root.active-art : root.placeholder-art;
+    private property <brush> fill: !root.enabled ? Palette.foreground.with-alpha(0.36)
+        : root.set ? Palette.accent-background
+        : root.preview ? Palette.foreground.with-alpha(0.06)
+        : Palette.foreground.with-alpha(0.9);
+
+    preferred-width: root.star-width + (root.caption != "" ? 12px + round(caption-text.preferred-width / 2px) * 2px : 0px);
+    preferred-height: 32px;
+    min-width: 16px;
+    min-height: 32px;
+    max-height: 32px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: keys;
+
+    init => { root.coerce(); }
+    changed max-rating => { root.coerce(); }
+    changed value => { root.coerce(); }
+    changed placeholder-value => { root.coerce(); }
+
+    pure function prefer(requested: RatingItemArt, fallback: RatingItemArt) -> RatingItemArt {
+        return requested.image.width > 0 || requested.glyph != "" ? requested : fallback;
+    }
+
+    function coerce() {
+        if (root.max-rating != root.count) { root.max-rating = root.count; }
+        if (root.value != root.rating) { root.value = root.rating; }
+        if (root.placeholder-value != root.placeholder) { root.placeholder-value = root.placeholder; }
+    }
+
+    pure function rating-at(x: length) -> int {
+        let logical-x = root.rtl ? root.display-width - x : x;
+        return clamp(ceil(logical-x / root.star-width * root.count), 0, root.count);
+    }
+
+    function commit(wanted: float, pointer: bool) {
+        if (!root.user-editable) { return; }
+        let target = clamp(wanted, 0, root.count);
+        if (root.rating < 0 && target == 0) { return; }
+        let clear = root.is-clear-enabled && (target == 0
+            || (target == root.rating && (pointer || target != root.count)));
+        let next = clear ? -1 : max(1, target);
+        if (next != root.rating) {
+            root.value = next;
+            root.value-changed(next);
+        }
+    }
+
+    function step(forward: bool) {
+        root.commit(root.rating < 0 ? root.initial-set-value
+            : forward ? floor(root.rating) + 1
+            : ceil(root.rating) - 1, false);
+    }
+
+    stars := Rectangle {
+        x: root.rtl ? root.width - self.width : 0px;
+        width: root.display-width;
+        height: parent.height;
+        clip: root.display-width < root.star-width;
+        accessible-role: slider;
+        accessible-label: root.accessible-name;
+        accessible-enabled: root.enabled;
+        accessible-read-only: root.is-read-only;
+        accessible-value: "\{max(0, root.rating)}";
+        accessible-value-minimum: 0;
+        accessible-value-maximum: root.count;
+        accessible-value-step: 1;
+        accessible-description: root.rating >= 0 ? @tr("{} out of {}", root.rating, root.count)
+            : root.placeholder >= 0 ? @tr("Community rating: {} out of {}", root.placeholder, root.count)
+            : @tr("Not rated");
+        accessible-action-increment => { root.step(true); }
+        accessible-action-decrement => { root.step(false); }
+        accessible-action-set-value(value) => {
+            if (root.user-editable && value.is-float()) {
+                let desired = value.to-float();
+                let next = desired < 0 ? -1 : clamp(desired, 1, root.count);
+                if (root.value != next) {
+                    root.value = next;
+                    root.value-changed(next);
+                }
+            }
+        }
+
+        for index in min(root.count, ceil(root.display-width / 24px)) : star := Rectangle {
+            property <float> pointer-distance: (hit.mouse-x - self.x - 8px) / 1px;
+            property <float> hover-scale: root.preview
+                ? max(0.5, 0.8 - 0.0004 * self.pointer-distance * self.pointer-distance) : 0.5;
+            property <length> art-size: round(16 * self.hover-scale) * 2px;
+            property <length> art-start: round((16px - self.art-size) / 4px) * 2px;
+            property <length> fraction-width: round(clamp(root.shown-value - index, 0, 1) * self.art-size / 2px) * 2px;
+            width: 16px;
+            height: parent.height;
+            x: root.rtl ? stars.width - self.width - 24px * index : 24px * index;
+            RatingItem {
+                x: star.art-start;
+                width: star.art-size;
+                height: star.art-size;
+                art: root.inactive-art;
+                font-family: root.font-family;
+                foreground: Palette.foreground.with-alpha(root.enabled ? 0.62 : 0.36);
+                colorize-image: root.colorize-images;
+            }
+            if self.fraction-width > 0px : Rectangle {
+                width: star.fraction-width;
+                height: star.art-size;
+                x: star.art-start + (root.rtl ? star.art-size - self.width : 0px);
+                clip: true;
+                RatingItem {
+                    x: root.rtl ? parent.width - star.art-size : 0px;
+                    width: star.art-size;
+                    height: star.art-size;
+                    art: root.foreground-art;
+                    foreground: root.fill;
+                    font-family: root.font-family;
+                    colorize-image: root.colorize-images;
+                }
+            }
+        }
+
+        keys := FocusScope {
+            enabled: root.enabled;
+            focus-on-click: false;
+            width: 0px;
+            key-pressed(event) => {
+                if (!root.user-editable) { return reject; }
+                if (event.text == Key.Home) { root.commit(0, false); return accept; }
+                if (event.text == Key.End) { root.commit(root.count, false); return accept; }
+                if (event.text == Key.UpArrow || event.text == Key.DownArrow) {
+                    root.step(event.text == Key.UpArrow);
+                    return accept;
+                }
+                if (event.text == Key.RightArrow || event.text == Key.LeftArrow) {
+                    root.step(event.text == (root.rtl ? Key.LeftArrow : Key.RightArrow));
+                    return accept;
+                }
+                return reject;
+            }
+        }
+
+        hit := TouchArea {
+            enabled: root.user-editable;
+            pointer-event(event) => {
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                    keys.focus();
+                }
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
+                    root.commit(root.rating-at(self.mouse-x), true);
+                }
+            }
+        }
+    }
+
+    caption-text := Text {
+        x: root.rtl ? 0px : stars.width + 12px;
+        width: max(0px, root.width - stars.width - 12px);
+        height: parent.height;
+        text: root.caption;
+        font-size: 12px;
+        font-family: "Segoe UI";
+        color: Palette.foreground.with-alpha(root.enabled ? 0.62 : 0.36);
+        vertical-alignment: center;
+        horizontal-alignment: root.rtl ? right : left;
+        overflow: elide;
+    }
+
+    if keys.has-focus && root.enabled : Rectangle {
+        x: stars.x;
+        width: stars.width;
+        height: parent.height;
+        border-width: 2px;
+        border-radius: 4px;
+        border-color: Palette.foreground;
+    }
+}

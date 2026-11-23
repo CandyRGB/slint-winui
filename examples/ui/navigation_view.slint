@@ -1,0 +1,153 @@
+import { Button, Palette } from "std-widgets.slint";
+import {
+    NavigationView, NavigationViewBehavior, NavigationViewDisplayMode, NavigationViewItem,
+    NavigationViewItemKind, NavigationViewLeftLayout, NavigationViewMeasurement, NavigationViewPaneDisplayMode, NavigationViewRow, NavigationViewTopContentWidths, NavigationViewTopLayout,
+} from "../../ui/components/navigation/navigation_view.slint";
+
+export { NavigationViewBehavior, NavigationViewDisplayMode, NavigationViewItem, NavigationViewItemKind, NavigationViewLeftLayout,
+    NavigationViewMeasurement, NavigationViewPaneDisplayMode, NavigationViewRow, NavigationViewTopContentWidths, NavigationViewTopLayout }
+
+export component NavigationViewExample inherits Window {
+    title: "LumaTune - NavigationView";
+    preferred-width: 1080px;
+    preferred-height: 620px;
+    min-width: 360px;
+    min-height: 320px;
+    default-font-family: "Segoe UI";
+    in-out property <NavigationViewPaneDisplayMode> mode: NavigationViewPaneDisplayMode.auto;
+    out property <string> selected-id: view.selected-id;
+    out property <bool> pane-open: view.is-pane-open;
+    out property <NavigationViewDisplayMode> display-mode: view.display-mode;
+    out property <string> last-invoked;
+    in-out property <bool> selection-follows-focus;
+    in property <bool> deep-menu;
+    in property <bool> with-search;
+    in property <bool> with-slots;
+    out property <int> slot-activations;
+    in property <length> title-bar-height;
+    private property <bool> title-bar-padding: true;
+    in-out property <string> query;
+    out property <string> submitted;
+    private property <string> previous;
+    private property <string> current: "home";
+
+    view := NavigationView {
+        height: parent.height;
+        width: parent.width;
+        pane-display-mode: root.mode;
+        pane-title: "LumaTune";
+        title-bar-height: root.title-bar-height;
+        is-title-bar-auto-padding-enabled: root.title-bar-padding;
+        selection-follows-focus: root.selection-follows-focus;
+        is-search-visible: root.with-search;
+        search-text <=> root.query;
+        search-placeholder: "Search library";
+        search-suggestions: root.query == "" ? [] : [
+            { id: "artists", label: "Artists", suggested-text: "Artists" },
+            { id: "albums", label: "Albums", suggested-text: "Albums" },
+        ];
+        search-submitted(text) => { root.submitted = text; }
+        header: root.selected-id == "home" ? "Home" : root.selected-id == "library" ? "Library"
+            : root.selected-id == "artists" ? "Artists" : root.selected-id == "albums" ? "Albums"
+            : root.selected-id == "recent" ? "Recently released" : root.selected-id == "favorites" ? "Favorites" : root.selected-id == "history" ? "Listening history"
+            : root.selected-id == "settings" || root.selected-id == "$settings" ? "Settings" : "Downloads";
+        selected-id: "home";
+        is-back-enabled: root.previous != "";
+        menu-items: [
+            { id: "home", label: "Home", icon: @image-url("../../ui/icons/home_16_regular.svg") },
+            { id: "group", label: "Your collection", kind: NavigationViewItemKind.header },
+            { id: "library", label: "Library", icon: @image-url("../../ui/icons/library_16_regular.svg") },
+            { id: "artists", parent-id: "library", label: "Artists" },
+            { id: "albums", parent-id: "library", label: "Albums" },
+            { id: "favorites", label: "Favorites", icon: @image-url("../../ui/icons/star_16_regular.svg") },
+            { id: "history", label: "Listening history", icon: @image-url("../../ui/icons/history_16_regular.svg") },
+            { id: "divider", kind: NavigationViewItemKind.separator },
+            { id: "downloads", label: "Offline downloads", disabled: true,
+                icon: @image-url("../../ui/icons/arrow_download_16_regular.svg") },
+            { id: root.deep-menu ? "releases" : "", label: "New releases and recommendations", icon: @image-url("../../ui/icons/music_note_2_16_regular.svg") },
+            { id: root.deep-menu ? "recent" : "", parent-id: "releases", label: "Recently released" },
+            { id: root.deep-menu ? "recommendations" : "", parent-id: "releases", label: "Recommendations" },
+            { id: root.deep-menu ? "shared" : "", label: "Shared collections", icon: @image-url("../../ui/icons/library_16_regular.svg") },
+            { id: root.deep-menu ? "community" : "", label: "Community libraries", icon: @image-url("../../ui/icons/library_16_regular.svg") },
+        ];
+        footer-menu-items: [
+            { id: "refresh", label: "Refresh", suppress-selection: true, icon: @image-url("../../ui/icons/arrow_clockwise_16_regular.svg") },
+        ];
+        item-invoked(id) => { root.last-invoked = id; }
+        selection-changed => {
+            if (root.selected-id != root.current) { root.previous = root.current; root.current = root.selected-id; }
+        }
+        back-requested => { if (root.previous != "") { self.selected-id = root.previous; } }
+
+        pane-header << HorizontalLayout {
+            alignment: start;
+            if root.with-slots : Button {
+                text: "Profile";
+                clicked => { root.slot-activations += 1; }
+            }
+        }
+        pane-custom-content << HorizontalLayout {
+            alignment: start;
+            spacing: 4px;
+            if root.with-slots : Button {
+                text: "Sort";
+                clicked => { root.slot-activations += 1; }
+            }
+            if root.with-slots : Button {
+                text: "Filter";
+                clicked => { root.slot-activations += 1; }
+            }
+        }
+        pane-footer << HorizontalLayout {
+            alignment: start;
+            if root.with-slots : Button {
+                text: "Help";
+                clicked => { root.slot-activations += 1; }
+            }
+        }
+        page-header << HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            if root.with-slots : Text {
+                text: "Library overview";
+                vertical-alignment: center;
+                font-size: 28px;
+                font-weight: 600;
+                color: Palette.foreground;
+            }
+            if root.with-slots : Button { text: "Page action"; }
+        }
+        content-overlay << HorizontalLayout {
+            if root.with-slots : Text {
+                text: "Library updated";
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                min-height: 32px;
+                color: Palette.foreground;
+            }
+        }
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 12px;
+            alignment: start;
+            Text { text: "Pane display mode"; font-size: 14px; color: Palette.foreground; }
+            HorizontalLayout {
+                spacing: 4px;
+                Button { text: "Auto"; clicked => { root.mode = NavigationViewPaneDisplayMode.auto; } }
+                Button { text: "Left"; clicked => { root.mode = NavigationViewPaneDisplayMode.left; } }
+                Button { text: "Compact"; clicked => { root.mode = NavigationViewPaneDisplayMode.left-compact; } }
+                Button { text: "Minimal"; clicked => { root.mode = NavigationViewPaneDisplayMode.left-minimal; } }
+                Button { text: "Top"; clicked => { root.mode = NavigationViewPaneDisplayMode.top; } }
+            }
+            if root.title-bar-height > 0px : Button {
+                text: "Toggle title bar padding";
+                clicked => { root.title-bar-padding = !root.title-bar-padding; }
+            }
+            if root.with-search : Text { text: "Submitted: " + root.submitted; font-size: 14px; color: Palette.foreground; }
+            if root.with-slots : Text { text: "Slot activations: \{root.slot-activations}"; color: Palette.foreground; }
+            Text { text: "Selection: " + root.selected-id; font-size: 14px; color: Palette.foreground; }
+            Button { text: "Toggle selection follows focus"; clicked => { root.selection-follows-focus = !root.selection-follows-focus; } }
+        }
+    }
+}

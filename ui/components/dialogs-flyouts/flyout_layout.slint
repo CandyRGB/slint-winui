@@ -1,0 +1,173 @@
+export struct FlyoutRect {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+}
+
+export enum FlyoutPlacement {
+    top,
+    bottom,
+    left,
+    right,
+    full,
+    top-edge-aligned-left,
+    top-edge-aligned-right,
+    bottom-edge-aligned-left,
+    bottom-edge-aligned-right,
+    left-edge-aligned-top,
+    left-edge-aligned-bottom,
+    right-edge-aligned-top,
+    right-edge-aligned-bottom,
+    auto,
+}
+
+enum FlyoutSide { top, bottom, left, right }
+
+export global FlyoutLayout {
+    private property <length> gap: 4px;
+
+    public pure function place-at-point(point: Point, bounds: FlyoutRect, size: Size) -> FlyoutRect {
+        let width = min(size.width, self.even-limit(bounds.width));
+        let height = min(size.height, self.even-limit(bounds.height));
+        let x = min(bounds.x + bounds.width, max(bounds.x, point.x));
+        let y = min(bounds.y + bounds.height, max(bounds.y, point.y));
+        return {
+            x: self.align(x + width > bounds.x + bounds.width ? x - width : x, bounds.x, bounds.width - width),
+            y: self.align(y + height > bounds.y + bounds.height ? y - height : y, bounds.y, bounds.height - height),
+            width: width,
+            height: height,
+        };
+    }
+
+    public pure function place-submenu(target: FlyoutRect, bounds: FlyoutRect, size: Size) -> FlyoutRect {
+        return self.place-submenu-on-side(target, bounds, size, false);
+    }
+
+    public pure function place-submenu-on-side(target: FlyoutRect, bounds: FlyoutRect, size: Size, prefer-left: bool) -> FlyoutRect {
+        let width = min(size.width, self.even-limit(bounds.width));
+        let height = min(size.height, self.even-limit(bounds.height));
+        let overlap = 4px;
+        let right = target.x + target.width;
+        let left-space = target.x - bounds.x;
+        let right-space = bounds.x + bounds.width - right;
+        let x = prefer-left
+            ? (width <= left-space ? target.x - width + overlap
+                : width < right-space ? right - overlap : bounds.x)
+            : (width <= right-space ? right - overlap
+                : width < left-space ? target.x - width + overlap : bounds.x + bounds.width - width);
+        let y = height <= bounds.y + bounds.height - target.y ? target.y
+            : height <= target.y + target.height - bounds.y ? target.y + target.height - height
+            : bounds.y;
+        return {
+            x: self.align(x, bounds.x, bounds.width - width),
+            y: self.align(y, bounds.y, bounds.height - height),
+            width: width,
+            height: height,
+        };
+    }
+
+    public pure function place(placement: FlyoutPlacement, target: FlyoutRect, bounds: FlyoutRect,
+        size: Size, minimum-size: Size) -> FlyoutRect {
+        return self.place-with-offsets(placement, target, bounds, size, minimum-size, { x: self.gap, y: self.gap });
+    }
+
+    public pure function place-with-offsets(placement: FlyoutPlacement, target: FlyoutRect, bounds: FlyoutRect,
+        size: Size, minimum-size: Size, offsets: Point) -> FlyoutRect {
+        let width = min(size.width, self.even-limit(bounds.width));
+        let height = min(size.height, self.even-limit(bounds.height));
+        if (placement == FlyoutPlacement.full) {
+            return {
+                x: self.align(bounds.x + (bounds.width - width) / 2, bounds.x, bounds.width - width),
+                y: self.align(bounds.y + (bounds.height - height) / 2, bounds.y, bounds.height - height),
+                width: width, height: height,
+            };
+        }
+
+        let preferred = self.preferred-side(placement);
+        let other = self.opposite(preferred);
+        let vertical = self.is-vertical(preferred);
+        let first-cross = vertical ? FlyoutSide.left : FlyoutSide.top;
+        let last-cross = self.opposite(first-cross);
+        let first-space = self.available-space(preferred, target, bounds, offsets);
+        let other-space = self.available-space(other, target, bounds, offsets);
+        let cross-space = self.available-space(first-cross, target, bounds, offsets);
+        let last-space = self.available-space(last-cross, target, bounds, offsets);
+        let primary-size = vertical ? height : width;
+        let cross-size = vertical ? width : height;
+        let minimum = vertical ? minimum-size.height : minimum-size.width;
+        let flip-to-resize = other-space > first-space && other-space >= minimum;
+        let side = first-space >= primary-size ? preferred
+            : other-space >= primary-size ? other
+            : cross-space >= cross-size ? first-cross
+            : last-space >= cross-size ? last-cross
+            : flip-to-resize ? other : preferred;
+        let available = self.available-space(side, target, bounds, offsets);
+        let fit-width = !self.is-vertical(side) && available >= minimum-size.width ? min(width, available) : width;
+        let fit-height = self.is-vertical(side) && available >= minimum-size.height ? min(height, available) : height;
+        let align-start = placement == FlyoutPlacement.top-edge-aligned-left
+            || placement == FlyoutPlacement.bottom-edge-aligned-left
+            || placement == FlyoutPlacement.left-edge-aligned-top
+            || placement == FlyoutPlacement.right-edge-aligned-top;
+        let align-end = placement == FlyoutPlacement.top-edge-aligned-right
+            || placement == FlyoutPlacement.bottom-edge-aligned-right
+            || placement == FlyoutPlacement.left-edge-aligned-bottom
+            || placement == FlyoutPlacement.right-edge-aligned-bottom;
+        let alignment = align-start ? 0.0 : align-end ? 1.0 : 0.5;
+        let x = side == FlyoutSide.left ? target.x - fit-width - offsets.x
+            : side == FlyoutSide.right ? target.x + target.width + offsets.x
+            : target.x + alignment * (target.width - fit-width);
+        let y = side == FlyoutSide.top ? target.y - fit-height - offsets.y
+            : side == FlyoutSide.bottom ? target.y + target.height + offsets.y
+            : target.y + alignment * (target.height - fit-height);
+        return {
+            x: self.align(x, bounds.x, bounds.width - fit-width),
+            y: self.align(y, bounds.y, bounds.height - fit-height),
+            width: fit-width, height: fit-height,
+        };
+    }
+
+    pure function preferred-side(placement: FlyoutPlacement) -> FlyoutSide {
+        if (placement == FlyoutPlacement.bottom || placement == FlyoutPlacement.bottom-edge-aligned-left
+            || placement == FlyoutPlacement.bottom-edge-aligned-right) {
+            return FlyoutSide.bottom;
+        }
+        if (placement == FlyoutPlacement.left || placement == FlyoutPlacement.left-edge-aligned-top
+            || placement == FlyoutPlacement.left-edge-aligned-bottom) {
+            return FlyoutSide.left;
+        }
+        if (placement == FlyoutPlacement.right || placement == FlyoutPlacement.right-edge-aligned-top
+            || placement == FlyoutPlacement.right-edge-aligned-bottom) {
+            return FlyoutSide.right;
+        }
+        return FlyoutSide.top;
+    }
+
+    pure function opposite(side: FlyoutSide) -> FlyoutSide {
+        return side == FlyoutSide.top ? FlyoutSide.bottom
+            : side == FlyoutSide.bottom ? FlyoutSide.top
+            : side == FlyoutSide.left ? FlyoutSide.right : FlyoutSide.left;
+    }
+
+    pure function is-vertical(side: FlyoutSide) -> bool {
+        return side == FlyoutSide.top || side == FlyoutSide.bottom;
+    }
+
+    pure function available-space(side: FlyoutSide, target: FlyoutRect, bounds: FlyoutRect, offsets: Point) -> length {
+        let space = side == FlyoutSide.top ? target.y - bounds.y
+            : side == FlyoutSide.bottom ? bounds.y + bounds.height - target.y - target.height
+            : side == FlyoutSide.left ? target.x - bounds.x
+            : bounds.x + bounds.width - target.x - target.width;
+        let axis-length = self.is-vertical(side) ? bounds.height : bounds.width;
+        let axis-offset = self.is-vertical(side) ? offsets.y : offsets.x;
+        return self.even-limit(min(space - axis-offset, axis-length));
+    }
+
+    pure function even-limit(size: length) -> length {
+        return max(0px, floor(size / 2px) * 2px);
+    }
+
+    pure function align(value: length, origin: length, extent: length) -> length {
+        return origin + min(self.even-limit(extent), max(0px, round((value - origin) / 2px) * 2px));
+    }
+}

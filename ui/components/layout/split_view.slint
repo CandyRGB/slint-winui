@@ -1,0 +1,219 @@
+import { Palette } from "std-widgets.slint";
+
+export enum SplitViewDisplayMode { overlay, inline, compact-overlay, compact-inline }
+export enum SplitViewPanePlacement { left, right }
+export enum SplitViewOverlayMode { auto, on, off }
+export enum SplitViewCloseReason { programmatic, light-dismiss, escape, resize }
+
+export global SplitViewBehavior {
+    callback traverse-focus(bool);
+}
+
+export component SplitView inherits Rectangle {
+    slot pane;
+    slot content;
+
+    in-out property <bool> is-pane-open;
+    in property <SplitViewDisplayMode> display-mode: SplitViewDisplayMode.overlay;
+    in property <SplitViewPanePlacement> pane-placement: SplitViewPanePlacement.left;
+    in property <SplitViewOverlayMode> light-dismiss-overlay-mode: SplitViewOverlayMode.auto;
+    in property <length> open-pane-length: 320px;
+    in property <length> compact-pane-length: 48px;
+    in property <brush> pane-background: Palette.color-scheme == ColorScheme.dark ? #171717 : #f2f2f2;
+    in property <brush> pane-border: transparent;
+    in property <brush> light-dismiss-overlay: Palette.color-scheme == ColorScheme.dark ? #00000099 : #ffffff99;
+    in property <bool> rtl;
+    in property <string> pane-accessible-name: @tr("Pane");
+
+    out property <bool> is-overlay-active: root.shown && root.overlay && root.visible-pane-width > 0px;
+    out property <length> visible-pane-width: root.shown ? root.open-width : root.compact-width;
+    out property <length> reserved-pane-width: root.overlay ? root.compact-width : root.visible-pane-width;
+    out property <length> content-width: max(0px, root.width - root.reserved-pane-width);
+
+    callback pane-opening();
+    callback pane-opened();
+    // Returning true cancels light dismissal, including Escape and resize.
+    callback pane-closing(SplitViewCloseReason) -> bool;
+    callback pane-closed(SplitViewCloseReason);
+    callback restore-focus();
+
+    private property <bool> shown;
+    private property <bool> changing;
+    private property <bool> overlay: root.display-mode == SplitViewDisplayMode.overlay
+        || root.display-mode == SplitViewDisplayMode.compact-overlay;
+    private property <bool> compact: root.display-mode == SplitViewDisplayMode.compact-overlay
+        || root.display-mode == SplitViewDisplayMode.compact-inline;
+    private property <bool> right: (root.pane-placement == SplitViewPanePlacement.right) != root.rtl;
+    private property <length> open-width: max(0px, min(root.width, root.open-pane-length));
+    private property <length> compact-width: root.compact ? max(0px, min(root.open-width, root.compact-pane-length)) : 0px;
+    private property <length> last-width;
+    private property <length> last-height;
+    private property <bool> forward-wrap;
+    private property <bool> wrapping;
+
+    preferred-width: 400px;
+    preferred-height: 300px;
+    clip: true;
+
+    init => {
+        root.last-width = root.width;
+        root.last-height = root.height;
+        root.set-open(root.is-pane-open, SplitViewCloseReason.programmatic);
+    }
+    changed is-pane-open => { root.set-open(root.is-pane-open, SplitViewCloseReason.programmatic); }
+    changed width => { root.on-resize(); }
+    changed height => { root.on-resize(); }
+
+    public function open-pane() { root.set-open(true, SplitViewCloseReason.programmatic); }
+    public function close-pane() { root.set-open(false, SplitViewCloseReason.programmatic); }
+    public function dismiss-pane() {
+        if root.is-overlay-active { root.set-open(false, SplitViewCloseReason.light-dismiss); }
+    }
+
+    function on-resize() {
+        if root.last-width != root.width || root.last-height != root.height {
+            let initialized = root.last-width > 0px && root.last-height > 0px;
+            root.last-width = root.width;
+            root.last-height = root.height;
+            if initialized && root.is-overlay-active { root.set-open(false, SplitViewCloseReason.resize); }
+        }
+    }
+
+    function set-open(open: bool, reason: SplitViewCloseReason) {
+        if root.changing || root.shown == open { return; }
+        root.changing = true;
+        if open {
+            root.pane-opening();
+            root.shown = true;
+            root.is-pane-open = true;
+            if root.is-overlay-active { root.focus-pane(); }
+            root.changing = false;
+            root.pane-opened();
+        } else {
+            let canceled = root.pane-closing(reason);
+            if canceled && reason != SplitViewCloseReason.programmatic {
+                root.changing = false;
+                return;
+            }
+            let restore = root.is-overlay-active;
+            root.shown = false;
+            root.is-pane-open = false;
+            if restore { root.restore-focus(); }
+            root.changing = false;
+            root.pane-closed(reason);
+        }
+    }
+
+    function focus-pane() {
+        start.focus();
+        root.schedule-wrap(true);
+    }
+
+    function schedule-wrap(forward: bool) {
+        if !root.wrapping {
+            root.forward-wrap = forward;
+            wrap.start();
+        }
+    }
+
+    wrap := Timer {
+        interval: 0ms;
+        running: false;
+        triggered => {
+            self.stop();
+            if root.is-overlay-active && (start.has-focus || end.has-focus) {
+                root.wrapping = true;
+                if root.forward-wrap { start.focus(); } else { end.focus(); }
+                SplitViewBehavior.traverse-focus(root.forward-wrap);
+                root.wrapping = false;
+            }
+        }
+    }
+
+    Rectangle {
+        x: root.right ? 0px : root.reserved-pane-width;
+        y: 0px;
+        width: root.content-width;
+        height: root.height;
+        clip: true;
+        content { }
+    }
+
+    if root.is-overlay-active: Rectangle {
+        x: root.right ? 0px : root.visible-pane-width;
+        y: 0px;
+        width: max(0px, root.width - root.visible-pane-width);
+        height: root.height;
+        background: root.light-dismiss-overlay-mode == SplitViewOverlayMode.on ? root.light-dismiss-overlay : transparent;
+        accessible-role: button;
+        accessible-label: @tr("Close pane");
+        accessible-action-default => { root.dismiss-pane(); }
+        TouchArea {
+            scroll-event(event) => { return accept; }
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left { root.dismiss-pane(); }
+            }
+        }
+    }
+
+    Rectangle {
+        x: root.right ? root.width - root.visible-pane-width : 0px;
+        y: 0px;
+        width: root.visible-pane-width;
+        height: root.height;
+        visible: self.width > 0px;
+        clip: true;
+        accessible-role: groupbox;
+        accessible-label: root.pane-accessible-name;
+
+        pane-area := Rectangle {
+            x: root.right ? parent.width - self.width : 0px;
+            y: 0px;
+            width: root.open-width;
+            height: parent.height;
+            background: root.pane-background;
+
+            if root.is-overlay-active: TouchArea {
+                scroll-event(event) => { return accept; }
+            }
+
+            FocusScope {
+                width: parent.width;
+                height: parent.height;
+                focus-on-click: false;
+                focus-on-tab-navigation: false;
+                key-pressed(event) => {
+                    if root.is-overlay-active && event.text == Key.Escape {
+                        root.set-open(false, SplitViewCloseReason.escape);
+                        return accept;
+                    }
+                    return reject;
+                }
+
+                start := FocusScope {
+                    x: 0px; y: 0px; width: 0px; height: 0px;
+                    enabled: root.is-overlay-active;
+                    focus-on-click: false;
+                    focus-gained(reason) => { if reason == FocusReason.tab-navigation { root.schedule-wrap(false); } }
+                }
+
+                pane { }
+
+                end := FocusScope {
+                    x: 0px; y: 0px; width: 0px; height: 0px;
+                    enabled: root.is-overlay-active;
+                    focus-on-click: false;
+                    focus-gained(reason) => { if reason == FocusReason.tab-navigation { root.schedule-wrap(true); } }
+                }
+            }
+
+            Rectangle {
+                x: root.right ? 0px : parent.width - 1px;
+                y: 0px;
+                width: 1px;
+                height: parent.height;
+                background: root.pane-border;
+            }
+        }
+    }
+}

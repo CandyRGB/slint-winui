@@ -1,0 +1,153 @@
+import { Palette } from "std-widgets.slint";
+
+export component ProgressBar inherits Rectangle {
+    in property <float> minimum: 0;
+    in-out property <float> maximum: 100;
+    in property <float> value: 0;
+    out property <float> effective-value: clamp(root.value, root.minimum, root.effective-maximum);
+    in property <bool> is-indeterminate;
+    in property <bool> show-paused;
+    in property <bool> show-error;
+    in property <bool> animations-enabled: true;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <length> content-padding-left;
+    in property <length> content-padding-right;
+    in property <length> content-padding-top;
+    in property <length> content-padding-bottom;
+    in property <color> foreground: Palette.accent-background;
+    in property <color> track-color: root.dark ? #ffffff8b : #00000072;
+    in property <color> paused-color: root.dark ? #fce100 : #9d5d00;
+    in property <color> error-color: root.dark ? #ff99a4 : #c42b1c;
+    in property <string> accessible-name: @tr("Progress");
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <float> effective-maximum: max(root.minimum, root.maximum);
+    private property <float> fraction: root.effective-maximum > root.minimum
+        ? (root.effective-value - root.minimum) / (root.effective-maximum - root.minimum) : 0;
+    private property <bool> stopped: root.show-error || root.show-paused;
+    private property <bool> running: root.visible && root.is-indeterminate && !root.stopped && root.animations-enabled;
+    private property <duration> loop-start;
+    private property <color> bar-color: root.show-error ? root.error-color : root.show-paused ? root.paused-color : root.foreground;
+    private property <string> status-name: root.show-error ? @tr("Error {}", root.accessible-name)
+        : root.show-paused ? @tr("Paused {}", root.accessible-name)
+        : root.is-indeterminate ? @tr("Busy {}", root.accessible-name) : root.accessible-name;
+    private property <length> left-inset: root.border-width + root.content-padding-left;
+    private property <length> right-inset: root.border-width + root.content-padding-right;
+    private property <length> top-inset: root.border-width + root.content-padding-top;
+    private property <length> bottom-inset: root.border-width + root.content-padding-bottom;
+
+    border-radius: 2px;
+    height: 4px + root.top-inset + root.bottom-inset;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    init => {
+        root.coerce-maximum();
+        root.loop-start = animation-tick();
+    }
+    changed minimum => { root.coerce-maximum(); }
+    changed maximum => { root.coerce-maximum(); }
+    changed running => { root.loop-start = animation-tick(); }
+    animate bar-color {
+        duration: root.animations-enabled ? 167ms : 0ms;
+        easing: linear;
+    }
+
+    function coerce-maximum() {
+        if root.maximum < root.minimum {
+            root.maximum = root.minimum;
+        }
+    }
+
+    pure function even-width(width: length) -> length {
+        return min(bar.width, round(width / 2px) * 2px);
+    }
+
+    pure function mirrored-x(x: length, segment-width: length) -> length {
+        let offset = round(x / 2px) * 2px;
+        return root.rtl ? bar.width - segment-width - offset : offset;
+    }
+
+    // Invert the x coordinate of the WinUI (0.4, 0, 0.6, 1) key spline.
+    pure function refine-spline-time(time: float, x: float) -> float {
+        let error = time * (1.2 + time * (-0.6 + 0.4 * time)) - x;
+        let slope = 1.2 * (1 - time + time * time);
+        return time - error / slope;
+    }
+
+    pure function scan-easing(phase: float) -> float {
+        let x = clamp(phase, 0, 1);
+        let time = root.refine-spline-time(root.refine-spline-time(x, x), x);
+        return time * time * (3 - 2 * time);
+    }
+
+    bar := Rectangle {
+        x: root.left-inset;
+        y: root.top-inset + (root.height - root.top-inset - root.bottom-inset - self.height) / 2;
+        width: max(0px, root.width - root.left-inset - root.right-inset);
+        height: min(4px, max(0px, root.height - root.top-inset - root.bottom-inset));
+        clip: true;
+        private property <duration> elapsed: root.running ? mod(animation-tick() - root.loop-start, 2s) : 0ms;
+
+        if !root.is-indeterminate: Rectangle {
+            width: parent.width;
+            height: min(1px, parent.height);
+            border-radius: self.height / 2;
+            background: root.track-color;
+        }
+        if !root.is-indeterminate: Rectangle {
+            x: root.rtl ? parent.width - self.width : 0px;
+            width: root.fraction == 1 ? parent.width : root.even-width(parent.width * root.fraction);
+            height: parent.height;
+            border-radius: root.border-radius;
+            background: root.bar-color;
+        }
+        if root.is-indeterminate && !root.stopped: Rectangle {
+            width: root.even-width(parent.width * 0.4);
+            height: parent.height;
+            x: root.mirrored-x(root.animations-enabled
+                ? root.width * (-0.4 + 1.6 * root.scan-easing(bar.elapsed / 1.5s))
+                : (parent.width - self.width) / 2, self.width);
+            border-radius: root.border-radius;
+            background: root.bar-color;
+        }
+        if root.is-indeterminate && !root.stopped && root.animations-enabled: Rectangle {
+            width: root.even-width(parent.width * 0.6);
+            height: parent.height;
+            x: root.mirrored-x(root.width * (-0.9 + 1.896 * root.scan-easing((bar.elapsed - 750ms) / 1.25s)), self.width);
+            border-radius: root.border-radius;
+            background: root.bar-color;
+        }
+        if root.is-indeterminate && root.stopped: Rectangle {
+            private property <float> entrance;
+            init => { self.entrance = 1; }
+            animate entrance {
+                delay: root.animations-enabled ? 167ms : 0ms;
+                duration: root.animations-enabled ? 583ms : 0ms;
+                easing: cubic-bezier(0, 0, 0, 1);
+            }
+
+            width: parent.width;
+            height: parent.height;
+            x: root.mirrored-x(root.width * -0.9 * (1 - self.entrance), self.width);
+            border-radius: root.border-radius;
+            background: root.bar-color;
+        }
+    }
+
+    if root.is-indeterminate: Rectangle {
+        accessible-role: progress-indicator;
+        accessible-label: root.status-name;
+        accessible-enabled: root.enabled;
+    }
+    if !root.is-indeterminate: Rectangle {
+        accessible-role: progress-indicator;
+        accessible-label: root.status-name;
+        accessible-enabled: root.enabled;
+        accessible-value: "\{root.effective-value}";
+        accessible-value-minimum: root.minimum;
+        accessible-value-maximum: root.effective-maximum;
+        accessible-read-only: true;
+    }
+}

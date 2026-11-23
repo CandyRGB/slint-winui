@@ -1,0 +1,32 @@
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement } from "../collections/items_repeater.slint";
+import { WrapLayoutBehavior, WrapLayoutChild, WrapGridAlignment } from "wrap_layout.slint";
+
+export component VariableSizedWrapGrid inherits Rectangle {
+    in property <[WrapLayoutChild]> items;
+    in property <Orientation> orientation: Orientation.vertical;
+    in property <length> item-width: -1px;
+    in property <length> item-height: -1px;
+    in property <int> maximum-rows-or-columns: -1;
+    in property <WrapGridAlignment> horizontal-children-alignment: WrapGridAlignment.start;
+    in property <WrapGridAlignment> vertical-children-alignment: WrapGridAlignment.start;
+    in property <bool> rtl;
+    in property <length> available-width: root.width;
+    in property <length> available-height: root.height;
+
+    out property <[ItemsRepeaterPlacement]> placements: root.geometry.placements;
+    out property <length> extent-width: root.geometry.width;
+    out property <length> extent-height: root.geometry.height;
+
+    private property <ItemsRepeaterGeometry> geometry: WrapLayoutBehavior.variable-grid(root.items, {
+        available: { width: root.available-width, height: root.available-height },
+        orientation: root.orientation,
+        cell: { width: root.item-width, height: root.item-height },
+        maximum-rows-or-columns: root.maximum-rows-or-columns,
+        horizontal-alignment: root.horizontal-children-alignment,
+        vertical-alignment: root.vertical-children-alignment,
+        rtl: root.rtl,
+    });
+
+    accessible-role: none;
+    @children
+}

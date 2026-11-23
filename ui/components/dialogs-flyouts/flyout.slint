@@ -1,0 +1,215 @@
+import { Palette, ScrollView } from "std-widgets.slint";
+import { FlyoutLayout, FlyoutPlacement, FlyoutRect } from "flyout_layout.slint";
+
+export { FlyoutPlacement, FlyoutRect }
+
+export enum FlyoutCloseReason { programmatic, light-dismiss, escape }
+
+export component FlyoutOverlay inherits Rectangle {
+    in property <bool> dim-background: false;
+    out property <bool> is-open: popup.is-open;
+
+    callback opening();
+    callback opened();
+    callback closing(FlyoutCloseReason) -> bool;
+    callback closed(FlyoutCloseReason);
+
+    private property <bool> changing;
+
+    public function show() {
+        if (!root.is-open && !root.changing) {
+            root.changing = true;
+            root.opening();
+            popup.show();
+            root.changing = false;
+            root.opened();
+        }
+    }
+
+    public function hide() {
+        root.dismiss(FlyoutCloseReason.programmatic);
+    }
+
+    // Returning true from closing keeps a light-dismissed or programmatically closed flyout open.
+    function dismiss(reason: FlyoutCloseReason) {
+        if (root.is-open && !root.changing) {
+            root.changing = true;
+            if (root.closing(reason)) {
+                root.changing = false;
+            } else {
+                popup.close();
+                root.changing = false;
+                root.closed(reason);
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        close-policy: no-auto-close;
+        forward-focus: start-focus;
+
+        FocusScope {
+            width: parent.width;
+            height: parent.height;
+            focus-on-click: false;
+            focus-on-tab-navigation: false;
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.dismiss(FlyoutCloseReason.escape);
+                    return accept;
+                }
+                return reject;
+            }
+
+            Rectangle {
+                background: root.dim-background ? #0000004d : transparent;
+                TouchArea {
+                    clicked => { root.dismiss(FlyoutCloseReason.light-dismiss); }
+                }
+            }
+
+            start-focus := FocusScope {
+                enabled: false;
+                width: 0px;
+                height: 0px;
+            }
+
+            @children
+        }
+    }
+}
+
+export component FlyoutPresenter inherits Rectangle {
+    in property <FlyoutRect> anchor;
+    in property <Size> available-size;
+    in property <FlyoutPlacement> placement: FlyoutPlacement.top;
+    in property <length> content-padding: 16px;
+    in property <length> horizontal-content-padding: root.content-padding;
+    in property <length> presenter-min-width: 96px;
+    in property <length> presenter-min-height: 40px;
+    in property <length> presenter-max-width: 456px;
+    in property <length> presenter-max-height: 758px;
+    in property <bool> allow-horizontal-scroll: true;
+    in property <bool> move-focus-on-scroll: true;
+    in property <{ y: length, height: length }> scroll-into-view;
+
+    callback scrolled();
+    in property <bool> cascading;
+    in property <bool> cascade-left;
+    in property <bool> positioned-at-point;
+    in property <Point> placement-offsets: { x: 4px, y: 4px };
+
+    private property <bool> full: !root.positioned-at-point && root.placement == FlyoutPlacement.full;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <FlyoutRect> bounds: {
+        x: 0px, y: 0px, width: root.available-size.width, height: root.available-size.height,
+    };
+    private property <Size> desired-size: {
+        width: min(root.presenter-max-width,
+            self.full ? self.bounds.width : round(max(root.presenter-min-width, content.preferred-width) / 2px) * 2px),
+        height: min(root.presenter-max-height,
+            self.full ? self.bounds.height : round(max(root.presenter-min-height, content.preferred-height) / 2px) * 2px),
+    };
+    private property <FlyoutRect> geometry: root.cascading
+        ? FlyoutLayout.place-submenu-on-side(root.anchor, self.bounds, self.desired-size, root.cascade-left)
+        : root.positioned-at-point
+        ? FlyoutLayout.place-at-point({ x: root.anchor.x, y: root.anchor.y }, self.bounds, self.desired-size)
+        : FlyoutLayout.place-with-offsets(root.placement, root.anchor, self.bounds, self.desired-size,
+            { width: root.presenter-min-width, height: root.presenter-min-height }, root.placement-offsets);
+
+    x: self.geometry.x;
+    y: self.geometry.y;
+    width: self.geometry.width;
+    height: self.geometry.height;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: self.dark ? #00000033 : #0000000f;
+    background: self.dark ? #2c2c2c : #f9f9f9;
+    drop-shadow-blur: 16px;
+    drop-shadow-color: self.dark ? #00000042 : #00000024;
+    drop-shadow-offset-y: 8px;
+
+    TouchArea { }
+
+    ScrollView {
+        private property <{ y: length, height: length }> scroll-target: root.scroll-into-view;
+
+        width: parent.width;
+        height: parent.height;
+        horizontal-scrollbar-policy: root.allow-horizontal-scroll ? as-needed : always-off;
+        content-width: max(self.visible-width, root.allow-horizontal-scroll ? content.min-width : 0px);
+        content-height: max(self.visible-height, content.preferred-height);
+        // Slint drops keyboard focus when the focused control scrolls out of view.
+        // Keep the keyboard in the popup after pointer scrolling.
+        scrolled => {
+            if (root.move-focus-on-scroll) {
+                fallback-focus.focus();
+            }
+            root.scrolled();
+        }
+
+        changed scroll-target => {
+            if (self.scroll-target.height > 0px) {
+                let top = self.scroll-target.y;
+                let bottom = top + self.scroll-target.height;
+                let current-top = -self.content-y;
+                let wanted-top = top < current-top ? top
+                    : bottom > current-top + self.visible-height ? bottom - self.visible-height : current-top;
+                self.content-y = -max(0px, min(self.content-height - self.visible-height, wanted-top));
+            }
+        }
+
+        content := VerticalLayout {
+            padding: root.content-padding;
+            padding-left: root.horizontal-content-padding;
+            padding-right: root.horizontal-content-padding;
+            @children
+        }
+    }
+
+    fallback-focus := FocusScope {
+        width: 0px;
+        height: 0px;
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        focus-gained(reason) => { self.focus-on-tab-navigation = true; }
+    }
+}
+
+// Place the flyout over the window's content and bind anchor to window-relative geometry.
+export component Flyout inherits FlyoutOverlay {
+    in property <FlyoutRect> anchor;
+    in property <FlyoutPlacement> placement: FlyoutPlacement.top;
+    in property <length> content-padding: 16px;
+    in property <length> horizontal-content-padding: root.content-padding;
+    in property <length> presenter-min-width: 96px;
+    in property <length> presenter-min-height: 40px;
+    in property <length> presenter-max-width: 456px;
+    in property <length> presenter-max-height: 758px;
+    in property <bool> allow-horizontal-scroll: true;
+    in property <bool> move-focus-on-scroll: true;
+    in property <{ y: length, height: length }> scroll-into-view;
+
+    FlyoutPresenter {
+        available-size: { width: root.width, height: root.height };
+        anchor: root.anchor;
+        placement: root.placement;
+        content-padding: root.content-padding;
+        horizontal-content-padding: root.horizontal-content-padding;
+        presenter-min-width: root.presenter-min-width;
+        presenter-min-height: root.presenter-min-height;
+        presenter-max-width: root.presenter-max-width;
+        presenter-max-height: root.presenter-max-height;
+        allow-horizontal-scroll: root.allow-horizontal-scroll;
+        move-focus-on-scroll: root.move-focus-on-scroll;
+        scroll-into-view: root.scroll-into-view;
+
+        VerticalLayout {
+            @children
+        }
+    }
+}

@@ -1,0 +1,73 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { ToggleSwitch } from "../../ui/components/basic-input/toggle_switch.slint";
+
+export component ToggleSwitchExample inherits Window {
+    title: "ToggleSwitch";
+    min-width: 560px;
+    preferred-height: 380px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+
+    in property <color> accent: Palette.accent-background;
+    private property <int> toggles;
+    private property <bool> rtl;
+    private property <bool> disable-simple;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        alignment: start;
+
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            Button { text: "Set simple On"; clicked => { simple.is-on = true; } }
+            Button { text: "Set simple Off"; clicked => { simple.is-on = false; } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+            Button { text: "Disable simple"; clicked => { root.disable-simple = !root.disable-simple; } }
+        }
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            simple := ToggleSwitch {
+                accessible-name: "Simple ToggleSwitch";
+                accent: root.accent;
+                enabled: !root.disable-simple;
+                rtl: root.rtl;
+                toggled(on) => { root.toggles += 1; }
+            }
+            ToggleSwitch { accessible-name: "Disabled Off"; enabled: false; accent: root.accent; }
+            ToggleSwitch { accessible-name: "Disabled On"; enabled: false; is-on: true; accent: root.accent; }
+        }
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            ToggleSwitch {
+                header: "Toggle work";
+                off-content: "Do work";
+                on-content: "Working";
+                is-on: true;
+                accent: root.accent;
+                rtl: root.rtl;
+            }
+            custom := ToggleSwitch {
+                header: "Custom content";
+                on-content: "";
+                off-content: "";
+                accessible-name: "Custom content";
+                accent: root.accent;
+                rtl: root.rtl;
+                Text {
+                    text: custom.is-on ? "✓ Active" : "○ Inactive";
+                    font-size: 14px;
+                    color: custom.foreground;
+                    accessible-role: none;
+                }
+            }
+        }
+        Text {
+            text: "Simple toggle events: \{root.toggles}";
+            color: Palette.foreground;
+        }
+    }
+}

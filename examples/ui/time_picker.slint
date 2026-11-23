@@ -1,0 +1,74 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { PickerWheelRow, TimePicker, TimePickerBehavior, TimePickerColumn, TimePickerOptions, TimePickerPart, TimePickerState } from "../../ui/components/date-time/time_picker.slint";
+
+export { PickerWheelRow, TimePickerBehavior, TimePickerColumn, TimePickerOptions, TimePickerPart, TimePickerState }
+
+export component TimePickerExample inherits Window {
+    title: "TimePicker";
+    min-width: 696px;
+    min-height: 520px;
+    preferred-height: 604px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+    in property <color> accent: Palette.accent-background;
+
+    private property <bool> twelve-hour: true;
+    private property <bool> rtl;
+    private property <int> increment-mode;
+    private property <bool> disabled;
+    private property <int> changes;
+    private property <int> opens;
+    private property <int> closes;
+
+    VerticalLayout {
+        x: 24px; y: 24px;
+        width: parent.width - 48px;
+        height: 72px;
+        alignment: start;
+        spacing: 8px;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Set midnight"; clicked => { picker.selected-time = 0; } }
+            Button { text: "Set 23:58"; clicked => { picker.selected-time = 1438; } }
+            Button { text: "Clear"; clicked => { picker.selected-time = -1; } }
+            Button { text: root.twelve-hour ? "12-hour clock" : "24-hour clock"; clicked => { root.twelve-hour = !root.twelve-hour; } }
+            Button {
+                text: root.increment-mode == 0 ? "1 minute" : root.increment-mode == 1 ? "15 minutes" : "Hour only";
+                clicked => { root.increment-mode = Math.mod(root.increment-mode + 1, 3); }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Open picker"; clicked => { picker.open-picker(); } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+            Button { text: "Toggle enabled"; clicked => { root.disabled = !root.disabled; } }
+        }
+    }
+
+    picker := TimePicker {
+        x: 208px; y: 244px;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        header: "Arrival time";
+        language: "en-US";
+        clock-identifier: root.twelve-hour ? "12HourClock" : "24HourClock";
+        minute-increment: root.increment-mode == 0 ? 1 : root.increment-mode == 1 ? 15 : 0;
+        now: 9 * 60 + 41;
+        rtl: root.rtl;
+        enabled: !root.disabled;
+        popup-viewport: { width: root.width, height: root.height };
+        accent: root.accent;
+        selected-time-changed(old-time, new-time) => { root.changes += 1; }
+        opened => { root.opens += 1; }
+        closed => { root.closes += 1; }
+    }
+
+    Text {
+        x: 24px; y: root.height - 32px;
+        text: "Time \{picker.selected-time} · Changes \{root.changes} · Opens \{root.opens} · Closes \{root.closes}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+}

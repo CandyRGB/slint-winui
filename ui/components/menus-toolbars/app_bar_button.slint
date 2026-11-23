@@ -1,0 +1,202 @@
+import { Palette } from "std-widgets.slint";
+import { FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+
+export enum AppBarLabelPosition { bottom, right, collapsed }
+
+export component AppBarButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> enabled: true;
+    in property <bool> compact;
+    in property <AppBarLabelPosition> label-position: AppBarLabelPosition.bottom;
+    in property <bool> has-flyout;
+    in property <bool> expanded;
+    in-out property <bool> checked;
+    callback clicked();
+    callback toggled(bool);
+    callback open-flyout(FlyoutRect);
+
+    // The CommandBar owns focus and check state for commands rendered from its models.
+    in property <bool> hosted;
+    in property <bool> floating;
+    in property <bool> keyboard-highlight;
+    in property <bool> toggleable;
+    in property <bool> overflow;
+    in property <bool> show-check-column;
+    in property <bool> show-icon-column;
+    in property <bool> more-button;
+    in property <bool> rtl;
+    in property <string> accelerator-text;
+    callback focus-requested();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> bottom-label: !root.compact && root.label-position == AppBarLabelPosition.bottom;
+    private property <bool> right-label: root.label-position == AppBarLabelPosition.right;
+    private property <bool> focused: root.keyboard-highlight || input.has-focus;
+    private property <color> foreground: !root.enabled ? Palette.foreground.with-alpha(0.36)
+        : hit.pressed ? Palette.foreground.with-alpha(0.62) : Palette.foreground;
+    private property <length> label-start: 12px + (root.show-check-column ? 38px : 0px)
+        + (root.show-icon-column ? 38px : 0px);
+
+    preferred-width: root.overflow
+        ? max(root.floating ? 128px : 160px, ceil((root.label-start + caption.preferred-width
+            + (root.accelerator-text != "" ? shortcut.preferred-width + 24px : 0px)
+            + (root.has-flyout ? 32px : 12px)) / 2px) * 2px)
+        : root.floating ? (root.bottom-label ? 60px : 40px) : 68px;
+    height: root.overflow ? 36px : root.floating ? (root.bottom-label ? 52px : 40px)
+        : root.bottom-label ? 64px : 48px;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-checkable: root.toggleable;
+    accessible-checked: root.checked;
+    accessible-expandable: root.has-flyout || root.more-button;
+    accessible-expanded: root.expanded;
+    accessible-action-default => { root.invoke(); }
+    accessible-action-expand => { if (!root.expanded) { root.invoke(); } }
+    forward-focus: input;
+
+    public function invoke() {
+        if (root.enabled) {
+            if (root.toggleable) {
+                let value = !root.checked;
+                if (!root.hosted) {
+                    root.checked = value;
+                }
+                root.toggled(value);
+            }
+            root.clicked();
+            if (root.has-flyout && !root.hosted) {
+                root.open-flyout({
+                    x: root.absolute-position.x, y: root.absolute-position.y,
+                    width: root.width, height: root.height,
+                });
+            }
+        }
+    }
+
+    Rectangle {
+        x: root.overflow ? 4px : root.more-button && root.rtl ? 6px : 2px;
+        y: root.overflow ? 0px : root.floating || root.height == 24px ? 2px : 6px;
+        width: max(0px, parent.width - (root.overflow || root.more-button ? 8px : 4px));
+        height: max(0px, parent.height - 2 * self.y);
+        border-radius: 4px;
+        border-width: root.focused ? 2px : 0px;
+        border-color: Palette.foreground;
+        background: !root.enabled ? transparent
+            : hit.pressed ? (root.dark ? #ffffff0a : #00000006)
+            : hit.has-hover || (root.checked && !root.overflow) ? (root.dark ? #ffffff0f : #00000009) : transparent;
+    }
+
+    Image {
+        private property <length> start: root.overflow ? 12px + (root.show-check-column ? 38px : 0px) : 12px;
+        x: root.overflow || root.right-label
+            ? (root.rtl ? parent.width - self.start - self.width : self.start)
+            : (parent.width - self.width) / 2;
+        y: !root.overflow && root.bottom-label ? (root.floating ? 8px : 16px)
+            : !root.floating && root.more-button && root.height >= 48px ? 16px : (parent.height - self.height) / 2;
+        width: 16px;
+        height: 16px;
+        source: root.icon;
+        colorize: root.foreground;
+        accessible-role: none;
+    }
+
+    if root.overflow && root.toggleable && root.checked : Image {
+        x: root.rtl ? parent.width - 28px : 12px;
+        width: 16px;
+        height: 16px;
+        source: @image-url("../../icons/checkmark_16_regular.svg");
+        colorize: root.foreground;
+        accessible-role: none;
+    }
+
+    caption := Text {
+        private property <length> start: root.overflow ? root.label-start : root.right-label ? 36px : 2px;
+        private property <length> end: (root.overflow ? (root.has-flyout ? 32px : 12px) : 2px)
+            + (root.overflow && root.accelerator-text != "" ? shortcut.preferred-width + 24px : 0px);
+        x: root.rtl ? self.end : self.start;
+        y: !root.overflow && root.bottom-label ? (root.floating ? 26px : 34px) : 0px;
+        width: max(0px, parent.width - self.start - self.end);
+        height: !root.overflow && root.bottom-label ? 24px : parent.height;
+        visible: !root.more-button && (root.overflow || root.bottom-label || root.right-label);
+        text: root.label;
+        font-size: root.overflow ? 14px : 12px;
+        color: root.foreground;
+        horizontal-alignment: root.overflow || root.right-label ? (root.rtl ? right : left) : center;
+        vertical-alignment: center;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    shortcut := Text {
+        x: root.rtl ? 12px : parent.width - (root.has-flyout ? 32px : 12px) - self.width;
+        y: 0px;
+        width: self.preferred-width;
+        height: parent.height;
+        visible: root.overflow && root.accelerator-text != "";
+        text: root.accelerator-text;
+        font-size: 12px;
+        color: root.foreground.with-alpha(0.60);
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+
+    if root.overflow && root.has-flyout : Image {
+        x: root.rtl ? 8px : parent.width - 24px;
+        width: 16px;
+        height: 16px;
+        source: root.rtl ? @image-url("../../icons/chevron_left_16_regular.svg")
+            : @image-url("../../icons/chevron_right_16_regular.svg");
+        colorize: root.foreground;
+        accessible-role: none;
+    }
+
+    input := FocusScope {
+        private property <string> activation-key;
+        enabled: root.enabled && !root.hosted;
+        focus-on-click: false;
+        focus-on-tab-navigation: self.enabled;
+        changed has-focus => { if (!self.has-focus) { self.activation-key = ""; } }
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == Key.Space) {
+                if (!event.repeat) { self.activation-key = event.text; }
+                return accept;
+            }
+            return reject;
+        }
+        key-released(event) => {
+            if (self.activation-key != "" && event.text == self.activation-key) {
+                self.activation-key = "";
+                root.invoke();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    hit := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.focus-requested();
+            root.invoke();
+        }
+    }
+}
+
+export component AppBarToggleButton inherits AppBarButton {
+    toggleable: true;
+}
+
+export component AppBarSeparator inherits Rectangle {
+    in property <bool> overflow;
+    preferred-width: 6px;
+    horizontal-stretch: root.overflow ? 1 : 0;
+    height: root.overflow ? 8px : 48px;
+
+    Rectangle {
+        width: root.overflow ? parent.width : 1px;
+        height: root.overflow ? 1px : max(0px, parent.height - 16px);
+        background: Palette.foreground.with-alpha(0.09);
+    }
+}

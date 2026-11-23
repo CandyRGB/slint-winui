@@ -1,0 +1,108 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual } from "../basic-input/button_input.slint";
+
+export component ItemContainer inherits Rectangle {
+    in property <string> label;
+    in property <int> item-index;
+    in property <int> item-count;
+    in property <bool> enabled: true;
+    in property <bool> selectable: true;
+    in property <bool> selected;
+    in property <bool> multiple;
+    in property <bool> focused;
+    in property <bool> rtl;
+    in property <length> corner-radius: 4px;
+    in property <color> accent: Palette.accent-background;
+    callback tapped(KeyboardModifiers);
+    callback double-tapped();
+    callback automation-action();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> overlay: !root.enabled ? transparent
+        : hit.pressed && hit.has-hover ? (root.dark ? #ffffff0a : #00000006)
+        : hit.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+
+    accessible-role: list-item;
+    accessible-label: root.label;
+    accessible-item-index: root.item-index;
+    accessible-item-count: root.item-count;
+    accessible-item-selectable: root.selectable;
+    accessible-item-selected: root.selected;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.automation-action(); } }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        opacity: root.enabled ? 1 : 0.3;
+        accessible-role: none;
+
+        hit := TouchArea {
+            enabled: root.enabled;
+            private property <KeyboardModifiers> modifiers;
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    self.modifiers = event.modifiers;
+                }
+            }
+            clicked => { root.tapped(self.modifiers); }
+            double-clicked => { root.double-tapped(); }
+        }
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            accessible-role: none;
+            @children
+        }
+
+        if root.selected && root.enabled: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: root.corner-radius;
+            border-width: 4px;
+            border-color: root.accent;
+        }
+
+        Rectangle {
+            private property <length> inset: root.selected && root.enabled ? 2px : 0px;
+            x: self.inset;
+            y: self.inset;
+            width: max(0px, parent.width - self.inset * 2);
+            height: max(0px, parent.height - self.inset * 2);
+            border-radius: root.corner-radius;
+            border-width: root.selected && root.enabled ? 1px : 0px;
+            border-color: root.dark ? #454545 : #ffffff;
+            background: root.overlay;
+        }
+
+        if root.multiple: Rectangle {
+            x: root.rtl ? 4px : parent.width - 24px;
+            y: -2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border-width: root.selected ? 0px : 1px;
+            border-color: !root.enabled ? (root.dark ? #ffffff28 : #00000037)
+                : root.dark ? #ffffff8b : #00000072;
+            background: root.selected ? root.accent : !root.enabled ? transparent
+                : root.dark ? #1c1c1cb3 : #ffffffc9;
+            if root.selected: Image {
+                source: @image-url("../../icons/checkbox_checkmark.svg");
+                width: 16px;
+                height: 16px;
+                x: 2px;
+                y: 2px;
+                colorize: root.dark ? black : white;
+            }
+        }
+    }
+
+    if root.focused && root.enabled: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+        control-radius: root.corner-radius;
+        horizontal-margin: 0px;
+        vertical-margin: 0px;
+    }
+}

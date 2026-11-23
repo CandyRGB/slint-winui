@@ -1,0 +1,326 @@
+import { Button as StandardButton, ComboBox, Palette, TextEdit } from "std-widgets.slint";
+import { Button, ButtonStyle } from "../../ui/components/basic-input/button.slint";
+import { AppBarLabelPosition, CommandBarBehavior, CommandBarEntry, CommandBarItem, CommandBarItemKind,
+    CommandBarLayout, CommandBarOverflowButtonVisibility } from "../../ui/components/menus-toolbars/command_bar.slint";
+import { CommandBarFlyoutKeyScope } from "../../ui/components/menus-toolbars/command_bar_flyout.slint";
+import { MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel, }
+    from "../../ui/components/menus-toolbars/menu_flyout.slint";
+import { RichEditBox, RichEditCommand, RichEditGeometry, RichEditState } from "../../ui/components/text/rich_edit_box.slint";
+import { TextBox } from "../../ui/components/text/text_box.slint";
+import { FlyoutCloseReason, FlyoutRect, TextCommand, TextCommandBarFlyout, TextCommandTarget }
+    from "../../ui/components/text/text_command_bar_flyout.slint";
+
+export { RichEditCommand, RichEditGeometry, RichEditState, FlyoutRect, TextCommand,
+    MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel,
+    AppBarLabelPosition, CommandBarBehavior, CommandBarEntry, CommandBarItem, CommandBarItemKind,
+    CommandBarLayout, CommandBarOverflowButtonVisibility }
+
+component ToolButton inherits Button {
+    in property <image> icon;
+    preferred-width: 40px;
+    preferred-height: 32px;
+    appearance: ButtonStyle.subtle;
+    Image {
+        width: 16px;
+        height: 16px;
+        source: root.icon;
+        colorize: root.foreground;
+        accessible-role: none;
+    }
+}
+
+export component RichEditBoxExample inherits Window {
+    title: "RichEditBox";
+    default-font-family: "Segoe UI Variable Text";
+    background: #f3f3f3;
+    min-width: 548px;
+    preferred-width: 848px;
+    min-height: 506px;
+    preferred-height: 560px;
+
+    in property <color> accent: #005fb8;
+    in property <RichEditState> simple-state;
+    in property <RichEditState> custom-state;
+    in property <string> status;
+    in property <bool> math-samples;
+    in property <bool> math-ready;
+    in property <string> math-ml;
+    in property <[MenuFlyoutItem]> proofing-items;
+    out property <RichEditGeometry> simple-geometry: root.math-samples ? math-input.geometry : simple.geometry;
+    out property <RichEditGeometry> custom-geometry: root.math-samples ? math-document.geometry : custom.geometry;
+    out property <FlyoutRect> menu-bounds: menu.panel-bounds;
+    out property <bool> menu-open: menu.is-open;
+    out property <bool> proofing-open: menu.proofing-open;
+    out property <FlyoutRect> proofing-bounds: menu.proofing-bounds;
+    out property <bool> menu-tracks-pointer: menu.is-open && root.selection-menu && !menu.is-expanded;
+
+    callback simple-command(RichEditCommand);
+    callback custom-command(RichEditCommand);
+    callback open-document();
+    callback save-document();
+    callback find-next(string);
+    callback highlight-matches(string);
+    callback apply-color(color, bool);
+    callback menu-command(bool, TextCommand);
+    callback restore-menu-focus(bool);
+    callback proofing-command(bool, string);
+    callback set-sample-formula();
+
+    private property <bool> read-only;
+    private property <bool> menu-simple;
+    private property <bool> selection-menu;
+    private property <bool> menu-can-paste;
+    private property <bool> restoring-focus: true;
+    private property <RichEditState> menu-state: root.menu-simple ? root.simple-state : root.custom-state;
+    private property <[color]> font-colors: [transparent, red, orange, yellow, green, blue, indigo, violet, gray];
+
+    public function open-editor-menu(simple-editor: bool, selection: bool, anchor: FlyoutRect, can-paste: bool) {
+        root.dismiss-editor-menu(false);
+        root.menu-simple = simple-editor;
+        root.selection-menu = selection;
+        root.menu-can-paste = can-paste;
+        if selection {
+            menu.show-selection(anchor);
+        } else {
+            menu.show-context-at({ x: anchor.x, y: anchor.y });
+        }
+    }
+
+    public function dismiss-editor-menu(escape: bool) {
+        // An outside native click already controls which editor receives focus.
+        root.restoring-focus = escape;
+        menu.dismiss(escape ? FlyoutCloseReason.escape : FlyoutCloseReason.light-dismiss);
+        root.restoring-focus = true;
+    }
+
+    public function track-editor-pointer(x: length, y: length) {
+        menu.track-pointer({ x: x, y: y });
+    }
+
+    // Native children hand focus back at the boundary of each editor.
+    public function traverse-from-editor(simple-editor: bool, backward: bool) {
+        if root.math-samples {
+            if simple-editor {
+                if backward { formula-button.focus(); }
+                else { root.custom-command(RichEditCommand.focus); }
+            } else if backward {
+                root.simple-command(RichEditCommand.focus);
+            } else {
+                math-code.focus();
+            }
+            return;
+        }
+        if simple-editor {
+            if backward { read-only-button.focus(); }
+            else if root.read-only { save-button.focus(); }
+            else { open-button.focus(); }
+        } else if backward {
+            if root.read-only { save-button.focus(); }
+            else { underline-button.focus(); }
+        } else {
+            find.focus();
+        }
+    }
+
+    VerticalLayout {
+        x: 24px;
+        y: 20px;
+        width: parent.width - 48px;
+        height: parent.height - 40px;
+        spacing: 12px;
+        alignment: start;
+        visible: !root.math-samples;
+
+        Text { text: "A simple text editor using RichEditBox."; font-size: 16px; font-weight: 600; }
+        simple := RichEditBox {
+            height: 32px;
+            placeholder-text: "Enter text";
+            accent: root.accent;
+            state: root.simple-state;
+            command(value) => { root.simple-command(value); }
+        }
+
+        Text { text: "A custom editor with RichEditBox."; font-size: 16px; font-weight: 600; }
+        HorizontalLayout {
+            height: 32px;
+            spacing: 8px;
+            open-button := ToolButton {
+                accessible-name: "Open file";
+                icon: @image-url("../../ui/icons/folder_open_16_regular.svg");
+                enabled: !root.read-only;
+                clicked => { root.open-document(); }
+            }
+            save-button := ToolButton {
+                accessible-name: "Save file";
+                icon: @image-url("../../ui/icons/save_16_regular.svg");
+                clicked => { root.save-document(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            ToolButton {
+                accessible-name: "Bold";
+                accessible-checkable: true;
+                accessible-checked: root.custom-state.bold;
+                icon: @image-url("../../ui/icons/text_bold_16_regular.svg");
+                enabled: !root.read-only;
+                appearance: root.custom-state.bold ? ButtonStyle.accent : ButtonStyle.subtle;
+                accent: root.accent;
+                clicked => { root.custom-command(RichEditCommand.bold); }
+            }
+            ToolButton {
+                accessible-name: "Italic";
+                accessible-checkable: true;
+                accessible-checked: root.custom-state.italic;
+                icon: @image-url("../../ui/icons/text_italic_16_regular.svg");
+                enabled: !root.read-only;
+                appearance: root.custom-state.italic ? ButtonStyle.accent : ButtonStyle.subtle;
+                accent: root.accent;
+                clicked => { root.custom-command(RichEditCommand.italic); }
+            }
+            underline-button := ToolButton {
+                accessible-name: "Underline";
+                accessible-checkable: true;
+                accessible-checked: root.custom-state.underlined;
+                icon: @image-url("../../ui/icons/text_underline_16_regular.svg");
+                enabled: !root.read-only;
+                appearance: root.custom-state.underlined ? ButtonStyle.accent : ButtonStyle.subtle;
+                accent: root.accent;
+                clicked => { root.custom-command(RichEditCommand.underline); }
+            }
+        }
+
+        custom := RichEditBox {
+            height: 200px;
+            placeholder-text: "Enter rich text";
+            accent: root.accent;
+            state: root.custom-state;
+            read-only: root.read-only;
+            command(value) => { root.custom-command(value); }
+        }
+
+        HorizontalLayout {
+            height: 32px;
+            spacing: 8px;
+            Text { text: "Find:"; vertical-alignment: center; }
+            find := TextBox {
+                width: 224px;
+                accessible-name: "Find text";
+                placeholder-text: "Enter search text";
+                accent: root.accent;
+                context-enabled: false;
+                accepted => { root.find-next(self.text); }
+                edited(value) => { root.highlight-matches(value); }
+                changed has-focus => { root.highlight-matches(self.has-focus ? self.text : ""); }
+            }
+            StandardButton { text: "Find next"; enabled: find.text != ""; clicked => { root.find-next(find.text); } }
+            Rectangle { horizontal-stretch: 1; }
+            ComboBox {
+                width: 110px;
+                accessible-label: "Font color";
+                enabled: !root.read-only;
+                model: ["Automatic", "Red", "Orange", "Yellow", "Green", "Blue", "Indigo", "Violet", "Gray"];
+                selected(value) => {
+                    if self.current-index >= 0 {
+                        root.apply-color(root.font-colors[self.current-index], self.current-index == 0);
+                    }
+                }
+            }
+            read-only-button := StandardButton { text: "Read-only"; checkable: true; checked <=> root.read-only; }
+        }
+
+        Text {
+            text: root.status;
+            height: 20px;
+            overflow: elide;
+            color: Palette.foreground;
+        }
+    }
+
+    VerticalLayout {
+        x: 24px;
+        y: 20px;
+        width: min(724px, parent.width - 48px);
+        height: parent.height - 40px;
+        visible: root.math-samples;
+        spacing: 16px;
+        alignment: start;
+
+        Text { text: "Math mode"; font-size: 16px; font-weight: 600; }
+        Text {
+            text: "Enter UnicodeMath, for example 4^2 or 1/2.";
+            wrap: word-wrap;
+        }
+        math-input := RichEditBox {
+            height: 80px;
+            enabled: root.math-ready;
+            accent: root.accent;
+            state: root.simple-state;
+            command(value) => { root.simple-command(value); }
+        }
+        Text { text: "Working with MathML"; font-size: 16px; font-weight: 600; }
+        math-document := RichEditBox {
+            height: 80px;
+            enabled: root.math-ready;
+            accent: root.accent;
+            state: root.custom-state;
+            command(value) => { root.custom-command(value); }
+        }
+        Text { text: "MathML Code"; font-weight: 600; }
+        math-code := TextEdit {
+            accessible-label: "MathML Code";
+            read-only: true;
+            font-family: "Consolas";
+            font-size: 14px;
+            text: root.math-ml == "" ? "<!-- No MathML content -->" : root.math-ml;
+            min-height: 100px;
+            preferred-height: 140px;
+            vertical-stretch: 1;
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            formula-button := Button {
+                text: "Set sample formula";
+                appearance: ButtonStyle.accent;
+                accent: root.accent;
+                enabled: root.math-ready;
+                clicked => { root.set-sample-formula(); }
+            }
+            Text {
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                text: root.status;
+                overflow: elide;
+            }
+        }
+    }
+
+    CommandBarFlyoutKeyScope {
+        width: parent.width;
+        height: parent.height;
+        dismiss-enabled: menu.is-open && !menu.proofing-open;
+        dismiss => { menu.dismiss(FlyoutCloseReason.escape); }
+
+        menu := TextCommandBarFlyout {
+            width: parent.width;
+            height: parent.height;
+            target-kind: TextCommandTarget.rich-edit-box;
+            mouse-selection: true;
+            read-only: !root.menu-simple && root.read-only;
+            has-text: root.menu-state.has-text;
+            has-selection: root.menu-state.has-selection;
+            can-paste: root.menu-can-paste;
+            can-undo: root.menu-state.can-undo;
+            can-redo: root.menu-state.can-redo;
+            bold: root.menu-state.bold;
+            italic: root.menu-state.italic;
+            underlined: root.menu-state.underlined;
+            proofing-items: root.proofing-items;
+            proofing-invoked(item) => { root.proofing-command(root.menu-simple, item.id); }
+            invoked(action) => { root.menu-command(root.menu-simple, action); }
+            restore-focus => {
+                if root.restoring-focus {
+                    root.restore-menu-focus(root.menu-simple);
+                }
+            }
+        }
+    }
+}

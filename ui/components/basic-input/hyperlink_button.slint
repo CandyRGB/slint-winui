@@ -1,0 +1,110 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "button_input.slint";
+
+export struct HyperlinkButtonAccentColors {
+    primary: color,
+    secondary: color,
+    tertiary: color,
+}
+
+export global HyperlinkButtonTheme {
+    in property <HyperlinkButtonAccentColors> light-accent-text;
+}
+
+export component HyperlinkButton inherits Rectangle {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <string> navigate-uri;
+    in property <bool> enabled: true;
+    in property <bool> underline-visible;
+    out property <bool> has-focus: input.has-focus;
+    out property <color> foreground: !root.enabled ? (root.dark ? #ffffff5e : #0000005c)
+        : root.dark ? root.accent.with-alpha(input.pressed ? 0.7 : 1)
+        : input.pressed ? root.light-colors.tertiary
+        : input.has-hover ? root.light-colors.secondary : root.light-colors.primary;
+    callback clicked();
+    callback navigation-failed(string);
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> accent: Palette.accent-background;
+    private property <HyperlinkButtonAccentColors> light-colors: HyperlinkButtonTheme.light-accent-text.primary.alpha > 0
+        ? HyperlinkButtonTheme.light-accent-text : {
+            primary: root.light-accent(#003e92),
+            secondary: root.light-accent(#001a68),
+            tertiary: root.light-accent(#0067c0),
+        };
+
+    min-width: body.min-width;
+    min-height: max(32px, body.min-height);
+    preferred-width: round(body.preferred-width / 2px) * 2px;
+    preferred-height: round(max(32px, body.preferred-height) / 2px) * 2px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: 4px;
+    background: !root.enabled ? transparent
+        : input.pressed ? (root.dark ? #ffffff0a : #00000006)
+        : input.has-hover ? (root.dark ? #ffffff0f : #00000009) : transparent;
+    animate background { duration: 83ms; easing: linear; }
+
+    forward-focus: input;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.activate(); }
+
+    pure function light-accent(shade: color) -> color {
+        if root.accent == #005fb8 {
+            return shade;
+        }
+        let custom = root.accent.to-oklch();
+        return oklch(shade.to-oklch().lightness, custom.chroma, custom.hue);
+    }
+
+    function activate() {
+        if root.enabled {
+            root.clicked();
+            let uri = root.navigate-uri;
+            if uri != "" && !Platform.open-url(uri) {
+                root.navigation-failed(uri);
+            }
+        }
+    }
+
+    body := HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        spacing: 8px;
+        alignment: start;
+
+        if root.text != "" && !root.underline-visible: Text {
+            text: root.text;
+            color: root.foreground;
+            font-family: "Segoe UI Variable Text";
+            font-size: 14px;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+        if root.text != "" && root.underline-visible: StyledText {
+            text: @markdown("<u>\{root.text}</u>");
+            default-color: root.foreground;
+            default-font-family: "Segoe UI Variable Text";
+            default-font-size: 14px;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+        @children
+    }
+
+    input := ButtonInput {
+        enabled: root.enabled;
+        clicked => { root.activate(); }
+    }
+
+    if root.enabled && input.keyboard-focused: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+        control-radius: root.border-radius;
+    }
+}

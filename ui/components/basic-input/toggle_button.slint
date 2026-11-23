@@ -1,0 +1,77 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "button_input.slint";
+import { ButtonSurface } from "button_surface.slint";
+import { CheckStateBehavior, ToggleButtonState } from "check_state.slint";
+
+export { ToggleButtonState }
+
+export component ToggleButton inherits Rectangle {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <bool> enabled: true;
+    in property <bool> is-three-state;
+    in property <color> accent: Palette.accent-background;
+    in-out property <ToggleButtonState> check-state <=> state-behavior.state;
+    out property <bool> has-focus: input.has-focus;
+    out property <color> foreground: surface.foreground;
+
+    callback clicked();
+    callback checked();
+    callback unchecked();
+    callback indeterminate();
+
+    private property <bool> selected: root.check-state == ToggleButtonState.checked;
+
+    border-radius: 4px;
+    min-width: surface.min-width;
+    min-height: surface.min-height;
+    preferred-width: surface.preferred-width;
+    preferred-height: surface.preferred-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+
+    forward-focus: input;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+    accessible-description: root.check-state == ToggleButtonState.indeterminate ? @tr("Indeterminate") : "";
+    accessible-action-default => { root.activate(); }
+
+    function activate() {
+        if root.enabled {
+            state-behavior.advance();
+            root.clicked();
+        }
+    }
+
+    state-behavior := CheckStateBehavior {
+        is-three-state: root.is-three-state;
+        checked => { root.checked(); }
+        unchecked => { root.unchecked(); }
+        indeterminate => { root.indeterminate(); }
+    }
+
+    surface := ButtonSurface {
+        border-radius: root.border-radius;
+        text: root.text;
+        enabled: root.enabled;
+        pressed: input.pressed;
+        hovered: input.has-hover;
+        selected: root.selected;
+        accent: root.accent;
+        @children
+    }
+
+    input := ButtonInput {
+        enabled: root.enabled;
+        clicked => { root.activate(); }
+    }
+
+    if root.enabled && input.keyboard-focused: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+        control-radius: root.border-radius;
+    }
+}

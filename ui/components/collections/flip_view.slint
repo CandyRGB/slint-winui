@@ -1,0 +1,365 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "../basic-input/button_input.slint";
+
+export struct FlipViewItem {
+    id: string,
+    title: string,
+    image: image,
+}
+
+export global FlipViewBehavior {
+    pure callback index-of([FlipViewItem], string) -> int;
+}
+
+component FlipViewArrow inherits Rectangle {
+    in property <bool> vertical;
+    in property <bool> points-forward;
+    in property <string> label;
+    out property <bool> hovered: input.has-hover;
+    callback invoked();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    width: root.vertical ? 38px : 16px;
+    height: root.vertical ? 16px : 38px;
+    border-radius: 4px;
+    background: root.dark ? #2c2c2cf2 : #f9f9f9ed;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.invoked(); }
+
+    Image {
+        width: 8px;
+        height: 8px;
+        source: root.vertical
+            ? (root.points-forward ? @image-url("../../icons/flip_view_arrow_down.svg") : @image-url("../../icons/flip_view_arrow_up.svg"))
+            : (root.points-forward ? @image-url("../../icons/flip_view_arrow_right.svg") : @image-url("../../icons/flip_view_arrow_left.svg"));
+        transform-scale-x: input.pressed ? 0.875 : 1;
+        transform-scale-y: self.transform-scale-x;
+        colorize: root.dark ? (input.has-hover ? #ffffffc5 : #ffffff8b)
+            : input.has-hover ? #0000009e : #00000072;
+        accessible-role: none;
+    }
+
+    input := ButtonInput {
+        tab-stop: false;
+        clicked => { root.invoked(); }
+    }
+}
+
+export component FlipView inherits Rectangle {
+    in property <[FlipViewItem]> items;
+    in-out property <int> selected-index: root.items.length == 0 ? -1 : 0;
+    in property <string> accessible-name;
+    in property <string> previous-label: @tr("Previous");
+    in property <string> next-label: @tr("Next");
+    in property <Orientation> orientation: Orientation.horizontal;
+    in property <bool> rtl;
+    in property <bool> enabled: true;
+    in property <bool> animations-enabled: true;
+    in property <bool> show-default-page: true;
+    in property <ImageFit> image-fit: ImageFit.contain;
+    out property <FlipViewItem> selected-item: root.item-at(root.active-index);
+    out property <bool> has-focus: keyboard.has-focus && root.interactive;
+    out property <bool> can-move-previous: root.active-index > 0;
+    out property <bool> can-move-next: root.active-index >= 0 && root.active-index + 1 < root.item-count;
+    callback selection-changed(int, int);
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> vertical: root.orientation == Orientation.vertical;
+    private property <bool> mirror: !root.vertical && root.rtl;
+    private property <int> item-count: root.items.length;
+    private property <bool> interactive: root.enabled && root.visible && root.item-count > 0;
+    private property <int> active-index: root.bounded(root.selected-index);
+    private property <int> last-index: -1;
+    private property <string> last-id;
+    private property <bool> keyboard-focus;
+    private property <bool> arrows-visible;
+    private property <bool> keep-arrows: previous.hovered || next.hovered;
+    private property <int> last-wheel;
+    private property <bool> wheel-paused;
+    private property <int> touch-id;
+    private property <bool> touch-is-quick;
+    private property <bool> swiping;
+    private property <float> drag-offset;
+    private property <length> extent: root.vertical ? root.height : root.width;
+    private property <float> page-position: clamp(root.active-index + root.drag-offset, 0, max(0, root.item-count - 1));
+    private property <int> lower-page: floor(root.page-position);
+
+    min-width: 40px;
+    min-height: 40px;
+    preferred-width: 400px;
+    preferred-height: 270px;
+    background: root.dark ? #202020 : #f3f3f3;
+    forward-focus: keyboard;
+
+    accessible-role: list;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-orientation: root.orientation;
+
+    animate page-position {
+        duration: root.animations-enabled && root.show-default-page && root.touch-id == 0 ? 250ms : 0ms;
+        easing: cubic-bezier(0, 0, 0, 1);
+    }
+
+    init => {
+        root.last-index = root.active-index;
+        root.last-id = root.selected-item.id;
+        if root.selected-index != root.active-index { root.selected-index = root.active-index; }
+    }
+    changed selected-index => { root.select(root.selected-index); }
+    changed items => { root.reconcile-items(); }
+    changed item-count => { root.reconcile-items(); }
+    changed interactive => {
+        if !root.interactive {
+            root.cancel-swipe();
+            root.arrows-visible = false;
+            keyboard.clear-focus();
+        }
+    }
+    changed keep-arrows => { if root.interactive { root.reveal-arrows(); } }
+    changed orientation => { root.cancel-swipe(); }
+    changed rtl => { root.cancel-swipe(); }
+
+    pure function bounded(index: int) -> int {
+        return root.item-count == 0 ? -1 : clamp(index, 0, root.item-count - 1);
+    }
+
+    pure function item-at(index: int) -> FlipViewItem {
+        return index >= 0 && index < root.item-count ? root.items[index] : {};
+    }
+
+    function reconcile-items() {
+        root.cancel-swipe();
+        let stable = root.last-id == "" ? -1 : FlipViewBehavior.index-of(root.items, root.last-id);
+        root.select(stable >= 0 ? stable : root.selected-index);
+    }
+
+    public function select(index: int) {
+        let target = root.bounded(index);
+        let old = root.last-index;
+        let id = root.item-at(target).id;
+        if root.selected-index != target { root.selected-index = target; }
+        if target != old || id != root.last-id {
+            root.last-index = target;
+            root.last-id = id;
+            root.selection-changed(old, target);
+        }
+    }
+
+    public function move-next() -> bool {
+        if !root.interactive || !root.can-move-next { return false; }
+        root.select(root.active-index + 1);
+        return true;
+    }
+
+    public function move-previous() -> bool {
+        if !root.interactive || !root.can-move-previous { return false; }
+        root.select(root.active-index - 1);
+        return true;
+    }
+
+    function reveal-arrows() {
+        if root.interactive && root.touch-id == 0 {
+            root.arrows-visible = true;
+            hide-arrows.restart();
+        }
+    }
+
+    function move-from-pointer(forward: bool) {
+        root.keyboard-focus = false;
+        keyboard.focus();
+        if forward { root.move-next(); } else { root.move-previous(); }
+        root.reveal-arrows();
+    }
+
+    function cancel-swipe() {
+        root.touch-id = 0;
+        root.touch-is-quick = false;
+        root.swiping = false;
+        root.drag-offset = 0;
+        quick-swipe.stop();
+    }
+
+    function swipe-moved(x: length, y: length) {
+        let main = root.vertical ? y : x;
+        let cross = root.vertical ? x : y;
+        if !root.swiping && max(abs(main), abs(cross)) >= 8px {
+            if abs(main) < abs(cross) { root.cancel-swipe(); return; }
+            root.swiping = true;
+        }
+        if root.swiping && root.extent > 0px {
+            root.drag-offset = clamp((root.mirror ? main : -main) / root.extent, -1, 1);
+        }
+    }
+
+    function finish-swipe() {
+        let delta = root.drag-offset;
+        let threshold = root.touch-is-quick ? 0.25 : 0.5;
+        root.cancel-swipe();
+        if delta >= threshold { root.move-next(); }
+        else if delta <= -threshold { root.move-previous(); }
+    }
+
+    function wheel(event: PointerScrollEvent) -> EventResult {
+        let delta = event.delta-y != 0px ? event.delta-y : event.delta-x;
+        if !root.interactive || event.modifiers.control || delta == 0px { return reject; }
+        let direction = delta < 0px ? 1 : -1;
+        let can-repeat = !root.wheel-paused || direction != root.last-wheel;
+        root.wheel-paused = true;
+        wheel-pause.restart();
+        if !can-repeat { return accept; }
+        if direction > 0 ? root.can-move-next : root.can-move-previous {
+            root.last-wheel = direction;
+            root.move-from-pointer(direction > 0);
+            return accept;
+        }
+        return reject;
+    }
+
+    hide-arrows := Timer {
+        interval: 3000ms;
+        triggered => {
+            self.stop();
+            if !root.keep-arrows { root.arrows-visible = false; }
+        }
+    }
+    wheel-pause := Timer {
+        interval: 200ms;
+        triggered => { self.stop(); root.wheel-paused = false; }
+    }
+    quick-swipe := Timer {
+        interval: 220ms;
+        triggered => { self.stop(); root.touch-is-quick = false; }
+    }
+
+    keyboard := FocusScope {
+        enabled: root.interactive;
+        focus-gained(reason) => {
+            if reason == FocusReason.tab-navigation {
+                root.keyboard-focus = true;
+                root.reveal-arrows();
+            }
+        }
+        focus-lost(reason) => {
+            root.keyboard-focus = false;
+            root.cancel-swipe();
+        }
+        key-pressed(event) => {
+            let key = event.text;
+            if key == Key.Home || key == Key.End {
+                root.select(key == Key.Home ? 0 : root.item-count - 1);
+            } else if key == Key.LeftArrow || key == Key.RightArrow || key == Key.UpArrow || key == Key.DownArrow
+                || key == Key.PageUp || key == Key.PageDown {
+                let forward = key == Key.DownArrow || key == Key.PageDown
+                    || key == (root.rtl ? Key.LeftArrow : Key.RightArrow);
+                if forward { root.move-next(); } else { root.move-previous(); }
+            } else {
+                return reject;
+            }
+            root.keyboard-focus = true;
+            root.reveal-arrows();
+            return accept;
+        }
+
+        Rectangle {
+            clip: true;
+            for relative in 2: Rectangle {
+                private property <int> page-index: root.lower-page + relative;
+                private property <length> shift: (self.page-index - root.page-position) * root.extent * (root.mirror ? -1 : 1);
+                private property <FlipViewItem> item: root.item-at(self.page-index);
+                x: root.vertical ? 0px : self.shift;
+                y: root.vertical ? self.shift : 0px;
+                width: parent.width;
+                height: parent.height;
+                visible: root.show-default-page && self.page-index < root.item-count;
+
+                if root.show-default-page && item.image.width > 0: Image {
+                    width: parent.width;
+                    height: parent.height;
+                    source: item.image;
+                    image-fit: root.image-fit;
+                    accessible-role: none;
+                }
+                if root.show-default-page && item.image.width == 0: Text {
+                    text: item.title;
+                    color: Palette.foreground;
+                    font-family: "Segoe UI Variable Text";
+                    font-size: 24px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+            }
+
+            hit := TouchArea {
+                enabled: root.interactive;
+                changed has-hover => { if self.has-hover { root.reveal-arrows(); } }
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        root.keyboard-focus = false;
+                        keyboard.focus();
+                        if event.touch-finger-id > 0 {
+                            root.touch-id = event.touch-finger-id;
+                            root.touch-is-quick = true;
+                            root.arrows-visible = false;
+                            quick-swipe.restart();
+                        } else {
+                            root.reveal-arrows();
+                        }
+                    }
+                    if event.kind == PointerEventKind.move {
+                        if root.touch-id > 0 && event.touch-finger-id == root.touch-id {
+                            root.swipe-moved(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                        } else if event.touch-finger-id == 0 {
+                            root.reveal-arrows();
+                        }
+                    }
+                    if event.kind == PointerEventKind.up && event.touch-finger-id > 0 && event.touch-finger-id == root.touch-id {
+                        root.finish-swipe();
+                    }
+                    if event.kind == PointerEventKind.cancel { root.cancel-swipe(); }
+                }
+                scroll-event(event) => { return root.wheel(event); }
+            }
+
+            Rectangle {
+                visible: root.active-index >= 0;
+                accessible-role: list-item;
+                accessible-label: root.selected-item.title;
+                accessible-item-index: root.active-index;
+                accessible-item-count: root.item-count;
+                accessible-item-selectable: true;
+                accessible-item-selected: true;
+                @children
+            }
+        }
+
+        if root.has-focus && root.keyboard-focus: ButtonFocusVisual {
+            control-width: root.width;
+            control-height: root.height;
+            horizontal-margin: 0px;
+            vertical-margin: 0px;
+        }
+
+        previous := FlipViewArrow {
+            visible: root.interactive && root.arrows-visible && root.can-move-previous;
+            vertical: root.vertical;
+            points-forward: root.mirror;
+            label: root.previous-label;
+            x: root.vertical ? (parent.width - self.width) / 2 : root.mirror ? parent.width - self.width - 2px : 2px;
+            y: root.vertical ? 2px : (parent.height - self.height) / 2;
+            invoked => { root.move-from-pointer(false); }
+        }
+        next := FlipViewArrow {
+            visible: root.interactive && root.arrows-visible && root.can-move-next;
+            vertical: root.vertical;
+            points-forward: !root.mirror;
+            label: root.next-label;
+            x: root.vertical ? (parent.width - self.width) / 2 : root.mirror ? 2px : parent.width - self.width - 2px;
+            y: root.vertical ? parent.height - self.height - 2px : (parent.height - self.height) / 2;
+            invoked => { root.move-from-pointer(true); }
+        }
+    }
+}

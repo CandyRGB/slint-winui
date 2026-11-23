@@ -1,0 +1,379 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual } from "../basic-input/button_input.slint";
+
+export struct PivotItem { id: string, label: string, accessible-name: string, disabled: bool }
+export struct PivotMeasurement { label: string, width: length }
+export struct PivotHeaderRow { item: PivotItem, index: int, offset: length, width: length }
+export struct PivotLayout {
+    rows: [PivotHeaderRow],
+    selected-id: string,
+    selected-index: int,
+    selected-offset: length,
+    selected-width: length,
+    total-width: length,
+}
+
+export enum PivotHeaderFocusPlacement { whole-header, selected-item-header }
+
+export global PivotBehavior {
+    in-out property <bool> ready;
+    pure callback measurements() -> [PivotMeasurement];
+    callback measure([PivotMeasurement], int, string, length);
+    pure callback layout([PivotItem], [PivotMeasurement], string, int, bool) -> PivotLayout;
+    pure callback next-enabled([PivotItem], int, bool) -> int;
+}
+
+component PivotLabel inherits Text {
+    font-family: "Segoe UI";
+    font-size: 24px;
+    font-weight: 350;
+    letter-spacing: -0.6px;
+    vertical-alignment: center;
+    accessible-role: none;
+}
+
+component PivotMeasure inherits PivotLabel {
+    in property <int> index;
+    in property <[PivotMeasurement]> measurements;
+    private property <PivotMeasurement> measured: { label: self.text, width: self.preferred-width };
+    visible: false;
+    init => { PivotBehavior.measure(root.measurements, root.index, self.text, self.preferred-width); }
+    changed measured => { PivotBehavior.measure(root.measurements, root.index, self.text, self.preferred-width); }
+}
+
+component PivotArrow inherits Rectangle {
+    in property <bool> points-right;
+    in property <string> label;
+    out property <bool> hovered: hit.has-hover;
+    callback invoked();
+    width: 20px;
+    height: 36px;
+    background: hit.pressed ? Palette.foreground.with-alpha(0.8)
+        : hit.has-hover ? Palette.foreground.with-alpha(0.6) : Palette.foreground.with-alpha(0.4);
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.invoked(); }
+    Image {
+        source: root.points-right ? @image-url("../../icons/chevron_right_16_regular.svg")
+            : @image-url("../../icons/chevron_left_16_regular.svg");
+        width: 12px;
+        height: 12px;
+        colorize: Palette.background.with-alpha(0.8);
+        accessible-role: none;
+    }
+    hit := TouchArea { clicked => { root.invoked(); } }
+}
+
+export component Pivot inherits Rectangle {
+    slot left-header;
+    slot right-header;
+    slot title-content;
+
+    in property <[PivotItem]> items;
+    in property <string> title;
+    in property <bool> enabled: true;
+    in property <bool> is-locked;
+    in property <bool> rtl;
+    in property <brush> indicator-color: Palette.accent-background;
+    in property <PivotHeaderFocusPlacement> header-focus-visual-placement: PivotHeaderFocusPlacement.whole-header;
+    in-out property <string> selected-id;
+    out property <int> selected-index: root.metrics.selected-index;
+    callback selection-changed(string);
+
+    private property <[PivotMeasurement]> measurements: PivotBehavior.ready ? PivotBehavior.measurements() : [];
+    private property <int> last-index: -1;
+    private property <PivotLayout> metrics: PivotBehavior.ready
+        ? PivotBehavior.layout(root.items, root.measurements, root.selected-id, root.last-index, root.is-locked)
+        : { selected-index: -1 };
+    private property <string> current-id: root.metrics.selected-id;
+    private property <bool> interactive: root.enabled && !root.is-locked && root.selected-index >= 0;
+    private property <brush> foreground: Palette.color-scheme == ColorScheme.dark ? white : black;
+    private property <length> title-height: root.title == "" && title-layout.preferred-height <= 0px
+        ? 0px : 28px + ceil(max(18px, title-layout.preferred-height) / 2px) * 2px;
+    private property <length> left-width: min(round(left-layout.preferred-width / 2px) * 2px, floor(root.width / 6px) * 2px);
+    private property <length> right-width: min(round(right-layout.preferred-width / 2px) * 2px, floor(root.width / 6px) * 2px);
+    private property <length> header-width: max(0px, root.width - root.left-width - root.right-width);
+    private property <length> max-offset: max(0px, root.metrics.total-width - root.header-width);
+    private property <length> requested-offset;
+    private property <length> offset: clamp(root.requested-offset, 0px, root.max-offset);
+    private property <int> previous-index: root.interactive
+        ? PivotBehavior.next-enabled(root.items, root.selected-index, false) : -1;
+    private property <int> next-index: root.interactive
+        ? PivotBehavior.next-enabled(root.items, root.selected-index, true) : -1;
+    private property <int> hovered-index: -1;
+    private property <bool> keyboard-focus: true;
+    private property <bool> arrows-visible: root.header-width >= 40px && root.max-offset > 0px
+        && (header-hit.has-hover || root.hovered-index >= 0 || previous.hovered || next.hovered);
+    private property <int> touch-id;
+    private property <length> swipe-x;
+    private property <length> swipe-y;
+
+    preferred-height: root.title-height + 48px + 120px;
+    preferred-width: 400px;
+    clip: true;
+    accessible-role: tab-list;
+    accessible-label: root.title;
+    accessible-item-count: root.items.length;
+
+    changed current-id => {
+        if root.selected-id != root.current-id { root.selected-id = root.current-id; }
+        root.selection-changed(root.current-id);
+    }
+    changed selected-id => {
+        if PivotBehavior.ready && root.selected-id != root.current-id { root.selected-id = root.current-id; }
+    }
+    changed selected-index => {
+        if root.selected-index >= 0 { root.last-index = root.selected-index; }
+        root.reveal();
+    }
+    changed header-width => { root.reveal(); }
+    changed metrics => { root.reveal(); }
+    changed interactive => {
+        if !root.interactive {
+            root.touch-id = 0;
+            root.hovered-index = -1;
+        }
+    }
+
+    public function select(index: int) {
+        if index >= 0 && index < root.items.length && !root.items[index].disabled {
+            root.selected-id = root.items[index].id;
+        }
+    }
+
+    public function focus-header() {
+        if root.interactive {
+            root.keyboard-focus = true;
+            header-keys.focus();
+        }
+    }
+
+    function reveal() {
+        let start = root.metrics.selected-offset;
+        let width = root.metrics.selected-width;
+        if start < root.offset || width > root.header-width {
+            root.requested-offset = start;
+        } else if start + width > root.offset + root.header-width {
+            root.requested-offset = start + width - root.header-width;
+        } else {
+            root.requested-offset = root.offset;
+        }
+    }
+
+    function select-from-pointer(index: int) {
+        if root.interactive {
+            root.keyboard-focus = false;
+            header-keys.focus();
+            root.select(index);
+        }
+    }
+
+    function handle-key(event: KeyEvent, on-header: bool) -> EventResult {
+        if !root.interactive { return reject; }
+        if event.modifiers.control && (event.text == Key.Tab || event.text == Key.Backtab
+                || event.text == Key.PageUp || event.text == Key.PageDown) {
+            let forward = event.text == Key.PageDown || (event.text == Key.Tab && !event.modifiers.shift);
+            root.select(forward ? root.next-index : root.previous-index);
+        } else if on-header && (event.text == Key.LeftArrow || event.text == Key.RightArrow) {
+            let forward = event.text == (root.rtl ? Key.LeftArrow : Key.RightArrow);
+            root.select(forward ? root.next-index : root.previous-index);
+        } else if on-header && (event.text == Key.Home || event.text == Key.End) {
+            let forward = event.text == Key.Home;
+            root.select(PivotBehavior.next-enabled(root.items, forward ? -1 : root.items.length, forward));
+        } else {
+            return reject;
+        }
+        root.keyboard-focus = true;
+        header-keys.focus();
+        return accept;
+    }
+
+    for item[index] in (PivotBehavior.ready ? root.items : []): PivotMeasure {
+        index: index;
+        text: item.label;
+        measurements: root.measurements;
+    }
+
+    title-area := Rectangle {
+        x: 12px;
+        y: 14px;
+        width: max(0px, root.width - 24px);
+        height: max(0px, root.title-height - 28px);
+        visible: root.title-height > 0px;
+        title-layout := HorizontalLayout {
+            alignment: root.rtl ? end : start;
+            title-content { }
+        }
+        if title-layout.preferred-height <= 0px: Text {
+            x: 0px;
+            width: parent.width;
+            text: root.title;
+            font-family: "Segoe UI";
+            font-weight: 700;
+            font-size: 14px;
+            color: Palette.foreground;
+            horizontal-alignment: root.rtl ? right : left;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+
+    FocusScope {
+        width: root.width;
+        height: root.height;
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        key-pressed(event) => { return root.handle-key(event, false); }
+
+        Rectangle {
+            x: root.rtl ? parent.width - root.left-width : 0px;
+            y: root.title-height;
+            width: root.left-width;
+            height: 48px;
+            clip: true;
+            left-layout := HorizontalLayout { alignment: start; left-header { } }
+        }
+
+        viewport := Rectangle {
+            x: root.rtl ? root.right-width : root.left-width;
+            y: root.title-height;
+            width: root.header-width;
+            height: 48px;
+            clip: true;
+
+            header-hit := TouchArea {
+                enabled: root.interactive;
+                clicked => { root.select-from-pointer(root.selected-index); }
+            }
+
+            header-keys := FocusScope {
+                width: parent.width;
+                height: parent.height;
+                enabled: root.interactive && root.header-width > 0px;
+                focus-on-click: false;
+                focus-gained(reason) => {
+                    if reason == FocusReason.tab-navigation { root.keyboard-focus = true; }
+                }
+                key-pressed(event) => { return root.handle-key(event, true); }
+
+                for row in root.metrics.rows: Rectangle {
+                    x: root.rtl ? parent.width - row.offset - row.width + root.offset : row.offset - root.offset;
+                    width: row.width;
+                    height: parent.height;
+                    visible: self.x + self.width > 0px && self.x < parent.width;
+                    private property <bool> selected: row.index == root.selected-index;
+                    private property <bool> enabled: root.enabled && !row.item.disabled;
+                    accessible-role: tab;
+                    accessible-label: row.item.accessible-name == "" ? row.item.label : row.item.accessible-name;
+                    accessible-enabled: self.enabled;
+                    accessible-item-index: row.index;
+                    accessible-item-count: root.items.length;
+                    accessible-item-selectable: true;
+                    accessible-item-selected: self.selected;
+                    accessible-action-default => { root.select-from-pointer(row.index); }
+
+                    PivotLabel {
+                        x: 12px;
+                        width: max(0px, parent.width - 24px);
+                        text: row.item.label;
+                        color: root.foreground.with-alpha(!parent.enabled ? 0.4
+                            : hit.has-hover ? 0.8 : parent.selected ? 1 : 0.6);
+                    }
+                    if self.selected && self.enabled: Rectangle {
+                        x: 12px;
+                        y: parent.height - 6px;
+                        width: max(0px, parent.width - 24px);
+                        height: 4px;
+                        border-radius: 2px;
+                        background: root.indicator-color;
+                    }
+                    hit := TouchArea {
+                        enabled: root.interactive && parent.enabled;
+                        changed has-hover => {
+                            if self.has-hover { root.hovered-index = row.index; }
+                            else if root.hovered-index == row.index { root.hovered-index = -1; }
+                        }
+                        clicked => { root.select-from-pointer(row.index); }
+                    }
+
+                    if self.selected && header-keys.has-focus && root.keyboard-focus
+                            && root.header-focus-visual-placement == PivotHeaderFocusPlacement.selected-item-header: ButtonFocusVisual {
+                        control-width: parent.width;
+                        control-height: parent.height;
+                        horizontal-margin: 0px;
+                        vertical-margin: 0px;
+                    }
+                }
+            }
+
+            if header-keys.has-focus && root.keyboard-focus
+                    && root.header-focus-visual-placement == PivotHeaderFocusPlacement.whole-header: ButtonFocusVisual {
+                control-width: parent.width;
+                control-height: parent.height;
+                horizontal-margin: 0px;
+                vertical-margin: 0px;
+            }
+
+            previous := PivotArrow {
+                x: root.rtl ? parent.width - self.width : 0px;
+                y: 6px;
+                visible: root.arrows-visible && root.previous-index >= 0;
+                points-right: root.rtl;
+                label: @tr("Previous");
+                invoked => { root.select-from-pointer(root.previous-index); }
+            }
+            next := PivotArrow {
+                x: root.rtl ? 0px : parent.width - self.width;
+                y: 6px;
+                visible: root.arrows-visible && root.next-index >= 0;
+                points-right: !root.rtl;
+                label: @tr("Next");
+                invoked => { root.select-from-pointer(root.next-index); }
+            }
+        }
+
+        Rectangle {
+            x: root.rtl ? 0px : parent.width - root.right-width;
+            y: root.title-height;
+            width: root.right-width;
+            height: 48px;
+            clip: true;
+            right-layout := HorizontalLayout { alignment: start; right-header { } }
+        }
+
+        Rectangle {
+            x: 0px;
+            y: root.title-height + 48px;
+            width: root.width;
+            height: max(0px, root.height - self.y);
+            clip: true;
+            TouchArea {
+                enabled: root.interactive;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.cancel { root.touch-id = 0; }
+                    if event.touch-finger-id <= 0 { return; }
+                    if event.kind == PointerEventKind.down && root.touch-id == 0 {
+                        root.touch-id = event.touch-finger-id;
+                        root.swipe-x = self.mouse-x;
+                        root.swipe-y = self.mouse-y;
+                    } else if event.kind == PointerEventKind.up && event.touch-finger-id == root.touch-id {
+                        root.touch-id = 0;
+                        let dx = self.mouse-x - root.swipe-x;
+                        let dy = self.mouse-y - root.swipe-y;
+                        if abs(dx) >= 40px && abs(dx) > abs(dy) {
+                            root.select((dx < 0px) != root.rtl ? root.next-index : root.previous-index);
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                x: 12px;
+                width: max(0px, parent.width - 24px);
+                height: parent.height;
+                visible: root.selected-index >= 0;
+                accessible-role: tab-panel;
+                @children
+            }
+        }
+    }
+}

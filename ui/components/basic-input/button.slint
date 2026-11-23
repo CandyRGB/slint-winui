@@ -1,0 +1,74 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonClickMode, ButtonFocusVisual, ButtonInput } from "button_input.slint";
+import { ButtonStyle, ButtonSurface } from "button_surface.slint";
+import { FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+
+export { ButtonClickMode, ButtonStyle, FlyoutRect }
+
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <bool> enabled: true;
+    in property <ButtonStyle> appearance: ButtonStyle.standard;
+    in property <ButtonClickMode> click-mode: ButtonClickMode.release;
+    in property <color> accent: Palette.accent-background;
+    in property <bool> has-flyout;
+    out property <bool> has-focus: input.has-focus;
+    out property <bool> has-hover: input.has-hover;
+    out property <bool> keyboard-focused: input.keyboard-focused;
+    out property <bool> pressed: input.pressed;
+    out property <color> foreground: surface.foreground;
+    out property <FlyoutRect> flyout-anchor: {
+        x: root.absolute-position.x, y: root.absolute-position.y,
+        width: root.width, height: root.height,
+    };
+
+    callback clicked();
+    callback open-flyout(FlyoutRect);
+
+    border-radius: 4px;
+    min-width: surface.min-width;
+    min-height: surface.min-height;
+    preferred-width: surface.preferred-width;
+    preferred-height: surface.preferred-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: input;
+
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.activate(); }
+
+    function activate() {
+        if root.enabled && root.visible {
+            root.clicked();
+            if root.has-flyout {
+                root.open-flyout(root.flyout-anchor);
+            }
+        }
+    }
+
+    surface := ButtonSurface {
+        border-radius: root.border-radius;
+        text: root.text;
+        enabled: root.enabled;
+        hovered: input.has-hover;
+        pressed: input.pressed;
+        appearance: root.appearance;
+        accent: root.accent;
+        @children
+    }
+
+    input := ButtonInput {
+        enabled: root.enabled && root.visible;
+        click-mode: root.click-mode;
+        clicked => { root.activate(); }
+    }
+
+    if root.enabled && input.keyboard-focused: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+        control-radius: root.border-radius;
+    }
+}

@@ -1,0 +1,352 @@
+import { Palette } from "std-widgets.slint";
+import { ContextFlyoutArea } from "../dialogs-flyouts/context_flyout_area.slint";
+import { FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+import { TextBoxField } from "text_box_field.slint";
+
+export struct TextBoxEdit {
+    text: string,
+    cursor: int,
+}
+
+export global TextBoxBehavior {
+    pure callback limit-edit(string, string, int, int) -> TextBoxEdit;
+    limit-edit(previous, draft, cursor, maximum) => { return { text: draft, cursor: cursor }; }
+}
+
+export component TextBox inherits Rectangle {
+    in-out property <string> text;
+    in property <string> header;
+    in property <string> description;
+    in property <string> placeholder-text;
+    in property <string> accessible-name: root.header;
+    in property <bool> enabled: true;
+    in property <bool> read-only;
+    in property <bool> accepts-return;
+    in property <TextWrap> text-wrapping: TextWrap.no-wrap;
+    in property <int> max-length;
+    in property <length> max-editor-height;
+    in property <string> font-family;
+    in property <length> font-size: 14px;
+    in property <int> font-weight: 400;
+    in property <bool> font-italic;
+    in property <length> letter-spacing;
+    in property <brush> foreground: Palette.foreground;
+    in property <color> selection-highlight-color: Palette.selection-background;
+    in property <color> selection-foreground-color: Palette.accent-foreground;
+    in property <color> accent: Palette.accent-background;
+    in property <TextHorizontalAlignment> text-alignment: root.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+    in property <bool> rtl;
+    in property <bool> context-enabled: true;
+    in property <InputMethodHints> input-method-hints: { auto-correct: false };
+
+    out property <bool> has-focus: input.has-focus;
+    out property <bool> has-selection: root.selection-anchor != root.selection-cursor;
+    out property <int> selection-anchor: max(0, input.anchor-position-byte-offset);
+    out property <int> selection-cursor: max(0, input.cursor-position-byte-offset);
+    out property <bool> clear-button-visible: root.can-clear && root.width > 5 * root.font-size;
+
+    // Return true to cancel a user edit or a paste.
+    callback before-text-changing(string) -> bool;
+    callback text-changing();
+    callback text-changed();
+    callback edited(string);
+    callback accepted();
+    callback paste-requested() -> bool;
+    callback context-requested(FlyoutRect);
+    callback context-requested-at(Point);
+
+    private property <bool> multiline: root.accepts-return || root.text-wrapping != TextWrap.no-wrap;
+    private property <bool> can-clear: root.enabled && root.has-focus && !root.read-only && root.text != "" && !root.multiline;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <brush> ink: root.enabled ? root.foreground : root.dark ? #ffffff5c : #0000005c;
+    private property <brush> secondary-ink: !root.enabled ? root.ink : root.dark ? #ffffffa6 : #0000009e;
+    private property <length> line-height: ceil(max(16px, input.font-metrics.ascent + input.font-metrics.descent) / 2px) * 2px;
+    private property <length> natural-height: max(32px, ceil((measure.preferred-height + 12px) / 2px) * 2px);
+    private property <length> natural-width: max(64px,
+        ceil(max(width-measure.preferred-width + 20px, header-measure.preferred-width) / 2px) * 2px);
+    private property <string> notified-text;
+    private property <int> previous-anchor;
+    private property <int> previous-cursor;
+    private property <bool> applying-edit;
+    private property <Point> caret;
+
+    min-width: 64px;
+    preferred-width: root.natural-width + (root.can-clear && root.natural-width > 5 * root.font-size ? 36px : 0px);
+    min-height: layout.preferred-height;
+    preferred-height: layout.preferred-height;
+    forward-focus: input;
+
+    init => { root.notified-text = root.text; input.text = root.text; }
+    changed text => {
+        if input.text != root.text {
+            input.text = root.text;
+            root.set-selection-offsets(0, 0);
+            viewport.content-x = 0px;
+            viewport.content-y = 0px;
+        }
+        root.notify-text-change();
+    }
+    changed enabled => { if !root.enabled { input.clear-focus(); } }
+
+    public function select-all() { if root.enabled { input.select-all(); } }
+    public function copy() { if root.enabled { input.copy(); } }
+    public function cut() { if root.enabled && !root.read-only { input.cut(); } }
+    public function paste() { if root.enabled && !root.read-only && !root.paste-requested() { input.paste(); } }
+    public function undo() { if root.enabled && !root.read-only { input.undo(); } }
+    public function redo() { if root.enabled && !root.read-only { input.redo(); } }
+    public function set-selection-offsets(anchor: int, cursor: int) {
+        input.set-selection-offsets(anchor, cursor);
+        root.remember-selection();
+    }
+
+    function notify-text-change() {
+        if root.notified-text != root.text {
+            root.notified-text = root.text;
+            root.text-changing();
+            root.text-changed();
+        }
+    }
+
+    function remember-selection() {
+        root.previous-anchor = root.selection-anchor;
+        root.previous-cursor = root.selection-cursor;
+    }
+
+    function apply-edit() {
+        if root.applying-edit { return; }
+        root.applying-edit = true;
+        let previous = root.text;
+        let edit = root.max-length > 0 ? TextBoxBehavior.limit-edit(previous, input.text,
+            root.selection-cursor, root.max-length) : { text: input.text, cursor: root.selection-cursor };
+        if edit.text != previous && root.before-text-changing(edit.text) {
+            input.text = root.text;
+            root.set-selection-offsets(root.previous-anchor, root.previous-cursor);
+        } else {
+            if edit.text != input.text {
+                input.text = edit.text;
+                root.set-selection-offsets(edit.cursor, edit.cursor);
+            }
+            root.text = input.text;
+        }
+        root.remember-selection();
+        root.applying-edit = false;
+        root.notify-text-change();
+        if root.text != previous { root.edited(root.text); }
+    }
+
+    function clear-field() {
+        if root.clear-button-visible {
+            input.focus();
+            input.text = "";
+            root.apply-edit();
+            root.keep-cursor-visible({ x: 0px, y: 0px });
+        }
+    }
+
+    function keep-cursor-visible(position: Point) {
+        let right = viewport.width - input.text-cursor-width - position.x;
+        viewport.content-x = max(viewport.width - viewport.content-width,
+            min(0px, max(-position.x, min(viewport.content-x, right))));
+        if root.multiline {
+            let bottom = viewport.height - root.line-height - position.y;
+            viewport.content-y = max(viewport.height - viewport.content-height,
+                min(0px, max(-position.y, min(viewport.content-y, bottom))));
+        }
+    }
+
+    width-measure := Text {
+        visible: false;
+        accessible-role: none;
+        text: root.text == "" ? root.placeholder-text : root.text;
+        font-size: root.font-size;
+        font-family: root.font-family;
+        font-italic: root.font-italic;
+        font-weight: root.font-weight;
+        letter-spacing: root.letter-spacing;
+    }
+    header-measure := Text {
+        visible: false;
+        accessible-role: none;
+        text: root.header;
+        font-size: 14px;
+    }
+
+    layout := VerticalLayout {
+        spacing: 4px;
+        alignment: start;
+
+        if root.header != "": Text {
+            text: root.header;
+            font-size: 14px;
+            color: root.enabled ? Palette.foreground : root.ink;
+            wrap: word-wrap;
+            horizontal-alignment: root.rtl ? right : left;
+            accessible-role: none;
+        }
+
+        area := ContextFlyoutArea {
+            height: root.max-editor-height > 0px ? min(root.natural-height, max(32px, root.max-editor-height)) : root.natural-height;
+            enabled: root.enabled;
+            context-enabled: root.enabled && root.context-enabled;
+            forward-focus: input;
+            context-requested(anchor) => { root.context-requested(anchor); }
+            context-requested-at(point) => { root.context-requested-at(point); }
+
+            hover-pointer := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                enabled: root.enabled;
+                property <bool> right-pressed;
+                clicked => { input.focus(); }
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.cancel { self.right-pressed = false; }
+                    else if event.button == PointerEventButton.right {
+                        if event.kind == PointerEventKind.down { self.right-pressed = true; }
+                        else if event.kind == PointerEventKind.up {
+                            let inside = self.mouse-x >= 0px && self.mouse-x < self.width
+                                && self.mouse-y >= 0px && self.mouse-y < self.height;
+                            if self.right-pressed && inside {
+                                area.request-at({ x: self.mouse-x, y: self.mouse-y });
+                            }
+                            self.right-pressed = false;
+                        }
+                    }
+                }
+
+                field := TextBoxField {
+                    width: parent.width;
+                    height: parent.height;
+                    accent: root.accent;
+                    enabled: root.enabled;
+                    editing: root.has-focus;
+                    hovered: hover-pointer.has-hover;
+                    accessible-role: text-input;
+                    accessible-label: root.accessible-name;
+                    accessible-enabled: root.enabled;
+                    accessible-read-only: root.read-only;
+                    accessible-value: root.text;
+                    accessible-placeholder-text: root.placeholder-text;
+                    accessible-action-set-value(value) => {
+                        if root.enabled && !root.read-only { root.text = value; }
+                    }
+                    accessible-action-set-selection-offsets(anchor, cursor) => { root.set-selection-offsets(anchor, cursor); }
+                    forward-focus: input;
+
+                    viewport := Flickable {
+                        x: root.rtl && root.clear-button-visible ? 40px : 12px;
+                        y: root.multiline ? 4px : 0px;
+                        width: max(0px, parent.width - 20px - (root.clear-button-visible ? 32px : 0px));
+                        height: parent.height - self.y - (root.multiline ? 8px : 2px);
+                        interactive: root.enabled && root.multiline;
+                        mouse-drag-pan-enabled: false;
+                        content-width: root.text-wrapping == TextWrap.no-wrap ? max(self.width, input.preferred-width + input.text-cursor-width) : self.width;
+                        content-height: root.multiline ? max(self.height, measure.preferred-height) : self.height;
+                        changed width => { if root.has-focus { root.keep-cursor-visible(root.caret); } }
+                        changed height => { if root.has-focus { root.keep-cursor-visible(root.caret); } }
+
+                        input := TextInput {
+                            width: viewport.content-width;
+                            height: viewport.content-height;
+                            page-height: viewport.height;
+                            enabled: root.enabled;
+                            read-only: root.read-only;
+                            single-line: !root.multiline;
+                            wrap: root.text-wrapping;
+                            horizontal-alignment: root.text-alignment;
+                            vertical-alignment: root.multiline ? top : center;
+                            font-size: root.font-size;
+                            font-family: root.font-family;
+                            font-italic: root.font-italic;
+                            font-weight: root.font-weight;
+                            letter-spacing: root.letter-spacing;
+                            color: root.ink;
+                            selection-background-color: root.selection-highlight-color;
+                            selection-foreground-color: root.selection-foreground-color;
+                            input-method-hints: root.input-method-hints;
+                            accessible-role: none;
+                            edited => { root.apply-edit(); }
+                            key-pressed(event) => {
+                                if event.text == Key.Return && !root.accepts-return {
+                                    root.accepted();
+                                    return accept;
+                                }
+                                if ((event.modifiers.control || event.modifiers.meta) && !event.modifiers.alt
+                                    && !event.modifiers.shift && event.text.to-lowercase() == "v")
+                                    || (event.modifiers.shift && event.text == Key.Insert) {
+                                    root.paste();
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                            cursor-position-changed(position) => {
+                                root.caret = position;
+                                root.keep-cursor-visible(position);
+                                if self.text == root.text && !root.applying-edit { root.remember-selection(); }
+                            }
+                        }
+
+                        if root.text == "" && input.preedit-text == "": Text {
+                            width: viewport.width;
+                            height: viewport.height;
+                            text: root.placeholder-text;
+                            font-size: root.font-size;
+                            font-family: root.font-family;
+                            font-italic: root.font-italic;
+                            font-weight: root.font-weight;
+                            letter-spacing: root.letter-spacing;
+                            wrap: root.text-wrapping;
+                            color: root.secondary-ink;
+                            horizontal-alignment: root.text-alignment;
+                            vertical-alignment: root.multiline ? top : center;
+                            overflow: elide;
+                            accessible-role: none;
+                        }
+                    }
+
+                    measure := Text {
+                        visible: false;
+                        accessible-role: none;
+                        width: viewport.width;
+                        text: input.text == "" ? root.placeholder-text : input.text;
+                        font-size: root.font-size;
+                        font-family: root.font-family;
+                        font-italic: root.font-italic;
+                        font-weight: root.font-weight;
+                        letter-spacing: root.letter-spacing;
+                        wrap: root.text-wrapping;
+                    }
+
+                    if root.clear-button-visible: Rectangle {
+                        x: root.rtl ? 4px : parent.width - self.width - 4px;
+                        y: (parent.height - self.height) / 2;
+                        width: 28px;
+                        height: 24px;
+                        border-radius: 4px;
+                        background: clear-input.pressed ? (root.dark ? #ffffff12 : #0000000a)
+                            : clear-input.has-hover ? (root.dark ? #ffffff0f : #00000008) : transparent;
+                        accessible-role: button;
+                        accessible-label: @tr("Delete");
+                        accessible-action-default => { root.clear-field(); }
+                        Image {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            width: 12px;
+                            height: 12px;
+                            source: @image-url("../../icons/dismiss_16_regular.svg");
+                            colorize: root.secondary-ink;
+                        }
+                        clear-input := TouchArea { clicked => { root.clear-field(); } }
+                    }
+                }
+            }
+        }
+
+        if root.description != "": Text {
+            text: root.description;
+            color: root.secondary-ink;
+            font-size: 12px;
+            wrap: word-wrap;
+            horizontal-alignment: root.rtl ? right : left;
+        }
+    }
+}

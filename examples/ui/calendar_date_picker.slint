@@ -1,0 +1,87 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { CalendarDatePicker } from "../../ui/components/date-time/calendar_date_picker.slint";
+import { CalendarDateText, CalendarViewBehavior, CalendarViewCell, CalendarViewDayName, CalendarViewDisplayMode, CalendarViewOptions, CalendarViewPage, CalendarViewSelectionChange, CalendarViewSelectionMode } from "../../ui/components/date-time/calendar_view.slint";
+
+export { CalendarDateText, CalendarViewBehavior, CalendarViewCell, CalendarViewDayName, CalendarViewDisplayMode, CalendarViewOptions, CalendarViewPage, CalendarViewSelectionChange, CalendarViewSelectionMode }
+
+export component CalendarDatePickerExample inherits Window {
+    title: "CalendarDatePicker";
+    min-width: 652px;
+    min-height: 500px;
+    preferred-height: 612px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+
+    in property <int> today;
+    in property <color> accent: Palette.accent-background;
+    in property <color> selection-ink: Palette.accent-background;
+
+    private property <bool> bounded;
+    private property <bool> rtl;
+    private property <bool> disabled;
+    private property <bool> long-format;
+    private property <bool> near-bottom;
+    private property <bool> blackout;
+    private property <int> opens;
+    private property <int> closes;
+    private property <int> changes;
+
+    VerticalLayout {
+        x: 24px;
+        y: 24px;
+        width: root.width - 48px;
+        height: 80px;
+        alignment: start;
+        spacing: 8px;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Set today"; clicked => { picker.date = root.today; } }
+            Button { text: "Clear"; clicked => { picker.date = 0; } }
+            Button { text: "Set later date"; clicked => { picker.date = root.today + 31; } }
+            Button { text: "Toggle range"; clicked => { root.bounded = !root.bounded; } }
+            Button { text: "Long date"; clicked => { root.long-format = !root.long-format; } }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Open calendar"; clicked => { picker.is-calendar-open = true; } }
+            Button { text: "Move field"; clicked => { root.near-bottom = !root.near-bottom; } }
+            Button { text: "Toggle enabled"; clicked => { root.disabled = !root.disabled; } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+            Button { text: "Blackout date"; clicked => { root.blackout = !root.blackout; } }
+        }
+    }
+
+    picker := CalendarDatePicker {
+        x: 216px;
+        y: root.near-bottom ? root.height - 106px : 128px;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        header: "Calendar";
+        placeholder-text: "Pick a date";
+        language: "en-US";
+        date-format: root.long-format ? "day month.full year" : "shortdate";
+        today: root.today;
+        min-date: root.bounded ? root.today - 2 : 0;
+        max-date: root.bounded ? root.today + 2 : 0;
+        blackout-dates: root.blackout ? [root.today - 1] : [];
+        rtl: root.rtl;
+        enabled: !root.disabled;
+        popup-viewport: { width: root.width, height: root.height };
+        accent: root.accent;
+        selection-ink: root.selection-ink;
+        opened => { root.opens += 1; }
+        closed => { root.closes += 1; }
+        date-changed(old, next) => { root.changes += 1; }
+    }
+
+    Text {
+        x: 24px;
+        y: root.height - 32px;
+        text: "Date \{picker.date} · Changes \{root.changes} · Opened \{root.opens} · Closed \{root.closes}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+}

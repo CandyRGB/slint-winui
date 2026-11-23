@@ -1,0 +1,230 @@
+import { CheckBox, LineEdit, Palette } from "std-widgets.slint";
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../../ui/components/collections/items_repeater.slint";
+import { VariableSizedWrapGrid } from "../../ui/components/layout/variable_sized_wrap_grid.slint";
+import { VariableSizedWrapGridOptions, WrapGridAlignment, WrapLayoutBehavior, WrapLayoutChild, WrapPanelItemsStretch, WrapPanelOptions, WrapPanelPadding } from "../../ui/components/layout/wrap_layout.slint";
+import { WrapPanel } from "../../ui/components/layout/wrap_panel.slint";
+
+export {
+    ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize,
+    VariableSizedWrapGridOptions, WrapGridAlignment, WrapLayoutBehavior, WrapLayoutChild,
+    WrapPanelItemsStretch, WrapPanelOptions, WrapPanelPadding
+}
+
+component SampleTitle inherits Text {
+    font-size: 18px;
+    font-weight: 600;
+    color: #000000e4;
+}
+
+component SampleFrame inherits Rectangle {
+    background: #f6f6f680;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: #0000000f;
+}
+
+component WrapTile inherits Rectangle {
+    in property <string> label;
+    in property <bool> use-editor;
+    in property <bool> rtl;
+    in property <brush> fill: #ffffffb3;
+    in property <brush> foreground: #000000e4;
+
+    background: root.fill;
+    border-width: 1px;
+    border-radius: 4px;
+    border-color: #0000000f;
+
+    if !root.use-editor: Text {
+        x: 12px;
+        width: parent.width - 24px;
+        height: parent.height;
+        vertical-alignment: center;
+        horizontal-alignment: root.rtl ? right : left;
+        font-size: 14px;
+        color: root.foreground;
+        text: root.label;
+    }
+    if root.use-editor: LineEdit {
+        x: 4px;
+        y: 4px;
+        width: parent.width - 8px;
+        height: parent.height - 8px;
+        placeholder-text: "Alpha";
+        accessible-label: "Alpha editor";
+    }
+}
+
+export component WrapLayoutExample inherits Window {
+    title: "WinUI WrapPanel and VariableSizedWrapGrid";
+    min-width: 826px;
+    min-height: 600px;
+    preferred-width: 826px;
+    preferred-height: 600px;
+    default-font-family: "Segoe UI";
+    background: #f3f3f3;
+    in property <brush> accent: Palette.accent-background;
+
+    private property <bool> vertical-wrap;
+    private property <bool> compact;
+    private property <bool> tight-spacing;
+    private property <bool> use-editor;
+    private property <bool> rtl;
+    private property <bool> stretch-last: true;
+    private property <bool> hide-last;
+    private property <bool> horizontal-grid;
+    private property <bool> two-tracks;
+    private property <bool> center-grid;
+
+    private property <length> panel-inset: root.tight-spacing ? 4px : 12px;
+    private property <length> spacing: root.tight-spacing ? 2px : 8px;
+    private property <[string]> wrap-labels: [
+        "Alpha", "Beta item", "Gamma", "Delta item", "Epsilon", "Zeta item",
+        "Eta", "Theta item", "Iota", "Kappa item",
+    ];
+    private property <[WrapLayoutChild]> wrap-items: [
+        { size: { width: 72px, height: 38px } },
+        { size: { width: 112px, height: 38px } },
+        { size: { width: 88px, height: 38px } },
+        { size: { width: 128px, height: 38px } },
+        { size: { width: 80px, height: 38px } },
+        { size: { width: 104px, height: 38px } },
+        { size: { width: 76px, height: 38px } },
+        { size: { width: 120px, height: 38px } },
+        { size: { width: 92px, height: 38px } },
+        { size: { width: 132px, height: 38px } },
+    ];
+    private property <[string]> stretch-labels: ["One", "Two", "Three", "Four", "Five", "Final item"];
+    private property <[WrapLayoutChild]> stretch-items: [
+        { size: { width: 72px, height: 38px } }, { size: { width: 72px, height: 38px } },
+        { size: { width: 72px, height: 38px } }, { size: { width: 72px, height: 38px } },
+        { size: { width: 72px, height: 38px } }, { size: { width: 82px, height: 38px }, collapsed: root.hide-last },
+    ];
+    private property <[WrapLayoutChild]> grid-items: [
+        { size: { width: 44px, height: 44px } },
+        { size: { width: 44px, height: 80px }, row-span: 2 },
+        { size: { width: 80px, height: 44px }, column-span: 2 },
+        { size: { width: 80px, height: 80px }, row-span: 2, column-span: 2 },
+    ];
+    private property <[string]> grid-labels: ["Red", "Blue", "Green", "Yellow"];
+    private property <[color]> grid-colors: [#ff0000, #0000ff, #008000, #ffff00];
+
+    SampleTitle { x: 24px; y: 24px; text: "WrapPanel"; }
+    HorizontalLayout {
+        x: 24px; y: 52px; width: 360px; height: 34px; spacing: 12px; alignment: start;
+        CheckBox { text: "Vertical"; checked <=> root.vertical-wrap; }
+        CheckBox { text: "Narrow"; checked <=> root.compact; }
+        CheckBox { text: "Tight spacing"; checked <=> root.tight-spacing; }
+    }
+    HorizontalLayout {
+        x: 24px; y: 86px; width: 360px; height: 34px; spacing: 12px; alignment: start;
+        CheckBox { text: "Editable first item"; checked <=> root.use-editor; }
+        CheckBox { text: "Right to left"; checked <=> root.rtl; }
+    }
+
+    SampleFrame {
+        x: 24px; y: 128px;
+        width: root.compact ? 252px : 360px;
+        height: root.vertical-wrap ? 360px : root.compact ? 300px : 200px;
+        accessible-role: groupbox;
+        accessible-label: "WrapPanel sample";
+
+        panel := WrapPanel {
+            x: 1px; y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            orientation: root.vertical-wrap ? Orientation.vertical : Orientation.horizontal;
+            items: root.wrap-items;
+            content-padding: { left: root.panel-inset, top: root.panel-inset, right: root.panel-inset, bottom: root.panel-inset };
+            item-spacing: root.spacing;
+            line-spacing: root.spacing;
+            rtl: root.rtl;
+
+            for label[index] in root.wrap-labels: WrapTile {
+                property <ItemsRepeaterPlacement> slot: panel.placements[index];
+                x: slot.x; y: slot.y;
+                width: slot.width; height: slot.height;
+                label: label;
+                use-editor: index == 0 && root.use-editor;
+                rtl: root.rtl;
+            }
+        }
+    }
+
+    SampleTitle { x: 400px; y: 24px; text: "Stretch the final item"; }
+    HorizontalLayout {
+        x: 400px; y: 52px; width: 360px; height: 34px; spacing: 12px; alignment: start;
+        CheckBox { text: "Stretch last"; checked <=> root.stretch-last; }
+        CheckBox { text: "Hide final item"; checked <=> root.hide-last; }
+    }
+    SampleFrame {
+        x: 400px; y: 94px;
+        width: 360px;
+        height: stretch-panel.extent-height + 2px;
+        accessible-role: groupbox;
+        accessible-label: "Stretch sample";
+
+        stretch-panel := WrapPanel {
+            x: 1px; y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            available-height: -1px;
+            items: root.stretch-items;
+            content-padding: { left: 12px, top: 12px, right: 12px, bottom: 12px };
+            item-spacing: 8px;
+            items-stretch: root.stretch-last ? WrapPanelItemsStretch.last : WrapPanelItemsStretch.none;
+            rtl: root.rtl;
+
+            for label[index] in root.stretch-labels: WrapTile {
+                property <ItemsRepeaterPlacement> slot: stretch-panel.placements[index];
+                x: slot.x; y: slot.y;
+                width: slot.width; height: slot.height;
+                label: label;
+                rtl: root.rtl;
+                visible: slot.height > 0px;
+                fill: index == 5 ? root.accent : #ffffffb3;
+                foreground: index == 5 ? white : #000000e4;
+            }
+        }
+    }
+
+    SampleTitle { x: 400px; y: 222px; text: "VariableSizedWrapGrid"; }
+    HorizontalLayout {
+        x: 400px; y: 250px; width: 400px; height: 34px; spacing: 12px; alignment: start;
+        CheckBox { text: "Horizontal grid"; checked <=> root.horizontal-grid; }
+        CheckBox { text: "Two tracks"; checked <=> root.two-tracks; }
+        CheckBox { text: "Center tiles"; checked <=> root.center-grid; }
+    }
+    SampleFrame {
+        x: 400px; y: 292px;
+        width: 402px; height: 264px;
+        accessible-role: groupbox;
+        accessible-label: "Grid sample";
+
+        grid := VariableSizedWrapGrid {
+            x: 1px; y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            items: root.grid-items;
+            item-width: 44px;
+            item-height: 44px;
+            orientation: root.horizontal-grid ? Orientation.horizontal : Orientation.vertical;
+            maximum-rows-or-columns: root.two-tracks ? 2 : 3;
+            horizontal-children-alignment: root.center-grid ? WrapGridAlignment.center : WrapGridAlignment.start;
+            vertical-children-alignment: root.center-grid ? WrapGridAlignment.center : WrapGridAlignment.start;
+            rtl: root.rtl;
+
+            for shade[index] in root.grid-colors: Rectangle {
+                property <ItemsRepeaterPlacement> slot: grid.placements[index];
+                width: min(slot.width, root.grid-items[index].size.width);
+                height: min(slot.height, root.grid-items[index].size.height);
+                x: slot.x + (slot.width - self.width) / 2;
+                y: slot.y + (slot.height - self.height) / 2;
+                visible: slot.width > 0px && slot.height > 0px;
+                background: shade;
+                accessible-role: groupbox;
+                accessible-label: root.grid-labels[index];
+            }
+        }
+    }
+}

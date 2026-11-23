@@ -1,0 +1,14 @@
+export struct SystemContrastColors {
+    active: bool,
+    window: color,
+    window-text: color,
+    button-face: color,
+    button-text: color,
+    disabled-text: color,
+    highlight: color,
+    highlight-text: color,
+}
+
+export global ContrastTheme {
+    in property <SystemContrastColors> colors;
+}

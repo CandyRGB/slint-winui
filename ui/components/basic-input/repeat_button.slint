@@ -1,0 +1,117 @@
+import { ButtonClickMode, ButtonInput, ButtonFocusVisual } from "button_input.slint";
+import { ButtonSurface } from "button_surface.slint";
+
+export { ButtonClickMode }
+
+export component RepeatButtonInput inherits ButtonInput {
+    in property <duration> delay: 500ms;
+    in property <duration> interval: 33ms;
+    callback repeated();
+    click-mode: ButtonClickMode.press;
+
+    private property <bool> delay-elapsed;
+    private property <bool> hold-active: root.enabled && root.visible && (root.click-mode == ButtonClickMode.hover
+        ? root.has-hover : root.pointer-held || root.space-held);
+    private property <bool> can-repeat: root.hold-active && (root.has-hover || root.space-held);
+
+    changed hold-active => {
+        if root.hold-active {
+            first-repeat.start();
+        } else {
+            first-repeat.stop();
+            next-repeat.stop();
+            root.delay-elapsed = false;
+        }
+    }
+
+    changed can-repeat => {
+        if root.can-repeat && root.delay-elapsed {
+            next-repeat.start();
+        } else if !root.can-repeat {
+            next-repeat.stop();
+        }
+    }
+
+    first-repeat := Timer {
+        interval: max(1ms, root.delay);
+        running: false;
+        triggered => {
+            self.stop();
+            if root.hold-active {
+                root.delay-elapsed = true;
+                if root.can-repeat {
+                    next-repeat.start();
+                    root.repeated();
+                }
+            }
+        }
+    }
+
+    next-repeat := Timer {
+        interval: max(1ms, root.interval);
+        running: false;
+        triggered => {
+            if root.can-repeat {
+                root.repeated();
+            } else {
+                self.stop();
+            }
+        }
+    }
+}
+
+export component RepeatButton inherits Rectangle {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <bool> enabled: true;
+    in property <ButtonClickMode> click-mode: ButtonClickMode.press;
+    in property <duration> delay: 500ms;
+    in property <duration> interval: 33ms;
+    out property <bool> has-focus: input.has-focus;
+    out property <color> foreground: surface.foreground;
+    callback clicked();
+
+    border-radius: 4px;
+    min-width: surface.min-width;
+    min-height: surface.min-height;
+    preferred-width: surface.preferred-width;
+    preferred-height: surface.preferred-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: input;
+
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.emit-click(); }
+
+    function emit-click() {
+        if root.enabled && root.visible {
+            root.clicked();
+        }
+    }
+
+    surface := ButtonSurface {
+        border-radius: root.border-radius;
+        text: root.text;
+        enabled: root.enabled;
+        pressed: input.pressed;
+        hovered: input.has-hover;
+        @children
+    }
+
+    input := RepeatButtonInput {
+        click-mode: root.click-mode;
+        delay: root.delay;
+        interval: root.interval;
+        enabled: root.enabled && root.visible;
+        clicked => { root.emit-click(); }
+        repeated => { root.emit-click(); }
+    }
+
+    if root.enabled && input.keyboard-focused: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+        control-radius: root.border-radius;
+    }
+}

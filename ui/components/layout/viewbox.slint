@@ -1,0 +1,88 @@
+export enum ViewboxStretch { none, fill, uniform, uniform-to-fill }
+export enum ViewboxStretchDirection { both, up-only, down-only }
+export enum ViewboxAlignment { stretch, start, center, end }
+export struct ViewboxScale { x: float, y: float }
+
+export global ViewboxLayout {
+    public pure function scale(
+        available-width: length, available-height: length,
+        content-width: length, content-height: length,
+        stretch: ViewboxStretch, direction: ViewboxStretchDirection,
+    ) -> ViewboxScale {
+        if (stretch == ViewboxStretch.none || (available-width < 0px && available-height < 0px)) {
+            return { x: 1, y: 1 };
+        }
+        let x = content-width <= 0.00001px ? 0 : max(0px, available-width) / content-width;
+        let y = content-height <= 0.00001px ? 0 : max(0px, available-height) / content-height;
+        let scale-x = available-width < 0px ? y : available-height < 0px ? x
+            : stretch == ViewboxStretch.uniform ? min(x, y)
+            : stretch == ViewboxStretch.uniform-to-fill ? max(x, y) : x;
+        let scale-y = available-width < 0px ? y : available-height < 0px ? x
+            : stretch == ViewboxStretch.uniform ? min(x, y)
+            : stretch == ViewboxStretch.uniform-to-fill ? max(x, y) : y;
+        return {
+            x: self.apply-direction(scale-x, direction),
+            y: self.apply-direction(scale-y, direction),
+        };
+    }
+
+    pure function apply-direction(scale: float, direction: ViewboxStretchDirection) -> float {
+        return direction == ViewboxStretchDirection.up-only ? max(1, scale)
+            : direction == ViewboxStretchDirection.down-only ? min(1, scale) : scale;
+    }
+
+    public pure function offset(available: length, ink: length, alignment: ViewboxAlignment) -> length {
+        let spare = available - ink;
+        let offset = alignment == ViewboxAlignment.start ? 0px
+            : alignment == ViewboxAlignment.end ? spare
+            : alignment == ViewboxAlignment.stretch && spare < 0px ? 0px : spare / 2;
+        return floor(offset / 2px + 0.5) * 2px;
+    }
+}
+
+export component Viewbox inherits Rectangle {
+    in property <ViewboxStretch> stretch: ViewboxStretch.uniform;
+    in property <ViewboxStretchDirection> stretch-direction: ViewboxStretchDirection.both;
+    in property <ViewboxAlignment> horizontal-content-alignment: ViewboxAlignment.stretch;
+    in property <ViewboxAlignment> vertical-content-alignment: ViewboxAlignment.stretch;
+    in property <length> content-width: content-layout.preferred-width;
+    in property <length> content-height: content-layout.preferred-height;
+    in property <length> measure-width: -1px;
+    in property <length> measure-height: -1px;
+    in property <bool> transform-content: true;
+
+    out property <float> scale-x: root.arranged.x;
+    out property <float> scale-y: root.arranged.y;
+    out property <length> scaled-width: root.natural-width * root.scale-x;
+    out property <length> scaled-height: root.natural-height * root.scale-y;
+    out property <length> content-x: ViewboxLayout.offset(root.width, root.scaled-width, root.horizontal-content-alignment);
+    out property <length> content-y: ViewboxLayout.offset(root.height, root.scaled-height, root.vertical-content-alignment);
+
+    private property <length> natural-width: max(0px, root.content-width);
+    private property <length> natural-height: max(0px, root.content-height);
+    private property <ViewboxScale> measured: ViewboxLayout.scale(
+        root.measure-width, root.measure-height, root.natural-width, root.natural-height,
+        root.stretch, root.stretch-direction);
+    private property <ViewboxScale> arranged: ViewboxLayout.scale(
+        root.width, root.height, root.natural-width, root.natural-height,
+        root.stretch, root.stretch-direction);
+
+    preferred-width: round(root.natural-width * root.measured.x / 2px) * 2px;
+    preferred-height: round(root.natural-height * root.measured.y / 2px) * 2px;
+    clip: root.scaled-width > root.width || root.scaled-height > root.height;
+    accessible-role: none;
+
+    content := Rectangle {
+        x: root.content-x;
+        y: root.content-y;
+        width: root.transform-content ? root.natural-width : root.scaled-width;
+        height: root.transform-content ? root.natural-height : root.scaled-height;
+        visible: root.scaled-width > 0px && root.scaled-height > 0px;
+        transform-origin: { x: 0px, y: 0px };
+        transform-scale-x: root.transform-content ? root.scale-x : 1;
+        transform-scale-y: root.transform-content ? root.scale-y : 1;
+        content-layout := VerticalLayout {
+            @children
+        }
+    }
+}

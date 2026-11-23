@@ -1,0 +1,87 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { InfoBadge, InfoBadgeTone } from "../../ui/components/status-info/info_badge.slint";
+import { NavigationView, NavigationViewPaneDisplayMode } from "../../ui/components/navigation/navigation_view.slint";
+export { NavigationViewBehavior, NavigationViewDisplayMode, NavigationViewPaneDisplayMode, NavigationViewRow, NavigationViewItem, NavigationViewItemKind, NavigationViewLeftLayout, NavigationViewTopLayout, NavigationViewMeasurement, NavigationViewTopContentWidths } from "../../ui/components/navigation/navigation_view.slint";
+
+component BadgeSampleRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <InfoBadgeTone> tone;
+    in property <string> glyph;
+    height: 32px;
+    alignment: start;
+    spacing: 20px;
+    Text { text: root.label; width: 100px; vertical-alignment: center; color: Palette.foreground; }
+    VerticalLayout { alignment: center; InfoBadge { tone: root.tone; accessible-name: root.label + " dot"; } }
+    VerticalLayout { alignment: center; InfoBadge { tone: root.tone; value: 10; accessible-name: root.label + " count"; } }
+    VerticalLayout { alignment: center; InfoBadge { tone: root.tone; glyph: root.glyph; show-tone-icon: true; accessible-name: root.label + " icon"; } }
+}
+
+export component InfoBadgeExample inherits Window {
+    title: "WinUI InfoBadge";
+    preferred-width: 640px;
+    preferred-height: 520px;
+    private property <int> value: -1;
+    private property <image> no-icon;
+    private property <NavigationViewPaneDisplayMode> navigation-mode: NavigationViewPaneDisplayMode.left;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+
+        VerticalLayout {
+            alignment: start;
+            BadgeSampleRow { label: "Accent"; tone: InfoBadgeTone.accent; glyph: "\u{E8BD}"; }
+            BadgeSampleRow { label: "Attention"; tone: InfoBadgeTone.attention; }
+            BadgeSampleRow { label: "Informational"; tone: InfoBadgeTone.informational; }
+            BadgeSampleRow { label: "Success"; tone: InfoBadgeTone.success; }
+            BadgeSampleRow { label: "Caution"; tone: InfoBadgeTone.caution; }
+            BadgeSampleRow { label: "Critical"; tone: InfoBadgeTone.critical; }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Dot"; clicked => { root.value = -1; icon-mode.checked = false; } }
+            Button { text: "Zero"; clicked => { root.value = 0; } }
+            Button { text: "One"; clicked => { root.value = 1; } }
+            Button { text: "Large number"; clicked => { root.value = 2147483647; } }
+            icon-mode := CheckBox { text: "Show icon"; }
+            VerticalLayout {
+                alignment: center;
+                InfoBadge {
+                    value: root.value;
+                    icon-source: icon-mode.checked ? @image-url("../../ui/icons/arrow_clockwise_16_regular.svg") : root.no-icon;
+                    accessible-name: root.value >= 0 ? "" : icon-mode.checked ? "Refresh required" : "New activity";
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Expanded"; clicked => { root.navigation-mode = NavigationViewPaneDisplayMode.left; } }
+            Button { text: "Compact"; clicked => { root.navigation-mode = NavigationViewPaneDisplayMode.left-compact; nav.hide-pane(); } }
+            Button { text: "Top"; clicked => { root.navigation-mode = NavigationViewPaneDisplayMode.top; } }
+            rtl := CheckBox { text: "RTL"; }
+            show-nav-badge := CheckBox { text: "Navigation badge"; checked: true; }
+        }
+        nav := NavigationView {
+            preferred-height: 184px;
+            pane-display-mode: root.navigation-mode;
+            rtl: rtl.checked;
+            is-settings-visible: false;
+            is-back-button-visible: false;
+            pane-title: "Workspace";
+            open-pane-length: 200px;
+            selected-id: "home";
+            menu-items: [
+                { id: "home", label: "Home", icon: @image-url("../../ui/icons/home_16_regular.svg") },
+                { id: "activity", label: "Activity", icon: @image-url("../../ui/icons/alert_16_regular.svg"),
+                  badge: { visible: show-nav-badge.checked, value: 5, tone: InfoBadgeTone.informational, accessible-name: "5 new items" } },
+                { id: "account", label: "Account", icon: @image-url("../../ui/icons/person_16_regular.svg"),
+                  badge: { visible: show-nav-badge.checked, value: -1, tone: InfoBadgeTone.critical, accessible-name: "Action required" } },
+            ];
+            Text { text: "NavigationView"; font-size: 16px; color: Palette.foreground; }
+        }
+    }
+}

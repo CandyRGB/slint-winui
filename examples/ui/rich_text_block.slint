@@ -1,0 +1,185 @@
+import { Button, ComboBox, Palette } from "std-widgets.slint";
+import { RichTextBlock, RichTextAlignment, RichTextBehavior, RichTextFill, RichTextFormat, RichTextFrame,
+    RichTextHighlight, RichTextHit, RichTextImage, RichTextLayout, RichTextLink, RichTextLocation,
+    RichTextNavigation, RichTextParagraph, RichTextRect, RichTextRun } from "../../ui/components/text/rich_text_block.slint";
+import { AppBarLabelPosition, CommandBarBehavior, CommandBarEntry, CommandBarItem, CommandBarItemKind,
+    CommandBarLayout, CommandBarOverflowButtonVisibility } from "../../ui/components/menus-toolbars/command_bar.slint";
+import { CommandBarFlyoutKeyScope } from "../../ui/components/menus-toolbars/command_bar_flyout.slint";
+import { FlyoutCloseReason, TextCommand, TextCommandBarFlyout,
+    TextCommandTarget } from "../../ui/components/text/text_command_bar_flyout.slint";
+
+export { RichTextAlignment, RichTextBehavior, RichTextFill, RichTextFormat, RichTextFrame,
+    RichTextHighlight, RichTextHit, RichTextImage, RichTextLayout, RichTextLink, RichTextLocation,
+    RichTextNavigation, RichTextParagraph, RichTextRect, RichTextRun, AppBarLabelPosition,
+    CommandBarBehavior, CommandBarEntry, CommandBarItem, CommandBarItemKind,
+    CommandBarLayout, CommandBarOverflowButtonVisibility }
+
+export component RichTextBlockExample inherits Window {
+    title: "RichTextBlock";
+    min-width: 540px;
+    preferred-width: 852px;
+    min-height: 560px;
+    preferred-height: 792px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI Variable Text";
+    in property <float> text-scale: 1;
+    in property <color> link-accent: #005fb8;
+    callback copy-text(string);
+
+    private property <string> activated-link;
+    private property <bool> narrow;
+    private property <bool> rtl;
+    private property <length> column-width: max(0px, floor((columns.width / 3 - 24px) / 2px) * 2px);
+    private property <length> column-height: root.narrow ? 144px : 300px;
+    private property <length> column-offset: root.column-width + 24px;
+    private property <color> highlight-ink: #1b1b1b;
+    private property <color> highlight-fill: colors.current-index == 1 ? red
+        : colors.current-index == 2 ? blue : yellow;
+
+    HorizontalLayout {
+        x: 24px;
+        y: 16px;
+        width: parent.width - 48px;
+        height: 32px;
+        spacing: 8px;
+        alignment: start;
+        Button { text: "Short columns"; checkable: true; checked <=> root.narrow; }
+        Button { text: "RTL"; checkable: true; checked <=> root.rtl; }
+        Button { text: "Clear selection"; clicked => { rich.clear-selection(); columns.clear-selection(); } }
+    }
+
+    CommandBarFlyoutKeyScope {
+        width: parent.width;
+        height: parent.height;
+        dismiss-enabled: menu.is-open;
+        dismiss => { menu.dismiss(FlyoutCloseReason.escape); }
+
+        Flickable {
+            x: 24px;
+            y: 60px;
+            width: parent.width - 48px;
+            height: parent.height - 124px;
+            content-height: max(self.height, samples.preferred-height);
+            content-width: self.width;
+            mouse-drag-pan-enabled: false;
+
+            samples := VerticalLayout {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: self.preferred-height;
+                spacing: 12px;
+
+                Text { text: "A simple RichTextBlock"; font-size: 16px; font-weight: 600; }
+                RichTextBlock {
+                    accessible-name: "Simple RichTextBlock";
+                    context-enabled: false;
+                    raster-scale: root.text-scale;
+                    rtl: root.rtl;
+                    paragraphs: [{ runs: [{ text: "I am a RichTextBlock." }] }];
+                    copy-requested(value) => { root.copy-text(value); }
+                }
+
+                Text { text: "Formatted text and selection"; font-size: 16px; font-weight: 600; }
+                rich := RichTextBlock {
+                    accessible-name: "Formatted text";
+                    raster-scale: root.text-scale;
+                    rtl: root.rtl;
+                    link-color: root.link-accent;
+                    selection-highlight-color: green;
+                    paragraphs: [
+                        { runs: [
+                            { text: "RichTextBlock provides a rich text display container that supports " },
+                            { text: "formatted text", italic: true, font-weight: 700 },
+                            { text: ", " },
+                            { text: "hyperlinks", link: "RichTextBlock documentation" },
+                            { text: ", inline images, and other rich content." },
+                        ] },
+                        { runs: [
+                            { text: "An image can flow with the text " },
+                            { image: @image-url("../../ui/icons/image_16_regular.svg"), image-width: 16px,
+                                image-height: 16px, image-label: "Image example" },
+                            { text: " and affect the line height." },
+                        ] },
+                    ];
+                    link-invoked(link) => { root.activated-link = link; }
+                    copy-requested(value) => { root.copy-text(value); }
+                    context-requested(anchor) => { menu.show-context(anchor); }
+                    context-requested-at(point) => { menu.show-context-at(point); }
+                }
+
+                Text { text: "Linked text containers"; font-size: 16px; font-weight: 600; }
+                columns := RichTextBlock {
+                    accessible-name: "Three linked text columns";
+                    context-enabled: false;
+                    raster-scale: root.text-scale;
+                    alignment: RichTextAlignment.justified;
+                    rtl: root.rtl;
+                    overflow-regions: [
+                        { x: 12px, width: root.column-width, height: root.column-height },
+                        { x: 12px + root.column-offset, width: root.column-width, height: root.column-height },
+                        { x: 12px + 2 * root.column-offset, width: root.column-width, height: root.column-height },
+                    ];
+                    paragraphs: [
+                        { runs: [{ text: "A linked text container lays out the next lines of the same paragraph when an earlier container runs out of vertical space. The text still belongs to one document." }] },
+                        { runs: [{ text: "The words in this column continue from the previous one. Resize the window to wrap the paragraphs differently or shorten the columns to see which portion of the text remains. You can drag a selection across the column boundary. The copied selection follows the order of the paragraphs even when the regions appear in a different place on the page." }] },
+                        { runs: [{ text: "Each column is a separate text region. Line breaks are measured at the width of the region receiving the text. Justified lines span the available width, while the last line of each paragraph retains its natural spacing. A region with no more room passes the rest of the document to the next one. When the final region fills up, the control reports the remaining text." }] },
+                        { runs: [{ text: "A paragraph can start in one column and end in another. Moving the boundary changes the positions of the glyphs but keeps the same selection offsets in the document. A longer passage also makes it possible to check a selection that begins near the end of one column and continues well into the next. The paragraphs still copy in reading order." }] },
+                        { runs: [{ text: "The last region displays the conclusion. Change the width to see its first line move without duplicating or dropping words from the preceding column." }] },
+                    ];
+                    copy-requested(value) => { root.copy-text(value); }
+                }
+
+                Text { text: columns.has-overflow-content ? "Text continues beyond the last column" : "All text fits in the three columns"; color: Palette.foreground; }
+
+                Text { text: "Text highlighting"; font-size: 16px; font-weight: 600; }
+                RichTextBlock {
+                    accessible-name: "Highlighted paragraph";
+                    context-enabled: false;
+                    raster-scale: root.text-scale;
+                    rtl: root.rtl;
+                    paragraphs: [{ runs: [{ text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua." }] }];
+                    highlights: [{ start: 28, length: 11, background: root.highlight-fill, foreground: root.highlight-ink, custom-foreground: true }];
+                    copy-requested(value) => { root.copy-text(value); }
+                }
+                colors := ComboBox { width: 124px; model: ["Yellow", "Red", "Blue"]; }
+
+            }
+        }
+
+        VerticalLayout {
+            x: 24px;
+            y: parent.height - 56px;
+            width: parent.width - 48px;
+            height: 48px;
+            spacing: 4px;
+            alignment: start;
+
+            Text {
+                height: 20px;
+                overflow: elide;
+                text: rich.selected-text != "" ? "Selected text: " + rich.selected-text
+                    : columns.selected-text != "" ? "Selected column text: " + columns.selected-text : "";
+            }
+            Text {
+                height: 20px;
+                overflow: elide;
+                text: root.activated-link != "" ? "Activated link: " + root.activated-link : "";
+            }
+        }
+
+        menu := TextCommandBarFlyout {
+            width: parent.width;
+            height: parent.height;
+            target-kind: TextCommandTarget.text-block;
+            rtl: root.rtl;
+            has-text: rich.text != "";
+            has-selection: rich.selected-text != "";
+            invoked(command) => {
+                if command == TextCommand.copy { rich.copy(); }
+                else if command == TextCommand.select-all { rich.select-all(); }
+            }
+            restore-focus => { rich.focus(); }
+        }
+    }
+}

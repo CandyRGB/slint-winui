@@ -1,0 +1,86 @@
+import { Button, CheckBox, ComboBox, Palette } from "std-widgets.slint";
+import { PipsPager, PipsPagerButtonVisibility, PipsPagerWrapMode } from "../../ui/components/scrolling/pips_pager.slint";
+
+export component PipsPagerExample inherits Window {
+    title: "WinUI PipsPager";
+    preferred-width: 640px;
+    preferred-height: 392px;
+
+    private property <[PipsPagerButtonVisibility]> visibility-modes: [
+        PipsPagerButtonVisibility.visible,
+        PipsPagerButtonVisibility.visible-on-pointer-over,
+        PipsPagerButtonVisibility.collapsed,
+    ];
+    private property <[int]> page-counts: [12, 3, -1, 0];
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        HorizontalLayout {
+            height: 32px;
+            spacing: 12px;
+            alignment: start;
+            vertical := CheckBox { text: "Vertical"; }
+            cyclic := CheckBox { text: "Wrap"; }
+            rtl := CheckBox { text: "RTL"; }
+            disabled := CheckBox { text: "Disabled"; }
+            dense := CheckBox { text: "Three pips"; }
+        }
+        HorizontalLayout {
+            height: 32px;
+            spacing: 12px;
+            alignment: start;
+            pages := ComboBox { width: 118px; model: ["12 pages", "3 pages", "Unlimited", "No pages"]; current-index: 0; }
+            previous-mode := ComboBox { width: 150px; model: ["Previous visible", "Previous on hover", "Previous collapsed"]; current-index: 0; }
+            next-mode := ComboBox { width: 150px; model: ["Next visible", "Next on hover", "Next collapsed"]; current-index: 0; }
+        }
+        Rectangle {
+            min-height: 128px;
+            vertical-stretch: 1;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Palette.foreground.with-alpha(0.08);
+            HorizontalLayout {
+                padding: 16px;
+                spacing: 12px;
+                alignment: center;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: pager.number-of-pages == 0 ? "No pages" : @tr("Selected page: {}", pager.selected-page-index + 1);
+                        color: Palette.foreground;
+                        font-size: 24px;
+                        horizontal-alignment: center;
+                    }
+                    if !vertical.checked : Rectangle { height: 20px; }
+                }
+                if vertical.checked : Rectangle { width: 100px; }
+            }
+            pager := PipsPager {
+                x: vertical.checked ? parent.width - 60px : round((parent.width - self.width) / 4px) * 2px;
+                y: vertical.checked ? round((parent.height - self.height) / 4px) * 2px : parent.height - self.height - 20px;
+                width: self.preferred-width;
+                height: self.preferred-height;
+                number-of-pages: root.page-counts[max(0, pages.current-index)];
+                max-visible-pips: dense.checked ? 3 : 5;
+                orientation: vertical.checked ? Orientation.vertical : Orientation.horizontal;
+                wrap-mode: cyclic.checked ? PipsPagerWrapMode.wrap : PipsPagerWrapMode.none;
+                rtl: rtl.checked;
+                enabled: !disabled.checked;
+                previous-button-visibility: root.visibility-modes[max(0, previous-mode.current-index)];
+                next-button-visibility: root.visibility-modes[max(0, next-mode.current-index)];
+            }
+        }
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            Button { text: "First page"; clicked => { pager.selected-page-index = 0; } }
+            Button { text: "Jump to page 12"; clicked => { pager.selected-page-index = 11; } }
+            Button { text: "Focus current page"; clicked => { pager.focus-selected(); } }
+        }
+    }
+}

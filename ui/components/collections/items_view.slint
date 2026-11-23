@@ -1,0 +1,266 @@
+import { ScrollView } from "../scrolling/scroll_view.slint";
+import { ItemsRepeater, ItemsRepeaterLayout, ItemsRepeaterSize, ItemsRepeaterPlacement,
+    ItemsRepeaterJustification, ItemsRepeaterStretch } from "items_repeater.slint";
+
+export struct ItemsViewItem { key: string, enabled: bool }
+export enum ItemsViewSelectionMode { none, single, multiple, extended }
+export enum ItemsViewSelectionAction { reconcile, select, deselect, all, invert, interact, navigate, list-interact, list-navigate }
+export enum ItemsViewNavigation { first, last, left, right, up, down, page-up, page-down, viewport-point }
+
+export global ItemsViewBehavior {
+    pure callback keys([ItemsViewItem]) -> [string];
+    pure callback index-of([string], string) -> int;
+    pure callback same-selection([string], [string]) -> bool;
+    pure callback selection([ItemsViewItem], [string], ItemsViewSelectionMode, ItemsViewSelectionAction, int, int, bool, bool) -> [string];
+    pure callback target([ItemsViewItem], [ItemsRepeaterPlacement], int, ItemsViewNavigation, length, length) -> int;
+}
+
+export component ItemsView inherits Rectangle {
+    in property <[ItemsViewItem]> items;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <string> label;
+    in property <bool> is-item-invoked-enabled;
+    in property <bool> list-view-interaction;
+    in property <bool> single-selection-follows-focus: true;
+    in property <ItemsViewSelectionMode> selection-mode: ItemsViewSelectionMode.single;
+    in property <ItemsRepeaterLayout> layout: ItemsRepeaterLayout.stack;
+    in property <Orientation> orientation: root.layout == ItemsRepeaterLayout.stack
+        ? Orientation.vertical : Orientation.horizontal;
+    in property <length> item-width: 96px;
+    in property <length> item-height: 64px;
+    in property <[ItemsRepeaterSize]> item-sizes;
+    in property <[ItemsRepeaterPlacement]> custom-placements;
+    in property <int> max-items-per-line: -1;
+    in property <ItemsRepeaterJustification> justification: ItemsRepeaterJustification.start;
+    in property <ItemsRepeaterStretch> stretch: ItemsRepeaterStretch.none;
+    in property <length> column-spacing;
+    in property <length> row-spacing;
+
+    out property <[ItemsRepeaterPlacement]> realized: repeater.realized;
+    out property <[ItemsRepeaterPlacement]> placements: repeater.placements;
+    out property <[string]> selected-keys;
+    out property <int> current-item-index: ItemsViewBehavior.index-of(root.keys, root.current-key);
+    out property <int> selected-item-index: root.selected-keys.length > 0
+        ? ItemsViewBehavior.index-of(root.keys, root.selected-keys[0]) : -1;
+    out property <bool> keyboard-focused: focus-scope.has-focus && root.show-focus;
+    out property <length> viewport-width: scroll.viewport-width;
+    out property <length> viewport-height: scroll.viewport-height;
+    out property <length> horizontal-offset: scroll.horizontal-offset;
+    out property <length> vertical-offset: scroll.vertical-offset;
+    callback selection-changed();
+    callback item-invoked(int);
+
+    private property <[string]> keys: ItemsViewBehavior.keys(root.items);
+    private property <string> current-key;
+    private property <string> anchor-key;
+    private property <bool> show-focus;
+
+    accessible-role: list;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    forward-focus: focus-scope;
+
+    changed keys => { root.apply-selection(ItemsViewSelectionAction.reconcile, -1, false, false); }
+    changed selection-mode => {
+        if root.selection-mode == ItemsViewSelectionMode.none {
+            root.deselect-all();
+        } else {
+            root.apply-selection(ItemsViewSelectionAction.reconcile, -1, false, false);
+        }
+    }
+
+    public pure function is-selected(index: int) -> bool {
+        return root.valid-index(index) && ItemsViewBehavior.index-of(root.selected-keys, root.keys[index]) >= 0;
+    }
+
+    public function select(index: int) {
+        root.apply-selection(ItemsViewSelectionAction.select, index, false, false);
+    }
+
+    public function deselect(index: int) {
+        root.apply-selection(ItemsViewSelectionAction.deselect, index, false, false);
+    }
+
+    public function select-all() {
+        root.apply-selection(ItemsViewSelectionAction.all, -1, false, false);
+    }
+
+    public function deselect-all() { root.commit-selection([]); }
+
+    public function invert-selection() {
+        root.apply-selection(ItemsViewSelectionAction.invert, -1, false, false);
+    }
+
+    public function bring-item-into-view(index: int) { repeater.scroll-into-view(index); }
+
+    public function bring-item-to-top(index: int) {
+        let rect = repeater.placement(index);
+        if rect.index >= 0 {
+            scroll.scroll-to(root.horizontal-offset, rect.y);
+        }
+    }
+
+    public pure function item-at-viewport-ratio(horizontal: float, vertical: float) -> int {
+        return ItemsViewBehavior.target(root.items, repeater.placements, -1, ItemsViewNavigation.viewport-point,
+            root.horizontal-offset + clamp(horizontal, 0, 1) * root.viewport-width,
+            root.vertical-offset + clamp(vertical, 0, 1) * root.viewport-height);
+    }
+
+    public function tap-item(index: int, modifiers: KeyboardModifiers) {
+        if !root.enabled || !root.valid-index(index) || !root.items[index].enabled { return; }
+        root.current-key = root.keys[index];
+        focus-scope.focus();
+        root.show-focus = false;
+        root.bring-item-into-view(index);
+        root.interact(index, modifiers, false);
+    }
+
+    public function double-tap-item(index: int) {
+        if !root.list-view-interaction && root.selection-mode != ItemsViewSelectionMode.none { root.invoke-item(index); }
+    }
+
+    public function invoke-item(index: int) {
+        if root.enabled && root.is-item-invoked-enabled && root.valid-index(index) && root.items[index].enabled {
+            root.item-invoked(index);
+        }
+    }
+
+    public function automation-item(index: int) {
+        if root.enabled && root.valid-index(index) && root.items[index].enabled {
+            if root.selection-mode == ItemsViewSelectionMode.none {
+                root.invoke-item(index);
+            } else {
+                root.select(index);
+            }
+        }
+    }
+
+    pure function valid-index(index: int) -> bool { return index >= 0 && index < root.items.length; }
+
+    function interact(index: int, modifiers: KeyboardModifiers, enter: bool) {
+        let key = root.keys[index];
+        if root.list-view-interaction {
+            root.invoke-item(index);
+            let current = ItemsViewBehavior.index-of(root.keys, key);
+            if current >= 0 {
+                root.apply-selection(ItemsViewSelectionAction.list-interact, current, modifiers.control, modifiers.shift);
+            }
+        } else {
+            root.apply-selection(ItemsViewSelectionAction.interact, index, modifiers.control, modifiers.shift);
+            if enter || root.selection-mode == ItemsViewSelectionMode.none {
+                root.invoke-item(ItemsViewBehavior.index-of(root.keys, key));
+            }
+        }
+    }
+
+    function apply-selection(action: ItemsViewSelectionAction, index: int, ctrl: bool, shift: bool) {
+        let anchor = ItemsViewBehavior.index-of(root.keys, root.anchor-key);
+        let next = ItemsViewBehavior.selection(root.items, root.selected-keys, root.selection-mode, action,
+            index, anchor, ctrl, shift);
+        let navigating = action == ItemsViewSelectionAction.navigate || action == ItemsViewSelectionAction.list-navigate;
+        if root.valid-index(index) && (!shift || anchor < 0)
+            && (!navigating || (!ctrl && root.selection-mode != ItemsViewSelectionMode.multiple)) {
+            root.anchor-key = root.keys[index];
+        }
+        root.commit-selection(next);
+    }
+
+    function commit-selection(next: [string]) {
+        if ItemsViewBehavior.same-selection(next, root.selected-keys) { return; }
+        root.selected-keys = next;
+        root.selection-changed();
+    }
+
+    function navigate(direction: ItemsViewNavigation, modifiers: KeyboardModifiers) {
+        let target = ItemsViewBehavior.target(root.items, repeater.placements, root.current-item-index, direction,
+            root.viewport-width, root.viewport-height);
+        if target >= 0 && target != root.current-item-index {
+            root.current-key = root.keys[target];
+            root.bring-item-into-view(target);
+            if root.selection-mode != ItemsViewSelectionMode.single || root.single-selection-follows-focus {
+                root.apply-selection(root.list-view-interaction ? ItemsViewSelectionAction.list-navigate
+                    : ItemsViewSelectionAction.navigate, target, modifiers.control, modifiers.shift);
+            }
+        }
+    }
+
+    focus-scope := FocusScope {
+        enabled: root.enabled;
+        focus-on-tab-navigation: root.items.length > 0;
+        changed has-focus => {
+            if self.has-focus && root.current-item-index < 0 {
+                let target = root.selected-item-index >= 0 && root.items[root.selected-item-index].enabled
+                    ? root.selected-item-index : ItemsViewBehavior.target(root.items, repeater.placements, -1,
+                        ItemsViewNavigation.first, 0px, 0px);
+                if target >= 0 {
+                    root.current-key = root.keys[target];
+                    root.bring-item-into-view(target);
+                }
+            }
+            if self.has-focus { root.show-focus = true; }
+        }
+        key-pressed(event) => {
+            let key = event.text;
+            if !root.enabled { return reject; }
+            if event.modifiers.control && (key == "a" || key == "A")
+                && (root.selection-mode == ItemsViewSelectionMode.multiple || root.selection-mode == ItemsViewSelectionMode.extended) {
+                root.select-all();
+                return accept;
+            }
+            if key == Key.Return || key == Key.Space {
+                root.show-focus = true;
+                let index = root.current-item-index;
+                if root.valid-index(index) && root.items[index].enabled {
+                    root.interact(index, event.modifiers, key == Key.Return);
+                }
+                return accept;
+            }
+            if key == Key.Home || key == Key.End || key == Key.LeftArrow || key == Key.RightArrow
+                || key == Key.UpArrow || key == Key.DownArrow || key == Key.PageUp || key == Key.PageDown {
+                root.show-focus = true;
+                root.navigate(key == Key.Home ? ItemsViewNavigation.first
+                    : key == Key.End ? ItemsViewNavigation.last
+                    : key == Key.LeftArrow ? ItemsViewNavigation.left
+                    : key == Key.RightArrow ? ItemsViewNavigation.right
+                    : key == Key.UpArrow ? ItemsViewNavigation.up
+                    : key == Key.DownArrow ? ItemsViewNavigation.down
+                    : key == Key.PageUp ? ItemsViewNavigation.page-up : ItemsViewNavigation.page-down, event.modifiers);
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    scroll := ScrollView {
+        extent-width: repeater.extent-width;
+        extent-height: repeater.extent-height;
+        enabled: root.enabled;
+        rtl: root.rtl;
+        accessible-role: none;
+        repeater := ItemsRepeater {
+            width: max(root.viewport-width, repeater.extent-width);
+            height: max(root.viewport-height, repeater.extent-height);
+            item-count: root.items.length;
+            item-keys: root.keys;
+            viewport-width: root.viewport-width;
+            viewport-height: root.viewport-height;
+            scroll-x: root.horizontal-offset;
+            scroll-y: root.vertical-offset;
+            layout: root.layout;
+            orientation: root.orientation;
+            rtl: root.rtl;
+            item-width: root.item-width;
+            item-height: root.item-height;
+            item-sizes: root.item-sizes;
+            custom-placements: root.custom-placements;
+            justification: root.justification;
+            stretch: root.stretch;
+            max-items-per-line: root.max-items-per-line;
+            column-spacing: root.column-spacing;
+            row-spacing: root.row-spacing;
+            scroll-requested(x, y) => { scroll.scroll-to(x, y); }
+            @children
+        }
+    }
+}

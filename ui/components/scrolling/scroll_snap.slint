@@ -1,0 +1,30 @@
+export enum ScrollSnapAlignment { near, center, far }
+export enum ScrollSnapIntent { nearest, directional, impulse }
+
+export struct ScrollSnapPoint { value: length, alignment: ScrollSnapAlignment }
+export struct ScrollSnapRange {
+    offset: length,
+    interval: length,
+    start: length,
+    end: length,
+    alignment: ScrollSnapAlignment,
+}
+export struct ScrollSnapPoints {
+    points: [ScrollSnapPoint],
+    ranges: [ScrollSnapRange],
+    aligned-points: [length],
+    alignment: ScrollSnapAlignment,
+}
+export struct ScrollSnapRequest {
+    target: length,
+    origin: length,
+    limit: length,
+    viewport: length,
+    zoom: float,
+    intent: ScrollSnapIntent,
+}
+
+export global ScrollSnapBehavior {
+    in property <bool> ready;
+    pure callback resolve(ScrollSnapPoints, ScrollSnapRequest) -> length;
+}

@@ -1,0 +1,105 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../basic-input/button.slint";
+
+export component PickerPopup inherits PopupWindow {
+    in property <Size> viewport;
+    in property <length> anchor-x;
+    in property <length> anchor-y;
+    in property <length> anchor-width;
+    in property <length> field-middle;
+    in property <int> column-count;
+    in property <color> accent: Palette.accent-background;
+    out property <int> focused-column: keys.has-focus ? root.active-column : -1;
+
+    callback step(int, int);
+    callback accepted();
+    callback dismissed();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <int> active-column;
+    private property <length> wheel-height: max(0px, root.height - 42px);
+    private property <length> aligned-y: root.field-middle - root.wheel-height / 2;
+
+    width: root.viewport.width > 0px ? min(root.anchor-width, root.viewport.width) : root.anchor-width;
+    height: root.viewport.height > 0px ? min(398px, root.viewport.height) : 398px;
+    x: root.viewport.width <= 0px ? 0px : clamp(0px, -root.anchor-x, root.viewport.width - root.anchor-x - root.width);
+    y: root.viewport.height <= 0px ? root.aligned-y : clamp(root.aligned-y,
+        -root.anchor-y, root.viewport.height - root.anchor-y - root.height);
+    close-policy: close-on-click-outside;
+    forward-focus: keys;
+
+    public function activate-column(index: int) {
+        root.active-column = index;
+        keys.focus();
+    }
+
+    keys := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-click: false;
+        key-pressed(event) => {
+            let key = event.text;
+            if key == Key.Escape { root.dismissed(); return accept; }
+            if key == Key.Return || (event.modifiers.alt && (key == Key.UpArrow || key == Key.DownArrow)) {
+                root.accepted(); return accept;
+            }
+            if key == Key.LeftArrow || key == Key.RightArrow {
+                root.active-column = clamp(root.active-column + (key == Key.LeftArrow ? -1 : 1), 0, max(0, root.column-count - 1));
+                return accept;
+            }
+            if key == Key.Tab {
+                let next = root.active-column + (event.modifiers.shift ? -1 : 1);
+                if next >= 0 && next < root.column-count { root.active-column = next; return accept; }
+                return reject;
+            }
+            if key == Key.UpArrow || key == Key.DownArrow || key == Key.PageUp || key == Key.PageDown {
+                root.step(root.active-column, key == Key.UpArrow ? -1 : key == Key.DownArrow ? 1 : key == Key.PageUp ? -5 : 5);
+                return accept;
+            }
+            return reject;
+        }
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: root.dark ? #ffffff20 : #00000022;
+            background: root.dark ? #292929 : #f9f9f9;
+            clip: true;
+
+            Rectangle {
+                x: 4px;
+                y: round((root.wheel-height - 40px) / 4px) * 2px;
+                width: max(0px, parent.width - 8px);
+                height: 40px;
+                border-radius: 4px;
+                background: root.accent;
+            }
+            HorizontalLayout {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: root.wheel-height;
+                @children
+            }
+            HorizontalLayout {
+                y: root.wheel-height;
+                width: parent.width;
+                height: 42px;
+                padding: 4px;
+                spacing: 4px;
+                Button {
+                    accessible-name: @tr("Accept");
+                    clicked => { root.accepted(); }
+                    Image { source: @image-url("../../icons/checkmark_16_regular.svg"); width: 16px; height: 16px; colorize: parent.foreground; accessible-role: none; }
+                }
+                Button {
+                    accessible-name: @tr("Dismiss");
+                    clicked => { root.dismissed(); }
+                    Image { source: @image-url("../../icons/dismiss_16_regular.svg"); width: 16px; height: 16px; colorize: parent.foreground; accessible-role: none; }
+                }
+            }
+        }
+    }
+}

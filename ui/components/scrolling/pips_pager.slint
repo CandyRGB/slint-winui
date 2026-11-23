@@ -1,0 +1,315 @@
+import { Palette } from "std-widgets.slint";
+import { ToolTipSurface } from "../status-info/tool_tip.slint";
+
+export enum PipsPagerButtonVisibility { visible, visible-on-pointer-over, collapsed }
+export enum PipsPagerWrapMode { none, wrap }
+
+component PagerArrow inherits Rectangle {
+    in property <bool> available;
+    in property <bool> shown;
+    in property <bool> vertical;
+    in property <bool> toward-end;
+    in property <string> label;
+    out property <bool> has-focus: keys.has-focus;
+    callback invoked();
+    callback navigated(bool) -> bool;
+
+    width: 24px;
+    height: 24px;
+    visible: root.shown;
+    forward-focus: keys;
+
+    if root.shown : Rectangle {
+        accessible-role: button;
+        accessible-label: root.label;
+        accessible-enabled: root.available;
+        accessible-action-default => { if (root.available) { root.invoked(); } }
+    }
+    if root.shown : Image {
+        width: 8px;
+        height: 8px;
+        source: root.vertical
+            ? (root.toward-end ? @image-url("../../icons/chevron_down_16_regular.svg") : @image-url("../../icons/chevron_up_16_regular.svg"))
+            : (root.toward-end ? @image-url("../../icons/chevron_right_16_regular.svg") : @image-url("../../icons/chevron_left_16_regular.svg"));
+        colorize: Palette.foreground.with-alpha(!root.available ? 0.32 : hit.has-hover || hit.pressed ? 0.6 : 0.45);
+        accessible-role: none;
+    }
+    hit := TouchArea {
+        enabled: root.shown && root.available;
+        clicked => {
+            keys.focus();
+            root.invoked();
+        }
+    }
+    keys := FocusScope {
+        enabled: root.available;
+        focus-on-click: false;
+        focus-on-tab-navigation: root.shown;
+        private property <string> activation;
+        changed has-focus => {
+            if (!self.has-focus) { self.activation = ""; }
+        }
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == Key.Space) {
+                if (!event.repeat) { self.activation = event.text; }
+                return accept;
+            }
+            if (event.text == Key.LeftArrow || event.text == Key.UpArrow || event.text == Key.RightArrow || event.text == Key.DownArrow) {
+                let forward = event.text == Key.RightArrow || event.text == Key.DownArrow;
+                return root.navigated(forward) ? accept : reject;
+            }
+            return reject;
+        }
+        key-released(event) => {
+            if (self.activation != "" && self.activation == event.text) {
+                self.activation = "";
+                root.invoked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    if root.shown && keys.has-focus : Rectangle {
+        border-width: 2px;
+        border-radius: 4px;
+        border-color: Palette.foreground;
+    }
+    if root.shown : Tooltip {
+        ToolTipSurface { text: root.label; }
+    }
+}
+
+export component PipsPager inherits Rectangle {
+    in property <bool> enabled: true;
+    in property <int> number-of-pages: -1;
+    in-out property <int> selected-page-index;
+    in property <int> max-visible-pips: 5;
+    in property <Orientation> orientation: Orientation.horizontal;
+    in property <PipsPagerButtonVisibility> previous-button-visibility: PipsPagerButtonVisibility.collapsed;
+    in property <PipsPagerButtonVisibility> next-button-visibility: PipsPagerButtonVisibility.collapsed;
+    in property <PipsPagerWrapMode> wrap-mode: PipsPagerWrapMode.none;
+    in property <bool> rtl;
+    in property <string> accessible-name: @tr("Pagination");
+    in property <brush> pip-foreground: Palette.foreground.with-alpha(0.45);
+    in property <brush> active-pip-foreground: Palette.foreground.with-alpha(0.6);
+    in property <brush> disabled-pip-foreground: Palette.foreground.with-alpha(0.32);
+
+    callback selected-index-changed(int);
+
+    private property <bool> vertical: root.orientation == Orientation.vertical;
+    private property <bool> mirrored: root.rtl && !root.vertical;
+    private property <bool> unbounded: root.number-of-pages < 0;
+    private property <int> last-page: root.unbounded ? 2147483646 : max(0, root.number-of-pages - 1);
+    private property <int> current: clamp(root.selected-page-index, 0, root.last-page);
+    private property <int> unbounded-count: 0;
+    private property <int> total: root.unbounded
+        ? max(root.max-visible-pips, max(root.unbounded-count, min(root.current, 2147483645) + 2))
+        : root.number-of-pages;
+    private property <int> desired-visible: min(max(root.max-visible-pips, 0), root.total);
+    private property <int> visible-count: min(root.desired-visible,
+        max(0, floor((root.axis - root.previous-space - root.next-space) / 12px)));
+    private property <length> axis: root.vertical ? root.height : root.width;
+    private property <length> natural-length: root.previous-space + 12px * root.desired-visible + root.next-space;
+    private property <length> previous-space: root.previous-button-visibility == PipsPagerButtonVisibility.collapsed ? 0px : 24px;
+    private property <length> next-space: root.next-button-visibility == PipsPagerButtonVisibility.collapsed ? 0px : 24px;
+    private property <bool> can-wrap: root.wrap-mode == PipsPagerWrapMode.wrap && root.number-of-pages > 1;
+    private property <bool> previous-available: root.visible-count > 0 && (root.current > 0 || root.can-wrap);
+    private property <bool> next-available: root.visible-count > 0 && (root.current < root.last-page || root.can-wrap);
+    private property <bool> reveal-arrows: hover-surface.has-hover || page-keys.has-focus || previous.has-focus || next.has-focus;
+    private property <bool> previous-shown: root.previous-available && root.previous-space > 0px
+        && (root.previous-button-visibility == PipsPagerButtonVisibility.visible || root.reveal-arrows);
+    private property <bool> next-shown: root.next-available && root.next-space > 0px
+        && (root.next-button-visibility == PipsPagerButtonVisibility.visible || root.reveal-arrows);
+    private property <int> keyboard-index: -1;
+    private property <int> cursor: page-keys.has-focus && root.keyboard-index >= 0 ? clamp(root.keyboard-index, 0, root.last-page) : root.current;
+    private property <int> center-start: clamp(root.current - floor(root.visible-count / 2), 0, max(0, root.total - root.visible-count));
+    private property <int> first: clamp(root.center-start,
+        max(0, root.cursor - max(0, root.visible-count - 1)),
+        min(root.cursor, max(0, root.total - root.visible-count)));
+    private property <length> group-length: root.previous-space + 12px * root.visible-count + root.next-space;
+    private property <length> start: max(0px, round((root.axis - root.group-length) / 4px) * 2px);
+    private property <int> announced-index: 0;
+
+    preferred-width: root.vertical ? 24px : root.natural-length;
+    preferred-height: root.vertical ? root.natural-length : 24px;
+    min-width: root.vertical ? 24px : root.previous-space + root.next-space + (root.desired-visible > 0 ? 12px : 0px);
+    min-height: root.vertical ? root.previous-space + root.next-space + (root.desired-visible > 0 ? 12px : 0px) : 24px;
+    max-width: self.preferred-width;
+    max-height: self.preferred-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    accessible-role: list;
+    accessible-label: root.accessible-name;
+    accessible-orientation: root.orientation;
+    accessible-item-count: root.unbounded ? -1 : root.number-of-pages;
+    accessible-delegate-focus: page-keys.has-focus ? root.cursor : -1;
+    accessible-enabled: root.enabled;
+
+    init => { root.sync-selection(); }
+    changed selected-page-index => { root.sync-selection(); }
+    changed number-of-pages => {
+        root.unbounded-count = 0;
+        root.sync-selection();
+    }
+
+    function sync-selection() {
+        let index = root.current;
+        if (root.unbounded) {
+            root.unbounded-count = max(root.unbounded-count, min(index, 2147483645) + 2);
+        }
+        if (root.selected-page-index != index) { root.selected-page-index = index; }
+        if (root.announced-index != index) {
+            root.announced-index = index;
+            root.keyboard-index = -1;
+            root.selected-index-changed(index);
+        }
+    }
+
+    function step(forward: bool) {
+        let target = forward
+            ? (root.current < root.last-page ? root.current + 1 : 0)
+            : (root.current > 0 ? root.current - 1 : root.last-page);
+        if (root.enabled && (forward ? root.next-available : root.previous-available)) {
+            root.selected-page-index = target;
+            if (forward ? target == root.last-page && !root.can-wrap : target == 0 && !root.can-wrap) {
+                if (previous.has-focus || next.has-focus) { root.focus-page(target); }
+            }
+        }
+    }
+
+    function focus-page(index: int) {
+        if (!root.enabled || root.visible-count == 0) { return; }
+        root.keyboard-index = index;
+        page-keys.focus();
+    }
+
+    public function focus-selected() { root.focus-page(root.current); }
+
+    function select-page(index: int) {
+        if (root.enabled) {
+            root.selected-page-index = index;
+            root.focus-page(index);
+        }
+    }
+
+    function navigate(forward: bool) -> bool {
+        let logical-forward = root.mirrored ? !forward : forward;
+        let candidate = root.cursor + (logical-forward ? 1 : -1);
+        if (candidate >= 0 && candidate <= root.last-page) {
+            root.focus-page(candidate);
+            if (root.unbounded) { root.unbounded-count = max(root.unbounded-count, min(candidate, 2147483645) + 2); }
+            return true;
+        }
+        if (logical-forward && root.next-shown) { next.focus(); return true; }
+        if (!logical-forward && root.previous-shown) { previous.focus(); return true; }
+        return false;
+    }
+
+    pure function axis-position(offset: length, extent: length) -> length {
+        return root.start + (root.mirrored ? root.group-length - offset - extent : offset);
+    }
+
+    hover-surface := TouchArea {
+        previous := PagerArrow {
+            x: root.vertical ? round((root.width - self.width) / 4px) * 2px : root.axis-position(0px, 24px);
+            y: root.vertical ? root.axis-position(0px, 24px) : round((root.height - self.height) / 4px) * 2px;
+            vertical: root.vertical;
+            toward-end: root.mirrored;
+            available: root.enabled && root.previous-available && root.previous-space > 0px;
+            shown: root.previous-shown || (self.has-focus && self.available);
+            label: @tr("Previous page");
+            invoked => { root.step(false); }
+            navigated(forward) => {
+                if (forward != root.mirrored) {
+                    root.focus-page(root.first);
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        for slot-index in root.visible-count : pip := Rectangle {
+            property <int> page: root.first + slot-index;
+            property <length> offset: root.previous-space + 12px * slot-index;
+            x: root.vertical ? round((root.width - self.width) / 4px) * 2px : root.axis-position(self.offset, self.width);
+            y: root.vertical ? root.axis-position(self.offset, self.height) : round((root.height - self.height) / 4px) * 2px;
+            width: root.vertical ? 24px : 12px;
+            height: root.vertical ? 12px : 24px;
+            accessible-role: list-item;
+            accessible-enabled: root.enabled;
+            accessible-label: @tr("Page {}", self.page + 1);
+            accessible-item-index: self.page;
+            accessible-item-selectable: true;
+            accessible-item-selected: self.page == root.current;
+            accessible-action-default => { root.select-page(self.page); }
+
+            Rectangle {
+                width: self.height;
+                height: hit.pressed ? 4px : pip.page == root.current || hit.has-hover ? 6px : 4px;
+                border-radius: self.height / 2;
+                background: !root.enabled ? root.disabled-pip-foreground
+                    : hit.pressed || hit.has-hover ? root.active-pip-foreground : root.pip-foreground;
+            }
+            hit := TouchArea {
+                enabled: root.enabled;
+                clicked => { root.select-page(pip.page); }
+            }
+            if root.enabled && page-keys.has-focus && pip.page == root.cursor : Rectangle {
+                border-width: 2px;
+                border-radius: 4px;
+                border-color: Palette.foreground;
+                accessible-role: none;
+            }
+        }
+
+        page-keys := FocusScope {
+            width: 0px;
+            enabled: root.enabled && root.visible-count > 0;
+            focus-on-click: false;
+            private property <string> activation;
+            changed has-focus => {
+                if (!self.has-focus) {
+                    root.keyboard-index = -1;
+                    self.activation = "";
+                }
+            }
+            key-pressed(event) => {
+                if (event.text == Key.LeftArrow || event.text == Key.UpArrow || event.text == Key.RightArrow || event.text == Key.DownArrow) {
+                    return root.navigate(event.text == Key.RightArrow || event.text == Key.DownArrow) ? accept : reject;
+                }
+                if (event.text == Key.Return || event.text == Key.Space) {
+                    if (!event.repeat) { self.activation = event.text; }
+                    return accept;
+                }
+                return reject;
+            }
+            key-released(event) => {
+                if (self.activation != "" && self.activation == event.text) {
+                    self.activation = "";
+                    root.select-page(root.cursor);
+                    return accept;
+                }
+                return reject;
+            }
+        }
+
+        next := PagerArrow {
+            private property <length> offset: root.previous-space + 12px * root.visible-count;
+            x: root.vertical ? round((root.width - self.width) / 4px) * 2px : root.axis-position(self.offset, 24px);
+            y: root.vertical ? root.axis-position(self.offset, 24px) : round((root.height - self.height) / 4px) * 2px;
+            vertical: root.vertical;
+            toward-end: !root.mirrored;
+            available: root.enabled && root.next-available && root.next-space > 0px;
+            shown: root.next-shown || (self.has-focus && self.available);
+            label: @tr("Next page");
+            invoked => { root.step(true); }
+            navigated(forward) => {
+                if (forward == root.mirrored) {
+                    root.focus-page(root.first + root.visible-count - 1);
+                    return true;
+                }
+                return false;
+            }
+        }
+    }
+}

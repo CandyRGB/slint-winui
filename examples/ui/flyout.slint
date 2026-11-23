@@ -1,0 +1,88 @@
+import { Button, CheckBox, ComboBox } from "std-widgets.slint";
+import { Flyout, FlyoutCloseReason, FlyoutPlacement } from "../../ui/components/dialogs-flyouts/flyout.slint";
+
+export component FlyoutExample inherits Window {
+    title: "Flyout";
+    width: 520px;
+    height: 360px;
+
+    private property <[FlyoutPlacement]> placements: [
+        FlyoutPlacement.top,
+        FlyoutPlacement.bottom,
+        FlyoutPlacement.left,
+        FlyoutPlacement.right,
+        FlyoutPlacement.full,
+        FlyoutPlacement.top-edge-aligned-left,
+        FlyoutPlacement.top-edge-aligned-right,
+        FlyoutPlacement.bottom-edge-aligned-left,
+        FlyoutPlacement.bottom-edge-aligned-right,
+    ];
+    private property <string> close-result;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 8px;
+        alignment: start;
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            placement := ComboBox {
+                model: ["Top", "Bottom", "Left", "Right", "Full",
+                    "Top left", "Top right", "Bottom left", "Bottom right"];
+            }
+
+            edge := CheckBox { text: "Near edge"; }
+            overflow := CheckBox { text: "Scrollable"; }
+            cancel := CheckBox { text: "Cancel outside click"; }
+        }
+
+        Text { text: root.close-result; }
+    }
+
+    opener := Button {
+        x: edge.checked ? 16px : round((parent.width - self.width) / 4px) * 2px;
+        y: edge.checked ? 64px : round((parent.height - self.height) / 4px) * 2px;
+        width: 128px;
+        height: 32px;
+        text: "Open flyout";
+        clicked => { flyout.show(); }
+    }
+
+    flyout := Flyout {
+        width: parent.width;
+        height: parent.height;
+        anchor: { x: opener.x, y: opener.y, width: opener.width, height: opener.height };
+        placement: root.placements[max(0, placement.current-index)];
+        opening => { root.close-result = ""; }
+        closing(reason) => {
+            if (reason == FlyoutCloseReason.light-dismiss && cancel.checked) {
+                root.close-result = "Outside click canceled";
+                return true;
+            }
+            return false;
+        }
+        closed(reason) => {
+            root.close-result = reason == FlyoutCloseReason.light-dismiss ? "Closed by outside click"
+                : reason == FlyoutCloseReason.escape ? "Closed by Escape" : "Closed by button";
+        }
+
+        VerticalLayout {
+            spacing: 12px;
+
+            Text { text: "Flyout content"; }
+
+            Button {
+                text: "Close";
+                clicked => { flyout.hide(); }
+            }
+
+            if overflow.checked : VerticalLayout {
+                min-width: 520px;
+                spacing: 8px;
+
+                for index in 24 : Text { text: "Detail " + (index + 1); }
+            }
+        }
+    }
+}

@@ -1,0 +1,39 @@
+export enum ToggleButtonState { unchecked, checked, indeterminate }
+
+export component CheckStateBehavior {
+    in-out property <ToggleButtonState> state: ToggleButtonState.unchecked;
+    in property <bool> is-three-state;
+    callback checked();
+    callback unchecked();
+    callback indeterminate();
+
+    private property <ToggleButtonState> reported-state;
+
+    init => { root.reported-state = root.state; }
+    changed state => { root.notify-state(); }
+
+    function notify-state() {
+        let state = root.state;
+        if state != root.reported-state {
+            root.reported-state = state;
+            if state == ToggleButtonState.checked {
+                root.checked();
+            } else if state == ToggleButtonState.indeterminate {
+                root.indeterminate();
+            } else {
+                root.unchecked();
+            }
+        }
+    }
+
+    public function set-state(state: ToggleButtonState) {
+        root.state = state;
+        root.notify-state();
+    }
+
+    public function advance() {
+        root.set-state(root.state == ToggleButtonState.unchecked ? ToggleButtonState.checked
+            : root.state == ToggleButtonState.checked && root.is-three-state
+                ? ToggleButtonState.indeterminate : ToggleButtonState.unchecked);
+    }
+}

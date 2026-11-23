@@ -1,0 +1,155 @@
+import { CheckBox, ComboBox, Slider } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { Viewbox, ViewboxAlignment, ViewboxLayout, ViewboxScale, ViewboxStretch, ViewboxStretchDirection } from "../../ui/components/layout/viewbox.slint";
+
+export { ViewboxAlignment, ViewboxLayout, ViewboxScale, ViewboxStretch, ViewboxStretchDirection }
+
+component GalleryChild inherits Rectangle {
+    in property <float> scale-x: 1;
+    in property <float> scale-y: 1;
+    in property <image> slices;
+    private property <[color]> swatches: [#0000ff, #008000, #ff0000, #ffff00];
+
+    width: 192px * root.scale-x;
+    height: 152px * root.scale-y;
+    background: #808080;
+    accessible-role: groupbox;
+    accessible-label: "Gallery content";
+
+    Rectangle {
+        x: 16px * root.scale-x; y: 16px * root.scale-y;
+        width: 160px * root.scale-x; height: 120px * root.scale-y;
+        background: #a9a9a9;
+
+        for shade[index] in root.swatches: Rectangle {
+            x: 40px * index * root.scale-x; y: 0px;
+            width: 40px * root.scale-x; height: 10px * root.scale-y;
+            background: shade;
+        }
+        Image {
+            x: 36px * root.scale-x; y: 10px * root.scale-y;
+            width: 90px * root.scale-x; height: 90px * root.scale-y;
+            source: root.slices;
+            image-fit: fill;
+            accessible-label: "Slices";
+        }
+        Text {
+            x: 0px; y: 100px * root.scale-y;
+            width: parent.width; height: 20px * root.scale-y;
+            text: "This is text.";
+            font-size: 14px * root.scale-y;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            color: #000000e4;
+        }
+    }
+}
+
+export component ViewboxExample inherits Window {
+    title: "WinUI Viewbox";
+    min-width: 732px;
+    min-height: 508px;
+    preferred-width: 732px;
+    preferred-height: 508px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI";
+    default-font-size: 14px;
+
+    in property <bool> transform-content: true;
+    in property <image> slices;
+    private property <int> size-step: round(size-slider.value / 2) * 2;
+    private property <int> activations;
+    private property <bool> wide;
+    private property <bool> enlarged: true;
+    private property <bool> use-layout-size;
+    private property <bool> clip-child;
+
+    VerticalLayout {
+        x: 24px; y: 20px; width: 328px; height: 124px;
+        spacing: 8px;
+        Text { text: "Viewbox"; font-size: 20px; font-weight: 600; }
+        Text { text: "Width / height · " + root.size-step; }
+        size-slider := Slider {
+            accessible-label: "Width and height";
+            minimum: 20;
+            maximum: 300;
+            value: 200;
+            height: 24px;
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            stretch-choice := ComboBox {
+                accessible-label: "Stretch";
+                model: ["None", "Fill", "Uniform", "UniformToFill"];
+                current-index: 2;
+            }
+            direction-choice := ComboBox {
+                accessible-label: "Stretch direction";
+                model: ["Both", "UpOnly", "DownOnly"];
+            }
+        }
+    }
+    CheckBox { x: 24px; y: 152px; height: 24px; text: "Shorter viewport"; checked <=> root.wide; }
+
+    Rectangle {
+        x: 24px; y: 184px;
+        width: root.size-step * 1px;
+        height: root.wide ? round(root.size-step * 0.3) * 2px : root.size-step * 1px;
+        background: #fdfdfd;
+        accessible-role: groupbox;
+        accessible-label: "Gallery viewport";
+        gallery := Viewbox {
+            width: parent.width; height: parent.height;
+            content-width: 192px;
+            content-height: 152px;
+            vertical-content-alignment: ViewboxAlignment.start;
+            horizontal-content-alignment: center-on-clip.checked ? ViewboxAlignment.center : ViewboxAlignment.stretch;
+            transform-content: root.transform-content;
+            stretch: stretch-choice.current-index == 0 ? ViewboxStretch.none
+                : stretch-choice.current-index == 1 ? ViewboxStretch.fill
+                : stretch-choice.current-index == 3 ? ViewboxStretch.uniform-to-fill : ViewboxStretch.uniform;
+            stretch-direction: direction-choice.current-index == 1 ? ViewboxStretchDirection.up-only
+                : direction-choice.current-index == 2 ? ViewboxStretchDirection.down-only : ViewboxStretchDirection.both;
+            GalleryChild {
+                scale-x: root.transform-content ? 1 : gallery.scale-x;
+                scale-y: root.transform-content ? 1 : gallery.scale-y;
+                slices: root.slices;
+            }
+        }
+    }
+
+    Text { x: 364px; y: 20px; text: "Interactive child"; font-size: 20px; font-weight: 600; }
+    CheckBox { x: 364px; y: 56px; height: 28px; text: "Enlarge child"; checked <=> root.enlarged; }
+    CheckBox { x: 504px; y: 56px; height: 28px; text: "Clip child"; checked <=> root.clip-child; }
+    center-on-clip := CheckBox { x: 364px; y: 88px; height: 28px; text: "Center the Gallery viewport"; }
+    CheckBox { x: 364px; y: 120px; height: 28px; text: "Use preferred size"; checked <=> root.use-layout-size; }
+    Text { x: 364px; y: 156px; text: "Activations " + root.activations; }
+    interactive := Viewbox {
+        x: 364px; y: 184px;
+        width: root.clip-child ? 144px : root.use-layout-size ? self.preferred-width : root.enlarged ? 288px : 144px;
+        height: root.clip-child ? 40px : root.use-layout-size ? self.preferred-height : root.enlarged ? 144px : 72px;
+        stretch: root.clip-child ? ViewboxStretch.none : ViewboxStretch.uniform;
+        measure-width: root.use-layout-size ? 216px : -1px;
+        transform-content: root.transform-content;
+        accessible-role: groupbox;
+        accessible-label: "Interactive viewport";
+        Rectangle {
+            preferred-width: 144px;
+            preferred-height: 72px;
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            background: #fdfdfd;
+            border-width: 1px * (root.transform-content ? 1 : interactive.scale-y);
+            border-color: #0000000f;
+            border-radius: 4px * (root.transform-content ? 1 : interactive.scale-y);
+            Button {
+                x: 72px * (root.transform-content ? 1 : interactive.scale-x);
+                y: 34px * (root.transform-content ? 1 : interactive.scale-y);
+                width: 64px * (root.transform-content ? 1 : interactive.scale-x);
+                height: 32px * (root.transform-content ? 1 : interactive.scale-y);
+                text: "Activate";
+                clicked => { root.activations += 1; }
+            }
+        }
+    }
+}

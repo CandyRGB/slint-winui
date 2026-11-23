@@ -1,0 +1,133 @@
+import { Palette } from "std-widgets.slint";
+
+export struct PersonPictureContact {
+    display-name: string,
+    first-name: string,
+    last-name: string,
+    large-picture: image,
+    small-picture: image,
+    source-picture: image,
+    thumbnail: image,
+}
+
+export global PersonPictureBehavior {
+    in-out property <bool> ready;
+    pure callback initials-from-name(string) -> string;
+    pure callback initials-from-parts(string, string) -> string;
+    pure callback round-photo(image) -> image;
+}
+
+export component PersonPicture inherits Rectangle {
+    in property <string> display-name;
+    in property <string> initials;
+    in property <image> profile-picture;
+    in property <PersonPictureContact> contact;
+    in property <bool> prefer-small-image;
+    in property <bool> is-group;
+    in property <int> badge-number;
+    in property <string> badge-glyph;
+    in property <image> badge-image-source;
+    in property <string> badge-text;
+    in property <brush> avatar-background: Palette.color-scheme == ColorScheme.dark
+        ? #ffffff12 : #00000018;
+    in property <brush> foreground: Palette.foreground;
+    in property <brush> avatar-stroke: Palette.foreground.with-alpha(0.06);
+    in property <length> size: 96px;
+    in property <bool> rtl;
+    out property <string> actual-initials: root.initials != "" ? root.initials
+        : root.name-initials != "" ? root.name-initials : root.contact-initials;
+
+    private property <string> name-initials: PersonPictureBehavior.ready
+        ? PersonPictureBehavior.initials-from-name(root.display-name) : "";
+    private property <string> contact-initials: !PersonPictureBehavior.ready ? ""
+        : root.contact.first-name != "" && root.contact.last-name != ""
+        ? PersonPictureBehavior.initials-from-parts(root.contact.first-name, root.contact.last-name)
+        : PersonPictureBehavior.initials-from-name(root.contact.display-name);
+    private property <image> contact-photo: root.prefer-small-image && root.contact.small-picture.width > 0 ? root.contact.small-picture
+        : root.contact.large-picture.width > 0 ? root.contact.large-picture
+        : root.contact.small-picture.width > 0 ? root.contact.small-picture
+        : root.contact.source-picture.width > 0 ? root.contact.source-picture : root.contact.thumbnail;
+    private property <image> photo: root.profile-picture.width > 0 ? root.profile-picture : root.contact-photo;
+    private property <image> rounded-photo: !root.is-group && PersonPictureBehavior.ready && root.photo.width > 0
+        ? PersonPictureBehavior.round-photo(root.photo) : root.empty-image;
+    private property <image> rounded-badge: PersonPictureBehavior.ready && root.badge-image-source.width > 0
+        ? PersonPictureBehavior.round-photo(root.badge-image-source) : root.empty-image;
+    private property <image> empty-image;
+    private property <bool> show-photo: root.rounded-photo.width > 0;
+    private property <bool> show-initials: !root.is-group && root.actual-initials != "" && !root.show-photo;
+    private property <bool> show-badge-image: root.rounded-badge.width > 0;
+    private property <bool> show-badge-glyph: root.badge-number == 0 && root.badge-glyph != "";
+    private property <length> diameter: max(0px, floor(min(root.width, root.height) / 2px) * 2px);
+    private property <length> badge-diameter: round(root.diameter / 4px) * 2px;
+    private property <string> person-label: root.is-group ? @tr("Group")
+        : root.contact.display-name != "" ? root.contact.display-name
+        : root.display-name != "" ? root.display-name : root.initials != "" ? root.initials : @tr("Person");
+
+    preferred-width: root.size;
+    preferred-height: root.size;
+    max-width: root.size;
+    max-height: root.size;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    accessible-role: text;
+    accessible-label: root.badge-number > 0
+        ? (root.badge-text != "" ? @tr("{}, {} {}", root.person-label, root.badge-number, root.badge-text)
+            : @tr("{}, {} item" | "{}, {} items" % root.badge-number, root.person-label, root.badge-number))
+        : root.badge-glyph != "" || root.badge-image-source.width > 0
+        ? @tr("{}, {}", root.person-label, root.badge-text != "" ? root.badge-text : @tr("icon"))
+        : root.person-label;
+
+    avatar := Rectangle {
+        width: root.diameter;
+        height: self.width;
+        x: round((root.width - self.width) / 4px) * 2px;
+        y: round((root.height - self.height) / 4px) * 2px;
+        border-radius: self.width / 2;
+        border-width: 1px;
+        border-color: root.avatar-stroke;
+        background: root.avatar-background;
+
+        if root.show-photo : Image { width: parent.width; height: parent.height; source: root.rounded-photo; accessible-role: none; }
+        if !root.show-photo && (root.show-initials || Platform.os == OperatingSystemType.windows) : Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.show-initials ? root.actual-initials : root.is-group ? "\u{E716}" : "\u{E77B}";
+            font-family: root.show-initials ? "Segoe UI" : "Segoe Fluent Icons";
+            font-size: max(2px, round(root.diameter * 0.42 / 2px) * 2px);
+            font-weight: root.show-initials ? 600 : 400;
+            color: root.foreground;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+        if !root.show-photo && !root.show-initials && Platform.os != OperatingSystemType.windows : Image {
+            width: round(root.diameter * 0.42 / 2px) * 2px;
+            height: self.width;
+            source: root.is-group ? @image-url("../../icons/people_16_regular.svg") : @image-url("../../icons/person_16_regular.svg");
+            colorize: root.foreground;
+            accessible-role: none;
+        }
+    }
+    if root.show-badge-image || root.badge-number > 0 || root.show-badge-glyph : Rectangle {
+        x: root.rtl ? avatar.x - 4px : avatar.x + avatar.width - self.width + 4px;
+        y: avatar.y - 4px;
+        width: root.badge-diameter;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: Palette.accent-background;
+        if root.show-badge-image : Image { width: parent.width; height: parent.height; source: root.rounded-badge; accessible-role: none; }
+        if !root.show-badge-image : Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.badge-number > 99 ? "99+" : root.badge-number > 0 ? "\{root.badge-number}" : root.badge-glyph;
+            color: Palette.accent-foreground;
+            font-family: root.badge-number > 0 ? "Segoe UI" : "Segoe Fluent Icons";
+            font-size: max(2px, round(root.badge-diameter * 0.6 / 2px) * 2px);
+            font-weight: root.badge-number > 0 ? 600 : 400;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+}

@@ -1,0 +1,37 @@
+import { ItemsRepeaterGeometry, ItemsRepeaterSize } from "../collections/items_repeater.slint";
+
+export struct WrapLayoutChild {
+    size: ItemsRepeaterSize,
+    row-span: int,
+    column-span: int,
+    collapsed: bool,
+}
+
+export struct WrapPanelPadding { left: length, top: length, right: length, bottom: length }
+export enum WrapPanelItemsStretch { none, last }
+export enum WrapGridAlignment { start, center, end, stretch }
+
+export struct WrapPanelOptions {
+    available: ItemsRepeaterSize,
+    orientation: Orientation,
+    padding: WrapPanelPadding,
+    item-spacing: length,
+    line-spacing: length,
+    stretch: WrapPanelItemsStretch,
+    rtl: bool,
+}
+
+export struct VariableSizedWrapGridOptions {
+    available: ItemsRepeaterSize,
+    orientation: Orientation,
+    cell: ItemsRepeaterSize,
+    maximum-rows-or-columns: int,
+    horizontal-alignment: WrapGridAlignment,
+    vertical-alignment: WrapGridAlignment,
+    rtl: bool,
+}
+
+export global WrapLayoutBehavior {
+    pure callback wrap-panel([WrapLayoutChild], WrapPanelOptions) -> ItemsRepeaterGeometry;
+    pure callback variable-grid([WrapLayoutChild], VariableSizedWrapGridOptions) -> ItemsRepeaterGeometry;
+}

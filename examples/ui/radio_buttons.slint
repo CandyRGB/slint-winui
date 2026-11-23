@@ -1,0 +1,83 @@
+import { CheckBox, Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { RadioButton } from "../../ui/components/basic-input/radio_button.slint";
+import { RadioButtons, RadioButtonsBehavior, RadioButtonsItem } from "../../ui/components/basic-input/radio_buttons.slint";
+
+export { RadioButtonsBehavior, RadioButtonsItem }
+
+export component RadioButtonsExample inherits Window {
+    title: "RadioButton and RadioButtons";
+    min-width: 824px;
+    preferred-height: 588px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+
+    in property <color> accent: Palette.accent-background;
+    in-out property <[RadioButtonsItem]> items: [
+        { id: "green", text: "Green", disabled: false },
+        { id: "yellow", text: "Yellow", disabled: false },
+        { id: "blue", text: "Blue", disabled: true },
+        { id: "white", text: "White", disabled: false },
+        { id: "black", text: "Black", disabled: false },
+        { id: "orange", text: "Orange", disabled: false },
+        { id: "gray", text: "A long label with several words", disabled: false },
+    ];
+    out property <string> selected-id: group.selected-item.id;
+    out property <int> selected-index: group.selected-index;
+    out property <int> focused-index: group.focused-index;
+    out property <int> column-count: group.column-count;
+    out property <bool> standalone-checked: standalone.checked;
+
+    private property <string> last-change;
+    callback move-selection-to-end();
+    callback remove-selected();
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 14px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            narrow := CheckBox { text: "Narrow"; }
+            rtl := CheckBox { text: "RTL"; }
+            disabled := CheckBox { text: "Disable group"; }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 20px;
+            standalone := RadioButton { text: "Single RadioButton"; accent: root.accent; }
+            RadioButton { text: "Disabled"; enabled: false; }
+            RadioButton { text: "Disabled checked"; enabled: false; checked: true; }
+        }
+
+        before := Button { text: "Before group"; }
+        group := RadioButtons {
+            header: "Background";
+            items: root.items;
+            max-columns: 3;
+            max-width: narrow.checked ? 156px : 776px;
+            rtl: rtl.checked;
+            enabled: !disabled.checked;
+            accent: root.accent;
+            selection-changed(old, new) => { root.last-change = "\{old} → \{new}"; }
+        }
+        after := Button { text: "After group"; }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Select White"; clicked => { group.select-id("white"); } }
+            Button { text: "Move selected to end"; clicked => { root.move-selection-to-end(); } }
+            Button { text: "Remove selected"; clicked => { root.remove-selected(); } }
+        }
+        Rectangle {
+            height: 20px;
+            Text {
+                x: 0px;
+                text: "Selection: \{group.selected-index} · \{group.selected-item.text}    Columns: \{group.column-count}    Focus: \{group.focused-index}    Change: \{root.last-change}";
+                color: Palette.foreground;
+            }
+        }
+    }
+}

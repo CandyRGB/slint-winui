@@ -1,0 +1,200 @@
+import { CommandBarAccelerators, CommandBarBehavior } from "../menus-toolbars/command_bar.slint";
+import { CommandBarFlyout, CommandBarFlyoutShowMode, CommandBarItem, CommandBarItemKind,
+    FlyoutCloseReason, FlyoutPlacement, FlyoutRect } from "../menus-toolbars/command_bar_flyout.slint";
+import { MenuFlyout, MenuFlyoutItem } from "../menus-toolbars/menu_flyout.slint";
+
+export { FlyoutCloseReason, FlyoutRect }
+export enum TextCommand { cut, copy, paste, undo, redo, select-all, bold, italic, underline }
+export enum TextCommandTarget { text-box, text-block, password-box, rich-edit-box }
+
+// The editor owns selection, the clipboard capability, and edit history.
+// Mount at the window origin alongside the editor and pass window-relative anchors.
+export component TextCommandBarFlyout inherits Rectangle {
+    in property <TextCommandTarget> target-kind;
+    in property <bool> read-only;
+    in property <bool> has-text;
+    in property <bool> has-selection;
+    in property <bool> can-paste;
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+    in property <bool> can-bold: true;
+    in property <bool> can-italic: true;
+    in property <bool> can-underline: true;
+    in property <bool> bold;
+    in property <bool> italic;
+    in property <bool> underlined;
+    in property <bool> rtl;
+    in property <bool> mouse-selection;
+    in property <[MenuFlyoutItem]> proofing-items;
+    out property <bool> is-open: flyout.is-open;
+    out property <bool> is-expanded: flyout.is-expanded;
+    out property <FlyoutRect> panel-bounds: flyout.panel-bounds;
+    out property <bool> proofing-open: proofing.is-open;
+    out property <FlyoutRect> proofing-bounds: proofing.panel-bounds;
+
+    callback invoked(TextCommand);
+    callback restore-focus();
+    callback closed(FlyoutCloseReason);
+    callback proofing-invoked(MenuFlyoutItem);
+
+    private property <bool> editable: !root.read-only && root.target-kind != TextCommandTarget.text-block;
+    private property <bool> password: root.target-kind == TextCommandTarget.password-box;
+    private property <bool> rich-edit: root.editable && root.target-kind == TextCommandTarget.rich-edit-box;
+    private property <bool> selection-entry;
+    private property <bool> clipboard-in-primary: root.selection-entry && !root.mouse-selection;
+    private property <bool> has-primary: CommandBarBehavior.has-actions(root.primary);
+    private property <bool> has-secondary: CommandBarBehavior.has-actions(root.secondary);
+    private property <bool> show-cut: root.editable && root.has-selection && !root.password;
+    private property <bool> show-copy: root.has-selection && !root.password;
+    private property <bool> show-paste: root.editable && root.can-paste;
+    private property <bool> show-undo: root.editable && !root.password && root.can-undo;
+    private property <bool> show-redo: root.editable && !root.password && root.can-redo;
+    private property <bool> show-proofing: root.editable && !root.selection-entry && root.proofing-items.length > 0;
+    private property <[CommandBarItem]> primary: [
+        root.cut-command(!root.clipboard-in-primary),
+        root.copy-command(!root.clipboard-in-primary),
+        root.paste-command(!root.clipboard-in-primary),
+        { id: "bold", label: @tr("Bold"), kind: CommandBarItemKind.toggle, checked: root.bold,
+            icon: @image-url("../../icons/text_bold_16_regular.svg"), shortcut: @keys(Control + B),
+            hidden: !root.rich-edit || !root.can-bold },
+        { id: "italic", label: @tr("Italic"), kind: CommandBarItemKind.toggle, checked: root.italic,
+            icon: @image-url("../../icons/text_italic_16_regular.svg"), shortcut: @keys(Control + I),
+            hidden: !root.rich-edit || !root.can-italic },
+        { id: "underline", label: @tr("Underline"), kind: CommandBarItemKind.toggle, checked: root.underlined,
+            icon: @image-url("../../icons/text_underline_16_regular.svg"), shortcut: @keys(Control + U),
+            hidden: !root.rich-edit || !root.can-underline },
+    ];
+    private property <[CommandBarItem]> secondary: [
+        { id: "proofing", label: @tr("Spelling"), has-flyout: true, hidden: !root.show-proofing },
+        root.cut-command(root.clipboard-in-primary),
+        root.copy-command(root.clipboard-in-primary),
+        root.paste-command(root.clipboard-in-primary),
+        { id: "undo", label: @tr("Undo"), shortcut: @keys(Control + Z),
+            icon: @image-url("../../icons/arrow_undo_16_regular.svg"), hidden: !root.show-undo },
+        { id: "redo", label: @tr("Redo"), shortcut: @keys(Control + Y),
+            icon: @image-url("../../icons/arrow_redo_16_regular.svg"), hidden: !root.show-redo },
+        { id: "select-all", label: @tr("Select All"), shortcut: @keys(Control + A), hidden: !root.has-text },
+    ];
+
+    visible: root.is-open;
+    z: root.is-open ? 2 : 0;
+
+    changed has-primary => { root.dismiss-if-empty(); }
+    changed has-secondary => { root.dismiss-if-empty(); }
+
+    function dismiss-if-empty() {
+        if (root.is-open && !root.has-primary && (!root.is-expanded || !root.has-secondary)) {
+            flyout.hide();
+        }
+    }
+
+    pure function cut-command(hidden: bool) -> CommandBarItem {
+        return { id: "cut", label: @tr("Cut"), shortcut: @keys(Control + X),
+            icon: @image-url("../../icons/cut_16_regular.svg"), hidden: hidden || !root.show-cut };
+    }
+
+    pure function copy-command(hidden: bool) -> CommandBarItem {
+        return { id: "copy", label: @tr("Copy"), shortcut: @keys(Control + C),
+            icon: @image-url("../../icons/copy_16_regular.svg"), hidden: hidden || !root.show-copy };
+    }
+
+    pure function paste-command(hidden: bool) -> CommandBarItem {
+        return { id: "paste", label: @tr("Paste"), shortcut: @keys(Control + V),
+            icon: @image-url("../../icons/clipboard_paste_16_regular.svg"), hidden: hidden || !root.show-paste };
+    }
+
+    public function show-context(target: FlyoutRect) {
+        if (flyout.is-open) { return; }
+        root.selection-entry = false;
+        flyout.show-for(target, CommandBarFlyoutShowMode.standard);
+        if (root.show-proofing) { flyout.open-secondary-flyout("proofing"); }
+    }
+
+    public function show-context-at(position: Point) {
+        if (flyout.is-open) { return; }
+        root.selection-entry = false;
+        flyout.show-at(position, CommandBarFlyoutShowMode.standard);
+        if (root.show-proofing) { flyout.open-secondary-flyout("proofing"); }
+    }
+
+    public function show-selection(target: FlyoutRect) {
+        if (flyout.is-open) { return; }
+        root.selection-entry = true;
+        if (root.has-primary) {
+            flyout.show-for(target, root.mouse-selection
+                ? CommandBarFlyoutShowMode.transient-with-dismiss-on-pointer-move-away
+                : CommandBarFlyoutShowMode.transient);
+        }
+    }
+
+    public function hide() { flyout.hide(); }
+    public function dismiss(reason: FlyoutCloseReason) { flyout.dismiss(reason); }
+    public function track-pointer(position: Point) { flyout.track-pointer(position.x, position.y); }
+
+    function invoke(item: CommandBarItem) {
+        if (item.id == "cut") {
+            root.invoked(TextCommand.cut);
+        } else if (item.id == "copy") {
+            root.invoked(TextCommand.copy);
+        } else if (item.id == "paste") {
+            root.invoked(TextCommand.paste);
+        } else if (item.id == "undo") {
+            root.invoked(TextCommand.undo);
+        } else if (item.id == "redo") {
+            root.invoked(TextCommand.redo);
+        } else if (item.id == "select-all") {
+            root.invoked(TextCommand.select-all);
+        } else if (item.id == "bold") {
+            root.invoked(TextCommand.bold);
+        } else if (item.id == "italic") {
+            root.invoked(TextCommand.italic);
+        } else if (item.id == "underline") {
+            root.invoked(TextCommand.underline);
+        }
+    }
+
+    CommandBarAccelerators {
+        primary: root.primary;
+        secondary: root.secondary;
+        accelerators-enabled: flyout.is-open;
+        invoked(index, secondary) => {
+            root.invoke(secondary ? self.secondary[index] : self.primary[index]);
+            if (secondary) { flyout.hide(); }
+        }
+
+        flyout := CommandBarFlyout {
+            width: root.width;
+            height: root.height;
+            rtl: root.rtl;
+            placement: root.selection-entry
+                ? (root.rtl ? FlyoutPlacement.top-edge-aligned-right : FlyoutPlacement.top-edge-aligned-left)
+                : (root.rtl ? FlyoutPlacement.bottom-edge-aligned-right : FlyoutPlacement.bottom-edge-aligned-left);
+            primary-commands: root.primary;
+            secondary-commands: root.secondary;
+            show-primary-labels: false;
+            invoked(item) => { root.invoke(item); }
+            restore-focus => { root.restore-focus(); }
+            closed(reason) => {
+                proofing.hide();
+                root.closed(reason);
+            }
+            open-flyout(item, anchor, overflow) => {
+                if (item.id == "proofing") {
+                    proofing.show-for(anchor);
+                }
+            }
+        }
+
+        proofing := MenuFlyout {
+            width: root.width;
+            height: root.height;
+            z: 3;
+            placement: FlyoutPlacement.right-edge-aligned-top;
+            items: root.proofing-items;
+            invoked(item) => {
+                root.proofing-invoked(item);
+                flyout.hide();
+            }
+        }
+    }
+}

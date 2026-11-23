@@ -1,0 +1,208 @@
+import { CommandBar, CommandBarBehavior, CommandBarItem, CommandBarItemKind, CommandBarOverflowButtonVisibility, AppBarLabelPosition } from "command_bar.slint";
+import { FlyoutCloseReason } from "../dialogs-flyouts/flyout.slint";
+import { FlyoutLayout, FlyoutPlacement, FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+
+export { CommandBarItem, CommandBarItemKind, FlyoutCloseReason, FlyoutPlacement, FlyoutRect }
+export enum CommandBarFlyoutShowMode { standard, transient, transient-with-dismiss-on-pointer-move-away }
+
+// Wrap the anchor and the flyout to handle Escape while a transient flyout leaves focus at its anchor.
+export component CommandBarFlyoutKeyScope inherits FocusScope {
+    in property <bool> dismiss-enabled;
+    callback dismiss();
+    enabled: false;
+
+    KeyBinding {
+        keys: @keys(Escape);
+        enabled: root.dismiss-enabled;
+        activated => { root.dismiss(); }
+    }
+    @children
+}
+
+// Mount this at the window origin with the window's size. Anchors are window-relative.
+export component CommandBarFlyout inherits Rectangle {
+    in property <[CommandBarItem]> primary-commands;
+    in property <[CommandBarItem]> secondary-commands;
+    in property <FlyoutRect> anchor;
+    in property <FlyoutPlacement> placement: FlyoutPlacement.top;
+    in property <CommandBarFlyoutShowMode> show-mode: CommandBarFlyoutShowMode.standard;
+    in property <bool> always-expanded;
+    in property <bool> dim-background;
+    in property <bool> rtl;
+    in property <bool> show-primary-labels: true;
+    out property <bool> is-open;
+    out property <bool> is-expanded: bar.is-open && bar.overflow-count > 0;
+    out property <FlyoutRect> panel-bounds: root.is-open ? root.geometry : {};
+
+    callback opening();
+    callback opened();
+    callback closing(FlyoutCloseReason) -> bool;
+    callback closed(FlyoutCloseReason);
+    callback restore-focus();
+    callback invoked(CommandBarItem);
+    callback open-flyout(CommandBarItem, FlyoutRect, bool);
+
+    private property <bool> changing;
+    private property <bool> keyboard-session;
+    private property <bool> dismiss-on-pointer-move;
+    private property <bool> positioned-at-point;
+    private property <bool> override-attachment;
+    private property <bool> has-primary: CommandBarBehavior.has-actions(root.primary-commands);
+    private property <bool> has-secondary: CommandBarBehavior.has-actions(root.secondary-commands);
+    private property <FlyoutRect> override-anchor;
+    private property <FlyoutRect> target: root.override-attachment ? root.override-anchor : root.anchor;
+    private property <FlyoutRect> bounds: { x: 0px, y: 0px, width: root.width, height: root.height };
+    private property <Size> ideal-size: root.is-expanded ? bar.expanded-size : bar.collapsed-size;
+    private property <Size> desired-size: { width: min(440px, root.ideal-size.width), height: root.ideal-size.height };
+    private property <FlyoutRect> geometry: root.positioned-at-point
+        ? FlyoutLayout.place-at-point({ x: root.target.x, y: root.target.y }, root.bounds, root.desired-size)
+        : FlyoutLayout.place(root.placement, root.target, root.bounds, root.desired-size,
+            { width: min(48px, root.desired-size.width), height: bar.collapsed-size.height });
+    private property <bool> overflow-above: root.is-expanded && root.geometry.y < root.target.y
+        && root.geometry.y + root.geometry.height <= root.target.y;
+
+    visible: root.is-open;
+    z: root.is-open ? 2 : 0;
+
+    changed always-expanded => {
+        if (root.is-open && root.always-expanded) { root.set-expanded(true); }
+    }
+
+    public function show() {
+        root.show-positioned(false, false, {}, root.show-mode);
+    }
+
+    public function show-for(target: FlyoutRect, mode: CommandBarFlyoutShowMode) {
+        root.show-positioned(true, false, target, mode);
+    }
+
+    public function show-at(position: Point, mode: CommandBarFlyoutShowMode) {
+        root.show-positioned(true, true, { x: position.x, y: position.y }, mode);
+    }
+
+    public function hide() {
+        root.dismiss(FlyoutCloseReason.programmatic);
+    }
+
+    public function open-secondary-flyout(id: string) {
+        if (root.is-open) { bar.open-secondary-flyout(id); }
+    }
+
+    public function set-expanded(expanded: bool) {
+        if (root.is-open) {
+            if (expanded && bar.overflow-count > 0) {
+                bar.show();
+            } else if (bar.collapsed-size.height > 0px) {
+                bar.hide();
+            }
+        }
+    }
+
+    function show-positioned(use-target: bool, at-point: bool, target: FlyoutRect, mode: CommandBarFlyoutShowMode) {
+        if (root.is-open || root.changing) { return; }
+        root.changing = true;
+        root.override-attachment = use-target;
+        root.positioned-at-point = at-point;
+        root.override-anchor = target;
+        root.opening();
+        if (bar.collapsed-size.height == 0px && bar.overflow-count == 0) {
+            root.changing = false;
+            return;
+        }
+        root.keyboard-session = mode == CommandBarFlyoutShowMode.standard || root.always-expanded
+            || bar.collapsed-size.height == 0px;
+        root.dismiss-on-pointer-move = !root.keyboard-session
+            && mode == CommandBarFlyoutShowMode.transient-with-dismiss-on-pointer-move-away;
+        root.is-open = true;
+        if (root.keyboard-session) {
+            root.set-expanded(true);
+            bar.focus-first-command();
+        }
+        root.changing = false;
+        root.opened();
+    }
+
+    public function dismiss(reason: FlyoutCloseReason) {
+        if (!root.is-open || root.changing) { return; }
+        root.changing = true;
+        if (root.closing(reason)) {
+            root.changing = false;
+            return;
+        }
+        let restore = root.keyboard-session || bar.has-command-focus;
+        root.is-open = false;
+        bar.hide();
+        root.keyboard-session = false;
+        root.dismiss-on-pointer-move = false;
+        if (restore) { root.restore-focus(); }
+        root.changing = false;
+        root.closed(reason);
+    }
+
+    // The native transient pointer mode uses the distance to the presenter's bounds.
+    public function track-pointer(x: length, y: length) {
+        if (!root.dismiss-on-pointer-move) { return; }
+        let horizontal = max(0px, max(root.geometry.x - x, x - root.geometry.x - root.geometry.width)) / 1px;
+        let vertical = max(0px, max(root.geometry.y - y, y - root.geometry.y - root.geometry.height)) / 1px;
+        if (horizontal * horizontal + vertical * vertical > 6400) {
+            root.dismiss(FlyoutCloseReason.light-dismiss);
+        }
+    }
+
+    Rectangle {
+        background: root.is-open && root.dim-background ? #0000004d : transparent;
+        TouchArea {
+            enabled: root.is-open;
+            clicked => { root.dismiss(FlyoutCloseReason.light-dismiss); }
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.move) {
+                    root.track-pointer(self.mouse-x, self.mouse-y);
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        x: root.geometry.x;
+        y: root.geometry.y;
+        width: root.geometry.width;
+        height: root.geometry.height;
+        border-radius: 8px;
+        drop-shadow-color: #00000024;
+        drop-shadow-offset-y: 8px;
+        drop-shadow-blur: 16px;
+    }
+
+    bar := CommandBar {
+        x: root.geometry.x;
+        y: root.overflow-above ? root.geometry.y + root.geometry.height - self.collapsed-size.height
+            : root.geometry.y;
+        width: root.geometry.width;
+        floating: true;
+        layout-available-width: 0px;
+        rtl: root.rtl;
+        take-focus-on-click: root.keyboard-session;
+        keep-expanded-on-invoke: root.always-expanded;
+        dynamic-overflow-enabled: false;
+        default-label-position: root.show-primary-labels ? AppBarLabelPosition.bottom : AppBarLabelPosition.collapsed;
+        popup-viewport: { width: root.width, height: root.height };
+        secondary-viewport-height: max(0px, root.geometry.height - self.collapsed-size.height);
+        bottom-app-bar: root.overflow-above;
+        overflow-button-visibility: !root.always-expanded && root.has-primary && root.has-secondary
+            ? CommandBarOverflowButtonVisibility.visible : CommandBarOverflowButtonVisibility.collapsed;
+        primary-commands: root.primary-commands;
+        secondary-commands: root.secondary-commands;
+        enabled: root.is-open;
+        accessible-name: @tr("Command bar flyout");
+        opened => {
+            root.keyboard-session = true;
+            root.dismiss-on-pointer-move = false;
+        }
+        dismiss-requested => { root.dismiss(FlyoutCloseReason.escape); }
+        command-invoked(item, secondary) => {
+            root.invoked(item);
+            if (secondary) { root.hide(); }
+        }
+        open-flyout(item, anchor, overflow) => { root.open-flyout(item, anchor, overflow); }
+    }
+}

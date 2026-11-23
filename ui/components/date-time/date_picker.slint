@@ -1,0 +1,237 @@
+import { Palette } from "std-widgets.slint";
+import { PickerPopup } from "picker_popup.slint";
+import { ButtonInput, ButtonFocusVisual } from "../basic-input/button_input.slint";
+import { ButtonSurface } from "../basic-input/button_surface.slint";
+import { PickerWheel, PickerWheelRow } from "picker_wheel.slint";
+
+export { PickerWheelRow }
+export enum DatePickerPart { month, day, year }
+export struct DatePickerColumn { part: DatePickerPart, text: string, rows: [PickerWheelRow] }
+export struct DatePickerOptions {
+    date: int, today: int, min-year: int, max-year: int,
+    language: string, calendar-identifier: string,
+    day-format: string, month-format: string, year-format: string,
+    day-visible: bool, month-visible: bool, year-visible: bool, rtl: bool,
+}
+export struct DatePickerState { date: int, initial: int, rtl: bool, columns: [DatePickerColumn] }
+
+export global DatePickerBehavior {
+    in property <bool> ready;
+    pure callback state(DatePickerOptions) -> DatePickerState;
+    pure callback step(DatePickerOptions, DatePickerPart, int) -> int;
+    pure callback value-text(DatePickerOptions) -> string;
+}
+
+export component DatePicker inherits Rectangle {
+    in property <string> header;
+    in property <string> description;
+    in property <string> accessible-name: root.header != "" ? root.header : @tr("Date picker");
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <string> language;
+    in property <string> calendar-identifier: "GregorianCalendar";
+    in property <string> day-format: "{day.integer}";
+    in property <string> month-format: "{month.full}";
+    in property <string> year-format: "{year.full}";
+    in property <bool> day-visible: true;
+    in property <bool> month-visible: true;
+    in property <bool> year-visible: true;
+    in property <int> today;
+    in property <int> min-year;
+    in property <int> max-year;
+    in property <Size> popup-viewport;
+    in property <color> accent: Palette.accent-background;
+    in-out property <int> selected-date;
+    out property <bool> is-open: popup.is-open;
+    callback selected-date-changed(int, int);
+    callback opened();
+    callback closed();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <int> draft;
+    private property <int> reported;
+    private property <bool> was-open;
+    private property <bool> open-state: popup.is-open;
+    private property <DatePickerOptions> options: {
+        date: root.selected-date, today: root.today, min-year: root.min-year, max-year: root.max-year,
+        language: root.language, calendar-identifier: root.calendar-identifier,
+        day-format: root.day-format, month-format: root.month-format, year-format: root.year-format,
+        day-visible: root.day-visible, month-visible: root.month-visible, year-visible: root.year-visible, rtl: root.rtl,
+    };
+    private property <DatePickerOptions> draft-options: {
+        date: root.draft, today: root.today, min-year: root.min-year, max-year: root.max-year,
+        language: root.language, calendar-identifier: root.calendar-identifier,
+        day-format: root.day-format, month-format: root.month-format, year-format: root.year-format,
+        day-visible: root.day-visible, month-visible: root.month-visible, year-visible: root.year-visible, rtl: root.rtl,
+    };
+    private property <DatePickerState> committed: DatePickerBehavior.ready ? DatePickerBehavior.state(root.options)
+        : { date: root.selected-date, initial: 0, rtl: root.rtl, columns: [] };
+    private property <DatePickerState> pending: DatePickerBehavior.ready ? DatePickerBehavior.state(root.draft-options)
+        : { date: root.draft, initial: 0, rtl: root.rtl, columns: [] };
+    private property <int> effective-date: root.committed.date;
+    private property <length> border-gap: 1px;
+
+    min-width: 132px;
+    preferred-width: 296px;
+    preferred-height: round(content.preferred-height / 2px) * 2px;
+    min-height: content.min-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: input;
+
+    init => { root.sync-date(); }
+    changed effective-date => { root.sync-date(); }
+    changed selected-date => { root.sync-date(); }
+    changed enabled => { if !root.enabled { root.close-picker(); } }
+    changed visible => { if !root.visible { root.close-picker(); } }
+    changed open-state => {
+        if root.open-state { root.was-open = true; root.opened(); }
+        else if root.was-open { root.was-open = false; root.closed(); }
+    }
+
+    function sync-date() {
+        if !DatePickerBehavior.ready { return; }
+        if root.selected-date != root.effective-date { root.selected-date = root.effective-date; }
+        if root.reported != root.effective-date {
+            let old = root.reported;
+            root.reported = root.effective-date;
+            if root.is-open { root.draft = root.committed.initial; }
+            root.selected-date-changed(old, root.reported);
+        }
+    }
+
+    public function open-picker() {
+        if root.enabled && root.visible && !root.is-open && root.committed.columns.length > 0 {
+            root.draft = root.committed.initial;
+            input.focus();
+            popup.show();
+        }
+    }
+
+    public function close-picker() {
+        if popup.is-open { popup.close(); if root.enabled { input.focus(); } }
+    }
+
+    function accept-date() {
+        root.close-picker();
+        root.selected-date = root.pending.date;
+    }
+
+    pure function title(part: DatePickerPart) -> string {
+        return part == DatePickerPart.month ? @tr("Month") : part == DatePickerPart.day ? @tr("Day") : @tr("Year");
+    }
+
+    pure function placeholder(part: DatePickerPart) -> string {
+        return part == DatePickerPart.month ? @tr("month") : part == DatePickerPart.day ? @tr("day") : @tr("year");
+    }
+
+    function step(column: int, amount: int) {
+        if column >= 0 && column < root.pending.columns.length && amount != 0 {
+            root.draft = DatePickerBehavior.step(root.draft-options, root.pending.columns[column].part, amount);
+        }
+    }
+
+    content := VerticalLayout {
+        spacing: 4px;
+        alignment: start;
+        if root.header != "": Text {
+            text: root.header;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            color: surface.foreground;
+            horizontal-alignment: root.committed.rtl ? right : left;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+        field := Rectangle {
+            height: 30px;
+            accessible-role: button;
+            accessible-label: root.accessible-name;
+            accessible-description: root.description;
+            accessible-value: DatePickerBehavior.ready ? DatePickerBehavior.value-text(root.options) : "";
+            accessible-read-only: true;
+            accessible-enabled: root.enabled;
+            accessible-action-default => { root.open-picker(); }
+
+            surface := ButtonSurface {
+                width: parent.width; height: parent.height;
+                enabled: root.enabled;
+                hovered: input.has-hover;
+                pressed: input.pressed;
+            }
+            HorizontalLayout {
+                for col[i] in root.committed.columns: Rectangle {
+                    horizontal-stretch: col.part == DatePickerPart.month ? 132 : 78;
+                    if i > 0: Rectangle {
+                        x: 0px;
+                        width: root.border-gap;
+                        height: parent.height;
+                        background: root.dark ? #ffffff18 : #00000018;
+                    }
+                    Text {
+                        x: col.part == DatePickerPart.month ? 10px : 0px;
+                        width: parent.width - 2 * self.x;
+                        height: parent.height - 2px;
+                        text: root.effective-date == 0 ? root.placeholder(col.part) : col.text;
+                        font-family: "Segoe UI";
+                        font-size: 14px;
+                        color: root.effective-date != 0 ? surface.foreground
+                           : root.dark ? #ffffffc5 : #0000009e;
+                        vertical-alignment: center;
+                        horizontal-alignment: col.part != DatePickerPart.month ? center : root.committed.rtl ? right : left;
+                        overflow: elide;
+                        accessible-role: none;
+                    }
+                }
+            }
+            input := ButtonInput {
+                enabled: root.enabled;
+                clicked => { root.open-picker(); }
+                unhandled-key-pressed(event) => {
+                    if event.modifiers.alt && (event.text == Key.DownArrow || event.text == Key.UpArrow) {
+                        root.open-picker();
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+            if input.keyboard-focused && root.enabled: ButtonFocusVisual {
+                control-width: field.width;
+                control-height: field.height;
+            }
+        }
+        if root.description != "": Text {
+            text: root.description;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            color: root.dark ? #ffffffc5 : #0000009e;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+    }
+
+    popup := PickerPopup {
+        viewport: root.popup-viewport;
+        anchor-x: root.absolute-position.x;
+        anchor-y: root.absolute-position.y;
+        anchor-width: root.width;
+        field-middle: field.y + field.height / 2;
+        column-count: root.pending.columns.length;
+        accent: root.accent;
+        accepted => { root.accept-date(); }
+        dismissed => { root.close-picker(); }
+        step(index, amount) => { root.step(index, amount); }
+
+        for col[i] in root.pending.columns: PickerWheel {
+            horizontal-stretch: col.part == DatePickerPart.month ? 132 : 78;
+            label: root.title(col.part);
+            rows: col.rows;
+            align-start: col.part == DatePickerPart.month;
+            rtl: root.pending.rtl;
+            divider-visible: i > 0;
+            focused: popup.focused-column == i;
+            activate => { popup.activate-column(i); }
+            step(amount) => { root.step(i, amount); }
+        }
+    }
+}

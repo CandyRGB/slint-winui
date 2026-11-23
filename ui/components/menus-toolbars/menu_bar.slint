@@ -1,0 +1,280 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonClickMode, ButtonFocusVisual, ButtonInput } from "../basic-input/button_input.slint";
+import {
+    FlyoutCloseReason, FlyoutPlacement, FlyoutRect, MenuFlyoutAccelerators, MenuFlyoutBehavior,
+    MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutPanels,
+} from "menu_flyout.slint";
+
+export { FlyoutCloseReason, FlyoutRect, MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind }
+
+// Use the same item model as the bar, and route invoked indices to the bar.
+export component MenuBarAccelerators inherits MenuFlyoutAccelerators {
+    capture-key-pressed(event) => {
+        if root.accelerators-enabled && event.modifiers.alt && !event.modifiers.control
+            && !event.modifiers.meta && !event.modifiers.shift {
+            // An editing child can consume Alt+letter as text before a KeyBinding sees it.
+            let index = MenuFlyoutBehavior.access-key(root.items, event.text);
+            if index >= 0 {
+                if !event.repeat { root.invoked(index); }
+                return accept;
+            }
+        }
+        return reject;
+    }
+}
+
+component MenuBarHeading inherits Rectangle {
+    in property <MenuFlyoutItem> item;
+    in property <bool> is-open;
+    in property <bool> tab-stop;
+    out property <FlyoutRect> anchor: {
+        x: root.absolute-position.x, y: root.absolute-position.y, width: root.width, height: root.height,
+    };
+    callback invoked();
+    callback show();
+    callback hovered();
+    callback focused();
+    callback move(bool);
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    height: 32px;
+    width: round((caption.preferred-width + 20px) / 2px) * 2px;
+    border-radius: 4px;
+    background: item.disabled ? transparent
+        : root.is-open || input.pressed ? (root.dark ? #ffffff0a : #00000006)
+        : input.has-hover ? (root.dark ? #ffffff0f : #00000009)
+        : transparent;
+    forward-focus: input;
+    accessible-role: button;
+    accessible-label: item.text;
+    accessible-enabled: !item.disabled;
+    accessible-expandable: true;
+    accessible-expanded: root.is-open;
+    accessible-action-default => { if !item.disabled { root.invoked(); } }
+    accessible-action-expand => { if !item.disabled { root.show(); } }
+
+    caption := Text {
+        text: root.item.text;
+        font-family: "Segoe UI Variable Text";
+        font-size: 14px;
+        color: root.item.disabled ? (root.dark ? #ffffff5e : #0000005c) : Palette.foreground;
+        accessible-role: none;
+    }
+
+    input := ButtonInput {
+        enabled: !root.item.disabled;
+        tab-stop: root.tab-stop;
+        click-mode: ButtonClickMode.press;
+        accepts-return: false;
+        accepts-space: false;
+        clicked => { root.invoked(); }
+        changed has-hover => { if self.has-hover { root.hovered(); } }
+        changed has-focus => { if self.has-focus { root.focused(); } }
+        unhandled-key-pressed(event) => {
+            if (event.text == Key.DownArrow || event.text == Key.Return || event.text == Key.Space)
+                && !event.modifiers.alt {
+                if !event.repeat { root.show(); }
+                return accept;
+            }
+            if event.text == Key.LeftArrow || event.text == Key.RightArrow {
+                root.move(event.text == Key.RightArrow);
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if input.keyboard-focused && !root.is-open : ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+    }
+}
+
+// Root entries are submenu headings with stable IDs; descendants use parent-id.
+// Place the bar over the host content, outside any clipping container.
+export component MenuBar inherits Rectangle {
+    in property <[MenuFlyoutItem]> items;
+    in property <FlyoutRect> viewport;
+    in property <bool> rtl: false;
+    in property <string> accessible-name: @tr("Menu bar");
+    out property <bool> is-open: root.open-id != "" && root.open-index >= 0;
+    out property <string> open-id;
+    out property <FlyoutRect> panel-bounds: root.is-open ? panels.panel-bounds : {};
+
+    callback opened(string);
+    callback closed(string, FlyoutCloseReason);
+    callback invoked(MenuFlyoutItem);
+
+    private property <[MenuFlyoutItem]> headings: MenuFlyoutBehavior.items-for(root.items, "");
+    private property <int> open-index: MenuFlyoutBehavior.index-of(root.headings, root.open-id);
+    private property <string> focused-id;
+    private property <int> focused-index: MenuFlyoutBehavior.index-of(root.headings, root.focused-id);
+    private property <int> tab-index: root.focused-index >= 0 && !root.headings[root.focused-index].disabled
+        ? root.focused-index : MenuFlyoutBehavior.next-item(root.headings, -1, true);
+    private property <string> focus-request;
+    private property <int> focus-ticket;
+    private property <FlyoutRect> anchor;
+    private property <bool> owner-valid: root.is-open && !root.headings[root.open-index].disabled
+        && MenuFlyoutBehavior.has-children(root.items, root.open-id);
+
+    height: 40px;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    accessible-role: groupbox;
+    accessible-label: root.accessible-name;
+
+    changed owner-valid => {
+        if !root.owner-valid && root.open-id != "" {
+            root.dismiss(FlyoutCloseReason.programmatic);
+        }
+    }
+
+    public function show-menu(id: string) {
+        let index = MenuFlyoutBehavior.index-of(root.headings, id);
+        if id != "" && index >= 0 && !root.headings[index].disabled
+            && root.headings[index].kind == MenuFlyoutItemKind.submenu
+            && MenuFlyoutBehavior.has-children(root.items, id) && root.open-id != id {
+            let previous = root.open-id;
+            root.open-id = id;
+            root.focused-id = id;
+            if previous != "" {
+                root.closed(previous, FlyoutCloseReason.programmatic);
+            }
+        }
+    }
+
+    public function hide() {
+        root.dismiss(FlyoutCloseReason.programmatic);
+    }
+
+    public function invoke-accelerator(index: int) {
+        if index >= 0 && index < root.items.length {
+            let item = root.items[index];
+            if item.parent-id == "" && item.kind == MenuFlyoutItemKind.submenu {
+                root.show-menu(item.id);
+            } else if MenuFlyoutBehavior.can-invoke-shortcut(root.items, index) {
+                MenuFlyoutBehavior.update-checks(root.items, index);
+                root.submit(root.items[index]);
+            }
+        }
+    }
+
+    function request-focus(id: string) {
+        root.focus-request = id;
+        root.focus-ticket += 1;
+    }
+
+    function toggle(id: string) {
+        if root.open-id == id {
+            root.dismiss(FlyoutCloseReason.programmatic);
+        } else {
+            root.show-menu(id);
+        }
+    }
+
+    function dismiss(reason: FlyoutCloseReason) {
+        if root.open-id != "" {
+            let owner = root.open-id;
+            root.open-id = "";
+            panels.clear();
+            let target = root.tab-index;
+            if target >= 0 { root.request-focus(root.headings[target].id); }
+            root.closed(owner, reason);
+        }
+    }
+
+    function submit(item: MenuFlyoutItem) {
+        root.dismiss(FlyoutCloseReason.programmatic);
+        root.invoked(item);
+    }
+
+    function move(index: int, right: bool, open: bool) {
+        let next = MenuFlyoutBehavior.next-item(root.headings, index, right != root.rtl);
+        if next >= 0 && next != index {
+            let id = root.headings[next].id;
+            if open {
+                root.show-menu(id);
+            } else {
+                root.request-focus(id);
+            }
+        }
+    }
+
+    if root.is-open : TouchArea {
+        x: root.viewport.x - root.absolute-position.x;
+        y: root.viewport.y - root.absolute-position.y;
+        width: root.viewport.width;
+        height: root.viewport.height;
+        clicked => { root.dismiss(FlyoutCloseReason.light-dismiss); }
+        scroll-event(event) => { return accept; }
+    }
+
+    FlexboxLayout {
+        padding: 4px;
+        spacing: 8px;
+        alignment: start;
+        flex-direction: root.rtl ? row-reverse : row;
+        flex-wrap: no-wrap;
+
+        for item[index] in root.headings : MenuBarHeading {
+            item: item;
+            is-open: root.is-open && root.open-id == item.id;
+            tab-stop: index == root.tab-index;
+            private property <int> requested-focus: root.focus-request == item.id ? root.focus-ticket : 0;
+
+            changed requested-focus => {
+                if self.requested-focus > 0 && !self.item.disabled { self.focus(); }
+            }
+            changed is-open => {
+                if self.is-open {
+                    root.anchor = self.anchor;
+                    panels.reset();
+                    root.opened(self.item.id);
+                }
+            }
+            changed anchor => { if self.is-open { root.anchor = self.anchor; } }
+            invoked => { root.toggle(self.item.id); }
+            show => { root.show-menu(self.item.id); }
+            hovered => { if root.is-open { root.show-menu(self.item.id); } }
+            focused => { root.focused-id = self.item.id; }
+            move(right) => { root.move(index, right, false); }
+        }
+    }
+
+    FocusScope {
+        x: root.viewport.x - root.absolute-position.x;
+        y: root.viewport.y - root.absolute-position.y;
+        width: root.viewport.width;
+        height: root.viewport.height;
+        focus-on-tab-navigation: false;
+        focus-on-click: false;
+        key-pressed(event) => {
+            if root.is-open && event.text == Key.Escape {
+                root.dismiss(FlyoutCloseReason.escape);
+                return accept;
+            }
+            return reject;
+        }
+
+        panels := MenuFlyoutPanels {
+            visible: root.is-open;
+            items: root.items;
+            root-owner: root.open-id;
+            anchor: { x: root.anchor.x - root.viewport.x, y: root.anchor.y - root.viewport.y,
+                width: root.anchor.width, height: root.anchor.height };
+            origin: { x: root.viewport.x, y: root.viewport.y };
+            placement: root.rtl ? FlyoutPlacement.bottom-edge-aligned-right : FlyoutPlacement.bottom-edge-aligned-left;
+            rtl: root.rtl;
+            regular-rows: true;
+            offsets: { x: 0px, y: 0px };
+            focus-on-mount: true;
+            accelerators-enabled: false;
+            menu-invoked(item) => { root.submit(item); }
+            horizontal-key(right) => {
+                root.move(root.open-index, right, true);
+                return true;
+            }
+        }
+    }
+}

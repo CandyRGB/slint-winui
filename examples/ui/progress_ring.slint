@@ -1,0 +1,68 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { ProgressRing } from "../../ui/components/status-info/progress_ring.slint";
+
+export component ProgressRingExample inherits Window {
+    title: "WinUI ProgressRing";
+    preferred-width: 640px;
+    preferred-height: 288px;
+    private property <length> ring-size: 32px;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            active := CheckBox { text: "Active"; checked: true; }
+            busy := CheckBox { text: "Indeterminate"; checked: true; }
+            track := CheckBox { text: "Show track"; }
+            animate-ring := CheckBox { text: "Animate"; checked: true; }
+        }
+
+        Rectangle {
+            height: 96px;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Palette.foreground.with-alpha(0.08);
+
+            ring := ProgressRing {
+                width: root.ring-size;
+                height: root.ring-size;
+                is-active: active.checked;
+                is-indeterminate: busy.checked;
+                animations-enabled: animate-ring.checked;
+                track-color: track.checked ? #d3d3d3 : transparent;
+                accessible-name: "Download progress";
+                value: 25;
+            }
+        }
+
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            Button { text: "16 px"; clicked => { root.ring-size = 16px; } }
+            Button { text: "32 px"; clicked => { root.ring-size = 32px; } }
+            Button { text: "60 px"; clicked => { root.ring-size = 60px; } }
+            Button { text: "Reset range"; clicked => { ring.minimum = 0; ring.maximum = 100; ring.value = 0; } }
+            Button { text: "Set minimum to 120"; clicked => { ring.minimum = 120; } }
+            Button { text: "Set maximum to 80"; clicked => { ring.maximum = 80; } }
+        }
+
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            Button { text: "Set 25"; clicked => { ring.value = 25; } }
+            Button { text: "Set 75"; clicked => { ring.value = 75; } }
+            Button { text: "Set 120"; clicked => { ring.value = 120; } }
+            Button { text: "Range 20–80"; clicked => { ring.minimum = 20; ring.maximum = 80; ring.value = 50; } }
+            Text { text: "\{ring.value} (\{ring.minimum}–\{ring.maximum})"; color: Palette.foreground; }
+        }
+    }
+}

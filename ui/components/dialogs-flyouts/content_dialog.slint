@@ -1,0 +1,383 @@
+import { Button, Palette } from "std-widgets.slint";
+import { ContrastTheme, SystemContrastColors } from "../contrast_theme.slint";
+
+export enum ContentDialogButton {
+    none,
+    primary,
+    secondary,
+    close,
+}
+
+export enum ContentDialogResult {
+    none,
+    primary,
+    secondary,
+}
+
+export enum ContentDialogDecision {
+    proceed,
+    cancel,
+    defer,
+}
+
+// Place this component over the window's content. Bind any form state that
+// should survive closing and reopening to properties owned by the caller.
+export component ContentDialog inherits Rectangle {
+    in-out property <bool> open: false;
+    in property <string> title;
+    in property <string> primary-label: "确定";
+    in property <string> secondary-label;
+    in property <string> close-label: "取消";
+    in property <bool> primary-enabled: true;
+    in property <bool> secondary-enabled: true;
+    in property <ContentDialogButton> default-button: ContentDialogButton.none;
+    in property <bool> close-on-overlay-click: false;
+
+    callback accepted();
+    callback secondary-accepted();
+    callback dismissed();
+    callback opened();
+    callback button-clicked(ContentDialogButton, int) -> ContentDialogDecision;
+    callback closing(ContentDialogResult, int) -> ContentDialogDecision;
+    callback closed(ContentDialogResult);
+
+    button-clicked(button, request-id) => { return ContentDialogDecision.proceed; }
+    closing(result, request-id) => { return ContentDialogDecision.proceed; }
+
+    private property <int> last-request-id;
+    private property <int> button-request-id;
+    private property <int> closing-request-id;
+    private property <ContentDialogButton> pending-button: ContentDialogButton.none;
+    private property <ContentDialogButton> closing-button: ContentDialogButton.none;
+    private property <ContentDialogResult> closing-result:
+        root.closing-button == ContentDialogButton.primary ? ContentDialogResult.primary
+        : root.closing-button == ContentDialogButton.secondary ? ContentDialogResult.secondary
+        : ContentDialogResult.none;
+    private property <SystemContrastColors> contrast: ContrastTheme.colors;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> has-primary: root.primary-label != "";
+    private property <bool> has-secondary: root.secondary-label != "";
+    private property <bool> has-close: root.close-label != "";
+    private property <int> button-count: (root.has-primary ? 1 : 0)
+        + (root.has-secondary ? 1 : 0) + (root.has-close ? 1 : 0);
+    private property <bool> can-activate-default:
+        root.default-button == ContentDialogButton.primary ? root.has-primary && root.primary-enabled
+        : root.default-button == ContentDialogButton.secondary ? root.has-secondary && root.secondary-enabled
+        : root.default-button == ContentDialogButton.close && root.has-close;
+
+    width: 100%;
+    height: 100%;
+
+    init => { root.sync-popup(); }
+    changed open => { root.sync-popup(); }
+
+    function sync-popup() {
+        if (root.open) {
+            root.show-if-requested();
+        } else if (popup.is-open) {
+            root.open = true;
+            root.hide();
+        }
+    }
+
+    function show-if-requested() {
+        if (root.open && !popup.is-open) {
+            popup.show();
+            root.opened();
+        }
+    }
+
+    public function hide() {
+        root.begin-close(ContentDialogButton.none);
+    }
+
+    // Complete the request ID supplied to button-clicked or closing after returning defer.
+    // IDs from completed events or an earlier showing are ignored.
+    public function complete-deferral(request-id: int, cancel: bool) {
+        if (request-id != 0 && request-id == root.button-request-id) {
+            let button = root.pending-button;
+            root.button-request-id = 0;
+            if (!cancel) {
+                root.begin-close(button);
+            }
+        } else {
+            root.complete-closing(request-id, cancel);
+        }
+    }
+
+    function next-request-id() -> int {
+        root.last-request-id += 1;
+        return root.last-request-id;
+    }
+
+    function respond(button: ContentDialogButton) {
+        if (popup.is-open && root.button-request-id == 0 && root.closing-request-id == 0) {
+            if (button == ContentDialogButton.close && !root.has-close) {
+                root.begin-close(button);
+            } else {
+                let request-id = root.next-request-id();
+                root.button-request-id = request-id;
+                root.pending-button = button;
+                let decision = root.button-clicked(button, request-id);
+                if (decision != ContentDialogDecision.defer) {
+                    root.complete-deferral(request-id, decision == ContentDialogDecision.cancel);
+                }
+            }
+        }
+    }
+
+    function begin-close(button: ContentDialogButton) {
+        if (popup.is-open && root.closing-request-id == 0) {
+            let request-id = root.next-request-id();
+            root.closing-request-id = request-id;
+            root.closing-button = button;
+            let decision = root.closing(root.closing-result, request-id);
+            if (decision != ContentDialogDecision.defer) {
+                root.complete-closing(request-id, decision == ContentDialogDecision.cancel);
+            }
+        }
+    }
+
+    function complete-closing(request-id: int, cancel: bool) {
+        if (request-id != 0 && request-id == root.closing-request-id) {
+            if (cancel) {
+                root.closing-request-id = 0;
+            } else {
+                root.finish-close();
+            }
+        }
+    }
+
+    function finish-close() {
+        let button = root.closing-button;
+        let result = root.closing-result;
+        root.button-request-id = 0;
+        popup.close();
+        root.open = false;
+        root.closing-request-id = 0;
+        root.closed(result);
+        if (button == ContentDialogButton.primary) {
+            root.accepted();
+        } else if (button == ContentDialogButton.secondary) {
+            root.secondary-accepted();
+        } else if (button == ContentDialogButton.close) {
+            root.dismissed();
+        }
+        root.show-if-requested();
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        close-policy: no-auto-close;
+        forward-focus: content-start;
+
+        modal := FocusScope {
+            focus-on-click: false;
+            focus-on-tab-navigation: !root.has-close && !(root.has-primary && root.primary-enabled)
+                && !(root.has-secondary && root.secondary-enabled);
+
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.respond(ContentDialogButton.close);
+                    return accept;
+                }
+                if (event.text == Key.Return && root.can-activate-default) {
+                    root.respond(root.default-button);
+                    return accept;
+                }
+                return reject;
+            }
+
+            Rectangle {
+                background: root.contrast.active ? root.contrast.window.with-alpha(0.80) : #0000004d;
+                TouchArea {
+                    clicked => {
+                        if (root.close-on-overlay-click) {
+                            root.respond(ContentDialogButton.close);
+                        }
+                    }
+                }
+            }
+
+            card := Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: min(max(0px, floor((parent.width - 48px) / 2px) * 2px),
+                    min(548px, round(max(320px, layout.preferred-width, commands.natural-width) / 2px) * 2px));
+                height: min(max(0px, floor((parent.height - 48px) / 2px) * 2px),
+                    min(756px, round(max(184px, layout.preferred-height + commands.height) / 2px) * 2px));
+                border-radius: 8px;
+                border-width: root.contrast.active ? 2px : 1px;
+                border-color: root.contrast.active ? root.contrast.window-text : Palette.foreground.with-alpha(0.10);
+                background: root.contrast.active ? root.contrast.window : Palette.background;
+                drop-shadow-blur: 24px;
+                drop-shadow-color: root.contrast.active ? transparent : #00000047;
+                drop-shadow-offset-y: 8px;
+
+                accessible-role: groupbox;
+                accessible-label: root.title;
+
+                TouchArea { }
+
+                Rectangle {
+                    x: card.border-width;
+                    y: card.border-width;
+                    width: max(0px, card.width - 2 * card.border-width);
+                    height: max(0px, card.height - commands.height - 2 * card.border-width);
+                    border-top-left-radius: 6px;
+                    border-top-right-radius: 6px;
+                    border-bottom-left-radius: root.button-count == 0 ? 6px : 0px;
+                    border-bottom-right-radius: self.border-bottom-left-radius;
+                    background: root.contrast.active ? transparent
+                        : root.dark ? #ffffff08 : #ffffff80;
+                }
+
+                viewport := Flickable {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: max(0px, parent.height - commands.height);
+                    content-width: self.width;
+                    content-height: max(self.height, layout.preferred-height);
+                    interactive: self.content-height > self.height;
+
+                    // A disabled starting item makes the focus search walk into the content.
+                    content-start := FocusScope {
+                        enabled: false;
+                        width: 0px;
+                        height: 0px;
+                    }
+
+                    layout := VerticalLayout {
+                        width: viewport.width;
+                        height: viewport.content-height;
+                        padding: 24px;
+                        spacing: 12px;
+                        alignment: start;
+
+                        if root.title != "" : Text {
+                            text: root.title;
+                            font-size: 20px;
+                            font-weight: 600;
+                            color: root.contrast.active ? root.contrast.window-text : Palette.foreground;
+                            wrap: word-wrap;
+                            accessible-role: none;
+                        }
+
+                        @children
+                    }
+                }
+
+                action-start := FocusScope {
+                    width: 0px;
+                    height: 0px;
+                    focus-on-click: false;
+                    focus-on-tab-navigation: false;
+                    changed has-focus => {
+                        if (self.has-focus) {
+                            commands.focus-action();
+                        }
+                    }
+                }
+
+                commands := Rectangle {
+                    width: parent.width;
+                    height: root.button-count > 0 ? 80px : 0px;
+                    y: parent.height - self.height;
+                    visible: root.button-count > 0;
+
+                    private property <int> columns: max(2, root.button-count);
+                    private property <length> buttons-width: max(0px, self.width - 48px - (self.columns - 1) * 8px);
+                    private property <length> natural-width: root.button-count == 0 ? 0px
+                        : 48px + (self.columns - 1) * 8px + self.columns * max(
+                            root.has-primary ? primary-action.min-width : 0px,
+                            root.has-secondary ? secondary-action.min-width : 0px,
+                            root.has-close ? close-action.min-width : 0px);
+
+                    pure function button-x(column: int) -> length {
+                        return 24px + round(self.buttons-width * column / (self.columns * 2px)) * 2px
+                            + 8px * column;
+                    }
+
+                    pure function button-width(column: int) -> length {
+                        return self.button-x(column + 1) - self.button-x(column) - 8px;
+                    }
+
+                    function focus-action() {
+                        if (root.can-activate-default && root.default-button == ContentDialogButton.primary) {
+                            primary-action.focus();
+                        } else if (root.can-activate-default && root.default-button == ContentDialogButton.secondary) {
+                            secondary-action.focus();
+                        } else if (root.can-activate-default && root.default-button == ContentDialogButton.close) {
+                            close-action.focus();
+                        } else if (root.has-primary && root.primary-enabled) {
+                            primary-action.focus();
+                        } else if (root.has-secondary && root.secondary-enabled) {
+                            secondary-action.focus();
+                        } else if (root.has-close) {
+                            close-action.focus();
+                        }
+                    }
+
+                    Rectangle {
+                        y: 0px;
+                        width: parent.width;
+                        height: 1px;
+                        background: root.contrast.active ? root.contrast.window-text
+                            : root.dark ? #0000001a : #0000000f;
+                    }
+
+                    primary-action := Button {
+                        private property <int> column: parent.columns - root.button-count;
+                        x: parent.button-x(self.column);
+                        y: 24px;
+                        width: parent.button-width(self.column);
+                        height: 32px;
+                        visible: root.has-primary;
+                        enabled: root.has-primary && root.primary-enabled;
+                        text: root.primary-label;
+                        primary: root.default-button == ContentDialogButton.primary;
+                        clicked => {
+                            if (self.enabled) {
+                                root.respond(ContentDialogButton.primary);
+                            }
+                        }
+                    }
+
+                    secondary-action := Button {
+                        private property <int> column: parent.columns - (root.has-close ? 2 : 1);
+                        x: parent.button-x(self.column);
+                        y: 24px;
+                        width: parent.button-width(self.column);
+                        height: 32px;
+                        visible: root.has-secondary;
+                        enabled: root.has-secondary && root.secondary-enabled;
+                        text: root.secondary-label;
+                        primary: root.default-button == ContentDialogButton.secondary;
+                        clicked => {
+                            if (self.enabled) {
+                                root.respond(ContentDialogButton.secondary);
+                            }
+                        }
+                    }
+
+                    close-action := Button {
+                        private property <int> column: parent.columns - 1;
+                        x: parent.button-x(self.column);
+                        y: 24px;
+                        width: parent.button-width(self.column);
+                        height: 32px;
+                        visible: root.has-close;
+                        enabled: root.has-close;
+                        text: root.close-label;
+                        primary: root.default-button == ContentDialogButton.close;
+                        clicked => { root.respond(ContentDialogButton.close); }
+                    }
+                }
+            }
+        }
+    }
+}

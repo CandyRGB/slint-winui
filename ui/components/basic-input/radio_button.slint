@@ -1,0 +1,113 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual, ButtonInput } from "button_input.slint";
+
+export component RadioButton inherits Rectangle {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <bool> enabled: true;
+    in property <bool> tab-stop: true;
+    in property <bool> rtl;
+    in property <color> accent: Palette.accent-background;
+    in property <int> index-in-set: -1;
+    in property <int> size-of-set: -1;
+    in-out property <bool> checked;
+    out property <bool> has-focus: root.enabled && input.has-focus;
+    out property <color> foreground: root.enabled ? (root.dark ? white : #000000e4)
+        : (root.dark ? #ffffff5e : #0000005c);
+
+    callback clicked();
+    callback selection-requested();
+    callback unhandled-key-pressed(KeyEvent) -> EventResult;
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <color> disabled-stroke: root.dark ? #ffffff29 : #00000037;
+    private property <color> accent-fill: root.accent.with-alpha(input.pressed ? 0.8 : input.has-hover ? 0.9 : 1);
+
+    border-radius: 4px;
+    min-width: max(120px, 28px + label.min-width);
+    min-height: max(32px, 6px + label.min-height);
+    preferred-width: round(max(120px, 28px + label.preferred-width) / 2px) * 2px;
+    preferred-height: round(max(32px, 6px + label.preferred-height) / 2px) * 2px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: input;
+
+    accessible-role: radio-button;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-enabled: root.enabled;
+    accessible-label: root.accessible-name;
+    accessible-item-index: root.index-in-set;
+    accessible-item-count: root.size-of-set;
+    accessible-action-default => { root.activate(); }
+
+    selection-requested => { root.checked = true; }
+
+    function activate() {
+        if root.enabled && root.visible {
+            if !root.checked {
+                root.selection-requested();
+            }
+            root.clicked();
+        }
+    }
+
+    Rectangle {
+        width: 20px;
+        height: 20px;
+        x: root.rtl ? root.width - self.width : 0px;
+        y: 6px;
+        border-radius: 10px;
+        border-width: root.checked ? 0px : 1px;
+        border-color: !root.enabled || input.pressed ? root.disabled-stroke
+            : root.dark ? #ffffff99 : #00000072;
+        background: root.checked ? (root.enabled ? root.accent-fill : root.disabled-stroke)
+            : !root.enabled ? transparent : input.pressed ? (root.dark ? #ffffff12 : #00000018)
+            : input.has-hover ? (root.dark ? #ffffff0a : #0000000f) : (root.dark ? #ffffff1a : #00000006);
+
+        if root.checked || input.pressed: Rectangle {
+            width: input.pressed ? 10px : input.has-hover ? 14px : 12px;
+            height: self.width;
+            border-radius: self.width / 2;
+            x: (parent.width - self.width) / 2;
+            y: self.x;
+            background: root.dark ? black : white;
+            border-width: root.checked ? 1px : 0px;
+            border-color: root.dark ? #ffffff14 : #00000014;
+        }
+    }
+
+    label := VerticalLayout {
+        x: root.rtl ? 0px : 28px;
+        y: 6px;
+        width: max(0px, root.width - 28px);
+        height: max(0px, root.height - 6px);
+        alignment: start;
+
+        if root.text != "": Text {
+            text: root.text;
+            font-family: "Segoe UI Variable Text";
+            font-size: 14px;
+            color: root.foreground;
+            wrap: word-wrap;
+            horizontal-alignment: root.rtl ? right : left;
+            accessible-role: none;
+        }
+        @children
+    }
+
+    input := ButtonInput {
+        enabled: root.enabled && root.visible;
+        accepts-return: false;
+        tab-stop: root.tab-stop;
+        clicked => { root.activate(); }
+        unhandled-key-pressed(event) => { return root.unhandled-key-pressed(event); }
+    }
+
+    if root.enabled && input.keyboard-focused: ButtonFocusVisual {
+        control-width: root.width;
+        control-height: root.height;
+        control-radius: root.border-radius;
+        horizontal-margin: 8px;
+    }
+}

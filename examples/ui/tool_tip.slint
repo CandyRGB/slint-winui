@@ -1,0 +1,147 @@
+import { CheckBox, Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { ToolTip, ToolTipPlacement } from "../../ui/components/status-info/tool_tip.slint";
+
+export component ToolTipExample inherits Window {
+    title: "WinUI ToolTip";
+    preferred-width: 740px;
+    min-width: 680px;
+    preferred-height: 544px;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+    background: #f3f3f3;
+    in property <duration> system-show-delay: 800ms;
+    in property <duration> system-show-duration: 5000ms;
+    in property <image> gallery-photo;
+    out property <int> activations;
+    out property <int> opened-count;
+    out property <int> closed-count;
+    private property <string> button-message: wrap-hint.checked
+        ? "This ToolTip contains a longer description and wraps its text when the available width reaches the template limit."
+        : "Simple ToolTip";
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            if event.text == Key.Escape && (button-tip.presented || offset-tip.presented || photo-tip.presented) {
+                button-tip.dismiss();
+                offset-tip.dismiss();
+                photo-tip.dismiss();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 14px;
+            alignment: start;
+
+            HorizontalLayout {
+                alignment: start;
+                spacing: 12px;
+                Button { text: "Open tip"; clicked => { button-tip.show(); } }
+                Button { text: "Close tip"; clicked => { button-tip.dismiss(); } }
+                mirror := CheckBox { text: "RTL"; }
+                disabled := CheckBox { text: "Disable target"; }
+                short := CheckBox { text: "Short duration"; }
+                wrap-hint := CheckBox { text: "Wrap hint"; }
+            }
+
+            HorizontalLayout {
+                alignment: start;
+                spacing: 12px;
+                sample := Button {
+                    text: "Show a simple ToolTip";
+                    enabled: !disabled.checked;
+                    accessible-description: root.button-message;
+                    clicked => { root.activations += 1; }
+                }
+                Text {
+                    vertical-alignment: center;
+                    text: "Opened \{root.opened-count}   Closed \{root.closed-count}   Clicked \{root.activations}";
+                    color: Palette.foreground;
+                    accessible-label: self.text;
+                }
+            }
+
+            offset-target := Rectangle {
+                width: 268px;
+                height: 32px;
+                Text {
+                    x: 0px;
+                    text: "TextBlock with an offset ToolTip";
+                    color: Palette.foreground;
+                    vertical-alignment: center;
+                    accessible-label: self.text;
+                    accessible-description: "Offset information.";
+                }
+                offset-hit := TouchArea { }
+            }
+
+            HorizontalLayout {
+                alignment: mirror.checked ? end : start;
+                photo := Rectangle {
+                    width: 400px;
+                    height: 266px;
+                    background: #e5e5e5;
+                    Image {
+                        width: parent.width;
+                        height: parent.height;
+                        source: root.gallery-photo;
+                        image-fit: cover;
+                        accessible-label: "Landscape";
+                        accessible-description: "Non-occluding information.";
+                    }
+                    image-hit := TouchArea { }
+                }
+            }
+        }
+
+        button-tip := ToolTip {
+            text: root.button-message;
+            target: sample.flyout-anchor;
+            target-enabled: sample.enabled;
+            target-hovered: sample.has-hover;
+            target-keyboard-focused: sample.keyboard-focused;
+            target-pressed: sample.pressed;
+            show-delay: root.system-show-delay;
+            show-duration: short.checked ? 360ms : root.system-show-duration;
+            opened => { root.opened-count += 1; }
+            closed => { root.closed-count += 1; }
+        }
+        offset-tip := ToolTip {
+            text: "Offset information.";
+            target: { x: offset-target.absolute-position.x, y: offset-target.absolute-position.y,
+                width: offset-target.width, height: offset-target.height };
+            target-hovered: offset-hit.has-hover;
+            target-pressed: offset-hit.pressed;
+            anchor-to-pointer: true;
+            pointer-position: { x: offset-target.absolute-position.x + offset-hit.mouse-x,
+                y: offset-target.absolute-position.y + offset-hit.mouse-y };
+            vertical-offset: -80px;
+            show-delay: root.system-show-delay;
+            show-duration: root.system-show-duration;
+        }
+        photo-tip := ToolTip {
+            accessible-name: "Non-occluding tooltip";
+            placement: ToolTipPlacement.right;
+            placement-rect: { x: photo.absolute-position.x, y: photo.absolute-position.y, width: photo.width, height: photo.height };
+            target-hovered: image-hit.has-hover;
+            target-pressed: image-hit.pressed;
+            rtl: mirror.checked;
+            show-delay: root.system-show-delay;
+            show-duration: root.system-show-duration;
+            Text {
+                text: "Non-occluding information.";
+                font-size: 12px;
+                color: Palette.foreground;
+                wrap: word-wrap;
+                accessible-role: none;
+            }
+        }
+    }
+}

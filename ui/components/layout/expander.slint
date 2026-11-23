@@ -1,0 +1,231 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput } from "../basic-input/button_input.slint";
+import { ContrastTheme, SystemContrastColors } from "../contrast_theme.slint";
+
+export enum ExpandDirection { down, up }
+export enum ExpanderContentAlignment { start, center, end, stretch }
+
+export component Expander inherits Rectangle {
+    slot header-content;
+
+    in property <string> header;
+    in property <string> accessible-name: root.header != "" ? root.header : @tr("Expander");
+    in property <ExpandDirection> expand-direction: ExpandDirection.down;
+    in property <bool> enabled: true;
+    in property <bool> rtl: false;
+    in property <length> content-padding: 16px;
+    in property <ExpanderContentAlignment> horizontal-content-alignment: ExpanderContentAlignment.center;
+    in property <LayoutAlignment> vertical-content-alignment: LayoutAlignment.center;
+    in property <brush> content-background: root.contrast.active ? root.contrast.window
+        : root.dark ? #ffffff08 : #f6f6f680;
+    in-out property <bool> expanded: false;
+    // Slint controls opt into inherited disabled visuals, focus and automation with this binding.
+    out property <bool> content-enabled: root.enabled && root.expanded;
+    out property <brush> header-foreground: root.contrast.active ? root.header-contrast-foreground
+        : root.enabled ? Palette.foreground : (root.dark ? #ffffff5e : #0000005c);
+    callback expanding();
+    callback collapsed();
+
+    private property <bool> opens-up: root.expand-direction == ExpandDirection.up;
+    private property <SystemContrastColors> contrast: ContrastTheme.colors;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <brush> stroke: root.dark ? #0000001a : #0000000f;
+    private property <color> header-contrast-foreground: !root.enabled ? root.contrast.disabled-text
+        : header-input.has-hover || header-input.pressed ? root.contrast.highlight : root.contrast.button-text;
+    private property <length> content-border-inset: max(0px, root.content-padding) + 1px;
+    private property <length> content-width: max(0px, root.width - 2 * root.content-border-inset);
+    private property <length> body-height: max(48px, root.even(content-layout.preferred-height + 2 * root.content-border-inset - 1px));
+    private property <length> shown-body-height: root.expanded ? root.body-height : 0px;
+    private property <length> header-gutter: 76px + 2 * header-button.border-width;
+    private property <bool> has-custom-header: custom-header.preferred-width > 0px;
+    private property <bool> align-content-right: root.horizontal-content-alignment
+        == (root.rtl ? ExpanderContentAlignment.start : ExpanderContentAlignment.end);
+
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    min-width: root.even(max(96px, root.header-gutter + header-layout.min-width,
+        root.expanded ? content-layout.min-width + 2 * root.content-border-inset : 0px));
+    preferred-width: root.even(max(96px, root.header-gutter + header-layout.preferred-width,
+        root.expanded ? content-layout.preferred-width + 2 * root.content-border-inset : 0px));
+    height: header-button.height + root.shown-body-height;
+    border-radius: 4px;
+    forward-focus: header-input;
+
+    changed expanded => {
+        if (root.expanded) {
+            root.expanding();
+        } else {
+            root.collapsed();
+        }
+    }
+
+    pure function even(value: length) -> length {
+        return round(value / 2px) * 2px;
+    }
+
+    function toggle() {
+        if (root.enabled) {
+            root.expanded = !root.expanded;
+        }
+    }
+
+    // This scope catches keys before custom descendants, even if a caller supplies
+    // a control whose enabled property does not follow the expander.
+    FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            return !root.enabled && event.text != Key.Tab && event.text != Key.Backtab ? accept : reject;
+        }
+        capture-key-released(event) => {
+            return !root.enabled && event.text != Key.Tab && event.text != Key.Backtab ? accept : reject;
+        }
+
+        header-button := Rectangle {
+            x: 0px;
+            y: root.opens-up ? root.shown-body-height : 0px;
+            width: parent.width;
+            height: max(48px, root.even(header-layout.preferred-height + 2 * self.border-width));
+            border-width: root.contrast.active ? 2px : 1px;
+            border-color: root.contrast.active ? root.header-contrast-foreground : root.stroke;
+            border-top-left-radius: root.expanded && root.opens-up ? 0px : root.border-radius;
+            border-top-right-radius: self.border-top-left-radius;
+            border-bottom-left-radius: root.expanded && !root.opens-up ? 0px : root.border-radius;
+            border-bottom-right-radius: self.border-bottom-left-radius;
+            background: root.contrast.active ? root.contrast.button-face : root.dark ? #ffffff0d : #ffffffb3;
+
+            accessible-role: button;
+            accessible-label: root.accessible-name;
+            accessible-enabled: root.enabled;
+            accessible-expandable: true;
+            accessible-expanded: root.expanded;
+            accessible-action-default => { root.toggle(); }
+            accessible-action-expand => {
+                if (root.enabled) {
+                    root.expanded = true;
+                }
+            }
+
+            header-input := ButtonInput {
+                enabled: root.enabled;
+                clicked => { root.toggle(); }
+            }
+
+            header-layout := VerticalLayout {
+                x: header-button.border-width + (root.rtl ? 60px : 16px);
+                y: 0px;
+                width: max(0px, parent.width - root.header-gutter);
+                height: parent.height;
+                alignment: center;
+
+                if !root.has-custom-header : Text {
+                    text: root.header;
+                    color: root.header-foreground;
+                    font-family: "Segoe UI Variable Text";
+                    font-size: 14px;
+                    horizontal-alignment: root.rtl ? right : left;
+                    wrap: word-wrap;
+                    accessible-role: none;
+                }
+
+                custom-header := VerticalLayout {
+                    alignment: center;
+                    header-content { }
+                }
+            }
+
+            chevron := Rectangle {
+                x: root.rtl ? 8px + header-button.border-width : parent.width - 40px - header-button.border-width;
+                y: (parent.height - self.height) / 2;
+                width: 32px;
+                height: 32px;
+                border-radius: 4px;
+                border-width: root.contrast.active ? 2px : 0px;
+                border-color: root.header-contrast-foreground;
+                background: root.contrast.active ? root.contrast.button-face
+                    : !root.enabled ? transparent
+                    : header-input.pressed ? (root.dark ? #ffffff0a : #00000006)
+                    : header-input.has-hover ? (root.dark ? #ffffff0f : #00000009)
+                    : transparent;
+
+                glyph := Image {
+                    width: 12px;
+                    height: 12px;
+                    private property <bool> points-up: root.expanded != root.opens-up;
+                    private property <angle> glyph-angle: self.points-up ? 180deg : 0deg;
+                    private property <angle> animated-angle: self.glyph-angle;
+
+                    source: self.points-up
+                        ? @image-url("../../icons/expander_chevron_up_12.svg")
+                        : @image-url("../../icons/expander_chevron_down_12.svg");
+                    colorize: root.header-foreground;
+                    // Use the final SVG orientation even if the renderer cannot rotate it.
+                    transform-rotation: self.animated-angle - self.glyph-angle;
+                    animate animated-angle { duration: 168ms; easing: ease-out; }
+                    accessible-role: none;
+                }
+            }
+
+            if header-input.keyboard-focused && root.enabled : Rectangle {
+                border-width: 2px;
+                border-color: root.contrast.active ? root.contrast.window-text : Palette.foreground;
+                border-top-left-radius: header-button.border-top-left-radius;
+                border-top-right-radius: header-button.border-top-right-radius;
+                border-bottom-left-radius: header-button.border-bottom-left-radius;
+                border-bottom-right-radius: header-button.border-bottom-right-radius;
+                Rectangle {
+                    x: 2px;
+                    y: 2px;
+                    width: parent.width - 4px;
+                    height: parent.height - 4px;
+                    border-width: 1px;
+                    border-color: root.contrast.active ? root.contrast.button-face : Palette.background;
+                    border-top-left-radius: max(0px, parent.border-top-left-radius - 2px);
+                    border-top-right-radius: max(0px, parent.border-top-right-radius - 2px);
+                    border-bottom-left-radius: max(0px, parent.border-bottom-left-radius - 2px);
+                    border-bottom-right-radius: max(0px, parent.border-bottom-right-radius - 2px);
+                }
+            }
+        }
+
+        // Keep the content mounted so its values survive closing and changes of direction.
+        Rectangle {
+            x: 0px;
+            y: root.opens-up ? 0px : header-button.height;
+            width: parent.width;
+            height: root.shown-body-height;
+            visible: root.expanded;
+            clip: true;
+
+            Rectangle {
+                x: 0px;
+                y: root.opens-up ? 0px : -1px;
+                width: parent.width;
+                height: root.body-height + 1px;
+                // Clip one border at the seam, leaving the header's border between the regions.
+                border-width: 1px;
+                border-color: root.contrast.active ? root.contrast.window-text : root.stroke;
+                border-top-left-radius: root.opens-up ? root.border-radius : 0px;
+                border-top-right-radius: self.border-top-left-radius;
+                border-bottom-left-radius: root.opens-up ? 0px : root.border-radius;
+                border-bottom-right-radius: self.border-bottom-left-radius;
+                background: root.content-background;
+
+                content-layout := VerticalLayout {
+                    x: root.content-border-inset + (root.align-content-right ? root.content-width - self.width
+                        : root.horizontal-content-alignment == ExpanderContentAlignment.center ? (root.content-width - self.width) / 2 : 0px);
+                    y: root.content-border-inset;
+                    width: root.horizontal-content-alignment == ExpanderContentAlignment.stretch
+                        ? root.content-width : min(root.content-width, root.even(self.preferred-width));
+                    height: max(0px, parent.height - 2 * root.content-border-inset);
+                    alignment: root.vertical-content-alignment;
+                    @children
+                }
+            }
+        }
+
+        if !root.enabled : TouchArea {
+            scroll-event(event) => { return accept; }
+        }
+    }
+}

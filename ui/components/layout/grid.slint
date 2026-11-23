@@ -1,0 +1,86 @@
+import { Border } from "border.slint";
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../collections/items_repeater.slint";
+
+export enum GridLengthKind { pixel, auto, star }
+export struct GridDefinition {
+    kind: GridLengthKind,
+    pixels: length,
+    weight: float,
+    min-size: length,
+    max-size: length,
+    has-max: bool,
+}
+export struct GridChild {
+    key: string,
+    size: ItemsRepeaterSize,
+    row: int,
+    column: int,
+    row-span: int,
+    column-span: int,
+    collapsed: bool,
+}
+export struct GridMeasureRequest {
+    key: string,
+    preferred: ItemsRepeaterSize,
+    available: ItemsRepeaterSize,
+}
+export struct GridTrackPlacement { offset: length, size: length }
+export struct GridLayoutResult {
+    geometry: ItemsRepeaterGeometry,
+    columns: [GridTrackPlacement],
+    rows: [GridTrackPlacement],
+}
+export struct GridOptions {
+    measure: ItemsRepeaterSize,
+    arrange: ItemsRepeaterSize,
+    row-spacing: length,
+    column-spacing: length,
+    rtl: bool,
+}
+
+export global GridBehavior {
+    pure callback layout([GridDefinition], [GridDefinition], [GridChild], GridOptions) -> GridLayoutResult;
+}
+
+export component Grid inherits Border {
+    in property <[GridDefinition]> columns;
+    in property <[GridDefinition]> rows;
+    in property <[GridChild]> items;
+    in property <length> row-spacing;
+    in property <length> column-spacing;
+    in property <length> measure-width: -1px;
+    in property <length> measure-height: -1px;
+
+    out property <[ItemsRepeaterPlacement]> placements: root.arranged.geometry.placements;
+    out property <[GridTrackPlacement]> column-tracks: root.arranged.columns;
+    out property <[GridTrackPlacement]> row-tracks: root.arranged.rows;
+    clip: root.measured.geometry.width > root.content-width || root.measured.geometry.height > root.content-height;
+
+    private property <ItemsRepeaterSize> measure-limit: {
+        width: root.measure-width < 0px ? -1px : max(0px, root.measure-width - max(0px, root.thickness.left)
+            - max(0px, root.thickness.right) - root.content-padding.left - root.content-padding.right),
+        height: root.measure-height < 0px ? -1px : max(0px, root.measure-height - max(0px, root.thickness.top)
+            - max(0px, root.thickness.bottom) - root.content-padding.top - root.content-padding.bottom),
+    };
+    private property <GridLayoutResult> measured: GridBehavior.layout(root.columns, root.rows, root.items, {
+        measure: root.measure-limit,
+        arrange: { width: -1px, height: -1px },
+        row-spacing: root.row-spacing,
+        column-spacing: root.column-spacing,
+    });
+    private property <GridLayoutResult> arranged: GridBehavior.layout(root.columns, root.rows, root.items, {
+        measure: root.measure-limit,
+        arrange: { width: root.content-width, height: root.content-height },
+        row-spacing: root.row-spacing,
+        column-spacing: root.column-spacing,
+        rtl: root.rtl,
+    });
+
+    Rectangle {
+        preferred-width: root.measured.geometry.width;
+        preferred-height: root.measured.geometry.height;
+        horizontal-stretch: 1;
+        vertical-stretch: 1;
+        @children
+    }
+}

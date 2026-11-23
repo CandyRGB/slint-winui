@@ -1,0 +1,138 @@
+import { Button, Palette } from "std-widgets.slint";
+import { TextBox, TextBoxBehavior, TextBoxEdit } from "../../ui/components/text/text_box.slint";
+import { AppBarLabelPosition, CommandBarBehavior, CommandBarEntry, CommandBarItem,
+    CommandBarItemKind, CommandBarLayout, CommandBarOverflowButtonVisibility }
+    from "../../ui/components/menus-toolbars/command_bar.slint";
+import { CommandBarFlyoutKeyScope } from "../../ui/components/menus-toolbars/command_bar_flyout.slint";
+import { FlyoutCloseReason, TextCommand, TextCommandBarFlyout }
+    from "../../ui/components/text/text_command_bar_flyout.slint";
+
+export { TextBoxBehavior, TextBoxEdit, AppBarLabelPosition, CommandBarBehavior, CommandBarEntry,
+    CommandBarItem, CommandBarItemKind, CommandBarLayout, CommandBarOverflowButtonVisibility }
+
+export component TextBoxExample inherits Window {
+    title: "TextBox";
+    min-width: 552px;
+    preferred-width: 640px;
+    min-height: 440px;
+    preferred-height: 536px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI Variable Text";
+    in property <color> accent: #005fb8;
+    private property <bool> narrow;
+    private property <bool> disable;
+    private property <bool> rtl;
+    private property <bool> clipboard-has-text;
+    private property <int> accepted-count;
+    private property <int> edit-count;
+    private property <int> saved-anchor;
+    private property <int> saved-cursor;
+    callback has-clipboard-text() -> bool;
+
+    function save-context-selection() {
+        root.clipboard-has-text = root.has-clipboard-text();
+        root.saved-anchor = simple.selection-anchor;
+        root.saved-cursor = simple.selection-cursor;
+    }
+
+    CommandBarFlyoutKeyScope {
+        width: parent.width;
+        height: parent.height;
+        dismiss-enabled: menu.is-open;
+        dismiss => { menu.dismiss(FlyoutCloseReason.escape); }
+
+        VerticalLayout {
+            x: 24px;
+            y: 20px;
+            width: parent.width - 48px;
+            height: self.preferred-height;
+            spacing: 12px;
+            alignment: start;
+
+            Text { text: "A simple TextBox"; font-size: 16px; font-weight: 600; }
+            simple := TextBox {
+                width: root.narrow ? 64px : min(400px, self.preferred-width);
+                accent: root.accent;
+                enabled: !root.disable;
+                rtl: root.rtl;
+                accessible-name: "Simple TextBox";
+                edited(value) => { root.edit-count += 1; }
+                accepted => { root.accepted-count += 1; }
+                context-requested(anchor) => { root.save-context-selection(); menu.show-context(anchor); }
+                context-requested-at(point) => { self.focus(); root.save-context-selection(); menu.show-context-at(point); }
+            }
+
+            Text { text: "A TextBox with a header and placeholder text"; font-size: 16px; font-weight: 600; }
+            TextBox {
+                width: min(400px, self.preferred-width);
+                enabled: !root.disable;
+                rtl: root.rtl;
+                accent: root.accent;
+                header: "Enter your name:";
+                placeholder-text: "Name";
+                max-length: 24;
+                context-enabled: false;
+            }
+
+            Text { text: "A read-only TextBox with custom formatting"; font-size: 16px; font-weight: 600; }
+            TextBox {
+                width: min(560px, parent.width);
+                accent: root.accent;
+                enabled: !root.disable;
+                accessible-name: "Read-only TextBox";
+                font-family: "Arial";
+                font-size: 24px;
+                font-italic: true;
+                letter-spacing: 4px;
+                foreground: #5178be;
+                text: "I am super excited to be here!";
+                read-only: true;
+                context-enabled: false;
+            }
+
+            Text { text: "A multi-line TextBox"; font-size: 16px; font-weight: 600; }
+            multiline := TextBox {
+                width: 400px;
+                accent: root.accent;
+                enabled: !root.disable;
+                rtl: root.rtl;
+                accessible-name: "Multi-line TextBox";
+                accepts-return: true;
+                text-wrapping: word-wrap;
+                selection-highlight-color: green;
+                max-editor-height: 112px;
+                context-enabled: false;
+            }
+
+            HorizontalLayout {
+                height: 32px;
+                spacing: 8px;
+                alignment: start;
+                Button { text: "Narrow"; checkable: true; checked <=> root.narrow; }
+                Button { text: "Disable fields"; checkable: true; checked <=> root.disable; }
+                Button { text: "RTL"; checkable: true; checked <=> root.rtl; }
+                Button { text: "Fill multiple lines"; clicked => {
+                    multiline.text = "One\nTwo\nThree\nFour\nFive\nSix\nSeven\nEight";
+                    multiline.focus();
+                } }
+            }
+            Text { text: "Edits: \{root.edit-count} · Enter: \{root.accepted-count}"; color: Palette.foreground; }
+        }
+
+        menu := TextCommandBarFlyout {
+            width: parent.width;
+            height: parent.height;
+            can-paste: root.clipboard-has-text;
+            has-text: simple.text != "";
+            has-selection: root.saved-anchor != root.saved-cursor;
+            invoked(command) => {
+                simple.set-selection-offsets(root.saved-anchor, root.saved-cursor);
+                if command == TextCommand.cut { simple.cut(); }
+                else if command == TextCommand.copy { simple.copy(); }
+                else if command == TextCommand.paste { simple.paste(); }
+                else if command == TextCommand.select-all { simple.select-all(); }
+            }
+            restore-focus => { simple.focus(); }
+        }
+    }
+}

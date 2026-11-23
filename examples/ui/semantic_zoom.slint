@@ -1,0 +1,323 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { ButtonInput, ButtonFocusVisual } from "../../ui/components/basic-input/button_input.slint";
+import { SemanticZoom, SemanticZoomLocation, SemanticZoomReason } from "../../ui/components/scrolling/semantic_zoom.slint";
+
+export struct SemanticZoomSampleItem { key: string, title: string, subtitle: string }
+export struct SemanticZoomSampleGroup { key: string, title: string, items: [SemanticZoomSampleItem] }
+export struct SemanticZoomSampleCell {
+    key: string, group-key: string, title: string, subtitle: string,
+    x: length, y: length, width: length, height: length, header: bool,
+}
+export struct SemanticZoomSampleLayout { cells: [SemanticZoomSampleCell], height: length }
+
+export global SemanticZoomSampleBehavior {
+    pure callback arrange([SemanticZoomSampleGroup], length, bool) -> SemanticZoomSampleLayout;
+    pure callback find-cell([SemanticZoomSampleCell], string) -> int;
+    pure callback find-group([SemanticZoomSampleGroup], string) -> int;
+    pure callback hit-cell([SemanticZoomSampleCell], length, length) -> int;
+    pure callback move-detail([SemanticZoomSampleCell], string, int) -> int;
+}
+
+component SemanticZoomSampleEntry inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> heading;
+    in property <bool> rtl;
+    in property <bool> tab-stop;
+    in property <bool> can-invoke: true;
+    callback invoked();
+    callback focused();
+    callback hovered();
+    callback navigate(KeyEvent) -> EventResult;
+    forward-focus: input;
+    border-radius: 4px;
+    background: input.pressed ? #00000006 : input.has-hover ? #00000009 : transparent;
+    accessible-role: list-item;
+    accessible-label: root.title;
+    accessible-description: root.subtitle;
+    accessible-action-default => {
+        input.focus();
+        if root.can-invoke { root.invoked(); }
+    }
+
+    VerticalLayout {
+        x: 12px;
+        width: max(0px, parent.width - 24px);
+        height: parent.height;
+        padding-top: root.heading ? 8px : 6px;
+        alignment: start;
+        Text {
+            text: root.title;
+            font-family: "Segoe UI";
+            font-size: root.heading ? 20px : 14px;
+            font-weight: 600;
+            horizontal-alignment: root.rtl ? right : left;
+            color: #1b1b1b;
+            accessible-role: none;
+        }
+        if !root.heading: Text {
+            text: root.subtitle;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            wrap: word-wrap;
+            horizontal-alignment: root.rtl ? right : left;
+            color: #1b1b1b;
+            accessible-role: none;
+        }
+    }
+    input := ButtonInput {
+        tab-stop: root.tab-stop;
+        accepts-return: root.can-invoke;
+        accepts-space: root.can-invoke;
+        clicked => { if root.can-invoke { root.invoked(); } }
+        changed has-focus => { if self.has-focus { root.focused(); } }
+        changed has-hover => { if self.has-hover { root.hovered(); } }
+        unhandled-key-pressed(event) => { return root.navigate(event); }
+    }
+    if input.keyboard-focused: ButtonFocusVisual {
+        control-width: parent.width;
+        control-height: parent.height;
+        horizontal-margin: 0px;
+        vertical-margin: 0px;
+    }
+}
+
+export component SemanticZoomExample inherits Window {
+    title: "SemanticZoom";
+    background: #f3f3f3;
+    min-width: 760px;
+    preferred-height: 620px;
+    default-font-family: "Segoe UI";
+
+    in property <[SemanticZoomSampleGroup]> groups;
+    private property <bool> gestures;
+    private property <bool> show-zoom-button;
+    private property <bool> locked;
+    private property <bool> rtl;
+    private property <bool> narrow;
+    private property <int> started;
+    private property <int> completed;
+    private property <string> reason;
+    private property <string> destination;
+    private property <SemanticZoomLocation> last-detail;
+    private property <string> detail-key;
+    private property <string> overview-key;
+    private property <int> detail-focus-ticket;
+    private property <int> overview-focus-ticket;
+    private property <SemanticZoomSampleLayout> detail-layout: SemanticZoomSampleBehavior.arrange(root.groups, zoom.width, root.rtl);
+    private property <int> detail-index: SemanticZoomSampleBehavior.find-cell(root.detail-layout.cells, root.detail-key);
+    private property <int> overview-index: SemanticZoomSampleBehavior.find-group(root.groups, root.overview-key);
+
+    changed detail-layout => { if zoom.zoomed-in-active { root.reveal-detail(root.detail-index, false); } }
+
+    pure function cell-location(index: int) -> SemanticZoomLocation {
+        return index >= 0 && index < root.detail-layout.cells.length
+            ? { item-key: root.detail-layout.cells[index].key, group-key: root.detail-layout.cells[index].group-key }
+            : {};
+    }
+
+    pure function overview-location(index: int) -> SemanticZoomLocation {
+        let key = index >= 0 && index < root.groups.length ? root.groups[index].key : "";
+        return { item-key: key, group-key: key };
+    }
+
+    pure function first-item(group-key: string) -> SemanticZoomLocation {
+        let found = SemanticZoomSampleBehavior.find-group(root.groups, group-key);
+        if found < 0 { return root.cell-location(0); }
+        let group = root.groups[found];
+        return { item-key: group.items.length > 0 ? group.items[0].key : group.key, group-key: group.key };
+    }
+
+    function reveal-detail(index: int, align-group: bool) {
+        if index < 0 || index >= root.detail-layout.cells.length { return; }
+        let cell = root.detail-layout.cells[index];
+        let start = -detail-view.content-y;
+        let limit = max(0px, detail-view.content-height - detail-view.height);
+        root.detail-key = cell.key;
+        if align-group {
+            let group = SemanticZoomSampleBehavior.find-cell(root.detail-layout.cells, cell.group-key);
+            detail-view.content-y = -clamp(group < 0 ? cell.y : root.detail-layout.cells[group].y, 0px, limit);
+        } else if cell.y < start || cell.y + cell.height > start + detail-view.height {
+            detail-view.content-y = -clamp(cell.y < start ? cell.y : cell.y + cell.height - detail-view.height, 0px, limit);
+        }
+    }
+
+    function reveal-overview(index: int) {
+        if index < 0 || index >= root.groups.length { return; }
+        root.overview-key = root.groups[index].key;
+        let top = index * 40px;
+        let start = -overview.content-y;
+        if top < start || top + 40px > start + overview.height {
+            overview.content-y = -clamp(top < start ? top : top + 40px - overview.height,
+                0px, max(0px, overview.content-height - overview.height));
+        }
+    }
+
+    HorizontalLayout {
+        x: 24px; y: 16px;
+        width: parent.width - 48px;
+        height: 32px;
+        spacing: 8px;
+        alignment: start;
+        Button { text: "Toggle view"; clicked => { zoom.is-zoomed-in-view-active = !zoom.zoomed-in-active; } }
+        Button { text: "Gestures"; clicked => { root.gestures = !root.gestures; } }
+        Button {
+            text: "Show zoom button";
+            clicked => {
+                root.show-zoom-button = !root.show-zoom-button;
+                zoom.notify-pointer-moved();
+            }
+        }
+        Button { text: "Lock views"; clicked => { root.locked = !root.locked; } }
+        Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+        Button { text: "Narrow"; clicked => { root.narrow = !root.narrow; } }
+    }
+
+    zoom := SemanticZoom {
+        x: 24px; y: 68px;
+        width: root.narrow ? 356px : 656px;
+        height: 500px;
+        rtl: root.rtl;
+        can-change-views: !root.locked;
+        is-zoom-out-button-enabled: root.show-zoom-button;
+        zoom-gestures-enabled: root.gestures;
+
+        zoomed-in-location: root.detail-index >= 0 ? root.cell-location(root.detail-index)
+            : root.cell-location(SemanticZoomSampleBehavior.hit-cell(root.detail-layout.cells, 12px, -detail-view.content-y));
+        zoomed-out-location: root.overview-location(root.overview-index >= 0 ? root.overview-index : floor(-overview.content-y / 40px));
+
+        location-at(in-detail, point) => {
+            return in-detail ? root.cell-location(SemanticZoomSampleBehavior.hit-cell(root.detail-layout.cells, point.x, point.y - detail-view.content-y))
+                : root.overview-location(floor((point.y - overview.content-y) / 40px));
+        }
+
+        map-destination(to-detail, source, reason) => {
+            if to-detail {
+                if reason != SemanticZoomReason.item && root.last-detail.group-key == source.group-key {
+                    let previous = SemanticZoomSampleBehavior.find-cell(root.detail-layout.cells, root.last-detail.item-key);
+                    if previous >= 0 && !root.detail-layout.cells[previous].header { return root.last-detail; }
+                }
+                return root.first-item(source.group-key);
+            }
+            let group = SemanticZoomSampleBehavior.find-group(root.groups, source.group-key);
+            return root.overview-location(max(0, group));
+        }
+
+        view-change-started(change) => {
+            root.started += 1;
+            if change.source-is-zoomed-in { root.last-detail = change.source; }
+        }
+
+        focus-destination(change) => {
+            if change.source-is-zoomed-in {
+                root.reveal-overview(SemanticZoomSampleBehavior.find-group(root.groups, change.destination.group-key));
+                root.overview-focus-ticket += 1;
+            } else {
+                root.reveal-detail(SemanticZoomSampleBehavior.find-cell(root.detail-layout.cells, change.destination.item-key),
+                    change.reason == SemanticZoomReason.item || change.destination.group-key != root.last-detail.group-key);
+                root.detail-focus-ticket += 1;
+            }
+        }
+
+        view-change-completed(change) => {
+            root.completed += 1;
+            root.destination = change.destination.group-key;
+            root.reason = change.reason == SemanticZoomReason.keyboard ? "keyboard"
+                : change.reason == SemanticZoomReason.wheel ? "wheel"
+                : change.reason == SemanticZoomReason.pinch ? "pinch"
+                : change.reason == SemanticZoomReason.button ? "button"
+                : change.reason == SemanticZoomReason.item ? "item" : "programmatic";
+        }
+
+        zoomed-in-view << detail-view := Flickable {
+            width: parent.width;
+            height: parent.height;
+            content-width: self.width;
+            content-height: max(self.height, root.detail-layout.height);
+            accessible-role: list;
+            accessible-label: "Detailed view";
+
+            TouchArea {
+                y: -detail-view.content-y;
+                width: detail-view.width;
+                height: detail-view.height;
+                scroll-event(event) => { return zoom.handle-wheel(event, { x: self.mouse-x, y: self.mouse-y }); }
+            }
+
+            for cell[index] in root.detail-layout.cells: SemanticZoomSampleEntry {
+                x: cell.x; y: cell.y;
+                width: cell.width;
+                height: cell.header ? cell.height - 4px : cell.height;
+                title: cell.title;
+                subtitle: cell.subtitle;
+                heading: cell.header;
+                can-invoke: cell.header;
+                rtl: root.rtl;
+                tab-stop: zoom.zoomed-in-active && index == (root.detail-index >= 0 ? root.detail-index : 1);
+                private property <int> focus-ticket: root.detail-focus-ticket;
+                changed focus-ticket => { if root.detail-key == cell.key && zoom.zoomed-in-active { self.focus(); } }
+                focused => { root.reveal-detail(index, false); }
+                hovered => { zoom.notify-pointer-moved(); }
+                invoked => { zoom.activate-item(root.cell-location(index)); }
+                navigate(event) => {
+                    let direction = event.text == Key.LeftArrow ? 0 : event.text == Key.RightArrow ? 1
+                        : event.text == Key.UpArrow ? 2 : event.text == Key.DownArrow ? 3 : -1;
+                    if direction < 0 { return reject; }
+                    let next = SemanticZoomSampleBehavior.move-detail(root.detail-layout.cells, cell.key, direction);
+                    if next >= 0 {
+                        root.reveal-detail(next, false);
+                        root.detail-focus-ticket += 1;
+                    }
+                    return accept;
+                }
+            }
+        }
+
+        zoomed-out-view << overview := Flickable {
+            width: parent.width;
+            height: parent.height;
+            content-width: self.width;
+            content-height: max(self.height, root.groups.length * 40px);
+            accessible-role: list;
+            accessible-label: "Overview";
+
+            TouchArea {
+                y: -overview.content-y;
+                width: overview.width;
+                height: overview.height;
+                scroll-event(event) => { return zoom.handle-wheel(event, { x: self.mouse-x, y: self.mouse-y }); }
+            }
+
+            for group[index] in root.groups: SemanticZoomSampleEntry {
+                x: 0px; y: index * 40px;
+                width: parent.width;
+                height: 40px;
+                title: group.title;
+                heading: true;
+                rtl: root.rtl;
+                tab-stop: !zoom.zoomed-in-active && index == max(0, root.overview-index);
+                private property <int> focus-ticket: root.overview-focus-ticket;
+                changed focus-ticket => { if root.overview-key == group.key && !zoom.zoomed-in-active { self.focus(); } }
+                focused => { root.reveal-overview(index); }
+                invoked => { zoom.activate-item(root.overview-location(index)); }
+                navigate(event) => {
+                    let next = event.text == Key.UpArrow ? max(0, index - 1)
+                        : event.text == Key.DownArrow ? min(root.groups.length - 1, index + 1) : -1;
+                    if next < 0 { return reject; }
+                    root.reveal-overview(next);
+                    root.overview-focus-ticket += 1;
+                    return accept;
+                }
+            }
+        }
+    }
+
+    Text {
+        x: 24px; y: 592px;
+        text: (zoom.zoomed-in-active ? "Details" : "Overview")
+            + " · \{root.destination} · Started \{root.started} · Completed \{root.completed} · \{root.reason}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+}

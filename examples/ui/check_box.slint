@@ -1,0 +1,86 @@
+import { Button, CheckBox as SlintCheckBox, Palette } from "std-widgets.slint";
+import { CheckBox, ToggleButtonState } from "../../ui/components/basic-input/check_box.slint";
+
+export component CheckBoxExample inherits Window {
+    title: "WinUI CheckBox";
+    preferred-width: 580px;
+    preferred-height: 320px;
+    background: #f3f3f3;
+    in property <color> accent: Palette.accent-background;
+    private property <string> last-event: "Unchecked";
+    private property <int> click-count;
+    private property <ToggleButtonState> group-state: first.check-state == second.check-state
+        ? first.check-state : ToggleButtonState.indeterminate;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+    changed group-state => { all.check-state = root.group-state; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 10px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            disabled := SlintCheckBox { text: "Disable checkboxes"; }
+            rtl := SlintCheckBox { text: "RTL"; }
+            motion := SlintCheckBox { text: "Animate"; checked: true; }
+            Button { text: "Set two-state to mixed"; clicked => { two.check-state = ToggleButtonState.indeterminate; } }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            two := CheckBox {
+                text: "Two-state CheckBox";
+                enabled: !disabled.checked;
+                rtl: rtl.checked;
+                accent: root.accent;
+                animations-enabled: motion.checked;
+                checked => { root.last-event = "Checked"; }
+                unchecked => { root.last-event = "Unchecked"; }
+                indeterminate => { root.last-event = "Indeterminate"; }
+                clicked => { root.click-count += 1; root.last-event += " → Click"; }
+            }
+            CheckBox {
+                text: "Three-state CheckBox";
+                is-three-state: true;
+                accent: root.accent;
+                enabled: !disabled.checked;
+                rtl: rtl.checked;
+                animations-enabled: motion.checked;
+            }
+        }
+        Text { text: "\{root.last-event} · Clicks \{root.click-count}"; color: Palette.foreground; }
+
+        HorizontalLayout {
+            alignment: start;
+            all := CheckBox {
+                text: "Select all";
+                check-state: root.group-state;
+                is-three-state: true;
+                enabled: !disabled.checked;
+                accent: root.accent;
+                clicked => {
+                    let next = self.check-state == ToggleButtonState.checked
+                        ? ToggleButtonState.checked : ToggleButtonState.unchecked;
+                    self.check-state = next;
+                    first.check-state = next;
+                    second.check-state = next;
+                }
+            }
+        }
+        HorizontalLayout {
+            padding-left: 24px;
+            alignment: start;
+            spacing: 12px;
+            first := CheckBox { text: "Option 1"; accent: root.accent; enabled: !disabled.checked; }
+            second := CheckBox {
+                text: "Option 2";
+                check-state: ToggleButtonState.checked;
+                accent: root.accent;
+                enabled: !disabled.checked;
+            }
+        }
+    }
+}

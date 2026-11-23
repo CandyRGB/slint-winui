@@ -1,0 +1,329 @@
+import { Button, Palette, ScrollView } from "std-widgets.slint";
+import { FlyoutRect } from "flyout_layout.slint";
+export { FlyoutRect }
+
+export enum TeachingTipPlacement { auto, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right, left-top, left-bottom, right-top, right-bottom, center }
+export enum TeachingTipSide { top, bottom, left, right }
+export enum TeachingTipTailVisibility { auto, visible, collapsed }
+export enum TeachingTipHeroPlacement { auto, top, bottom }
+export enum TeachingTipCloseReason { programmatic, close-button, light-dismiss, escape }
+
+export struct TeachingTipMargins { top: length, right: length, bottom: length, left: length }
+export struct TeachingTipPlacementInput {
+    preferred: TeachingTipPlacement, targeted: bool, show-tail: bool, rtl: bool,
+    target: FlyoutRect, window-width: length, window-height: length, width: length, height: length,
+    top: length, right: length, bottom: length, left: length,
+}
+export struct TeachingTipGeometry {
+    x: length, y: length, tail-center: length, fits: bool, side: TeachingTipSide, hero-on-bottom: bool,
+}
+
+export global TeachingTipLayout {
+    in-out property <bool> ready;
+    pure callback place(TeachingTipPlacementInput) -> TeachingTipGeometry;
+}
+
+export component TeachingTip inherits FocusScope {
+    slot hero;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <image> icon-source;
+    in property <string> action-button-content;
+    in property <string> close-button-content;
+    in property <bool> action-enabled: true;
+    in property <bool> is-light-dismiss-enabled;
+    in property <bool> targeted;
+    in property <FlyoutRect> target;
+    in property <TeachingTipPlacement> preferred-placement;
+    in property <TeachingTipMargins> placement-margin;
+    in property <TeachingTipTailVisibility> tail-visibility;
+    in property <TeachingTipHeroPlacement> hero-placement;
+    in property <bool> rtl;
+    in property <string> accessible-name: root.title == "" ? @tr("Teaching tip") : root.title;
+    out property <bool> is-open;
+    out property <TeachingTipSide> effective-side: root.geometry.side;
+
+    callback opened();
+    callback closing(TeachingTipCloseReason) -> bool;
+    callback closed(TeachingTipCloseReason);
+    callback action-button-click();
+    callback close-button-click();
+    callback restore-focus();
+
+    private property <bool> changing;
+    private property <bool> raising-closing;
+    private property <bool> deferred;
+    private property <TeachingTipCloseReason> pending-reason;
+    private property <bool> focus-inside;
+    private property <bool> buttons-focused: action.has-focus || close.has-focus || dismiss-icon.has-focus || fallback.has-focus;
+    private property <bool> header-close: root.close-button-content == "" && !root.is-light-dismiss-enabled;
+    private property <bool> footer-buttons: root.close-button-content != "" || root.action-button-content != "";
+    private property <bool> two-buttons: root.action-button-content != "" && root.close-button-content != "";
+    private property <bool> show-tail: root.targeted && root.tail-visibility != TeachingTipTailVisibility.collapsed;
+    private property <bool> hero-bottom: root.hero-placement == TeachingTipHeroPlacement.bottom
+        || (root.hero-placement == TeachingTipHeroPlacement.auto && root.geometry.hero-on-bottom);
+    private property <length> body-width: min(312px, max(0px, floor(root.width / 2px) * 2px));
+    private property <length> content-width: max(0px, root.body-width - 24px);
+    private property <length> hero-height: min(hero-panel.preferred-height, max(0px, root.height - 56px));
+    private property <length> scroll-height: clamp(round(contents.preferred-height / 2px) * 2px, 40px, 504px);
+    private property <length> body-height: min(max(0px, floor(root.height / 2px) * 2px), root.scroll-height + root.hero-height);
+    private property <brush> surface: Palette.color-scheme == ColorScheme.dark ? #2c2c2c
+        : root.is-light-dismiss-enabled ? #fcfcfc : #f9f9f9;
+    private property <brush> outline: Palette.foreground.with-alpha(0.08);
+    private property <TeachingTipGeometry> geometry: TeachingTipLayout.ready ? TeachingTipLayout.place({
+        preferred: root.preferred-placement, targeted: root.targeted, show-tail: root.show-tail,
+        rtl: root.rtl, target: root.target, window-width: root.width, window-height: root.height,
+        width: root.body-width, height: root.body-height,
+        top: root.placement-margin.top, right: root.placement-margin.right,
+        bottom: root.placement-margin.bottom, left: root.placement-margin.left,
+    }) : {};
+
+    focus-on-click: false;
+    focus-on-tab-navigation: false;
+
+    public function show() {
+        if (!root.is-open && !root.changing && TeachingTipLayout.ready) {
+            root.changing = true;
+            if (!root.geometry.fits) {
+                root.closing(TeachingTipCloseReason.programmatic);
+                root.changing = false;
+                root.closed(TeachingTipCloseReason.programmatic);
+                return;
+            }
+            scroll.content-y = 0px;
+            root.is-open = true;
+            root.changing = false;
+            if (root.is-light-dismiss-enabled) { root.focus-tip(); }
+            root.opened();
+        }
+    }
+
+    public function hide() { root.dismiss(TeachingTipCloseReason.programmatic); }
+
+    // The host may defer from closing(), then resolve this request exactly once.
+    public function defer-close() { if (root.raising-closing) { root.deferred = true; } }
+
+    public function complete-close(cancel: bool) {
+        if (root.deferred && !root.raising-closing) { root.finish-close(cancel); }
+    }
+
+    public function toggle-keyboard-focus() -> bool {
+        if (!root.is-open) { return false; }
+        if (root.focus-inside || root.buttons-focused) {
+            root.focus-inside = false;
+            root.restore-focus();
+        } else { root.focus-tip(); }
+        return true;
+    }
+
+    function focus-tip() {
+        root.focus-inside = true;
+        if (root.action-button-content != "" && root.action-enabled) { action.focus(); }
+        else if (root.close-button-content != "") { close.focus(); }
+        else if (root.header-close) { dismiss-icon.focus(); }
+        else { fallback.focus(); }
+    }
+
+    function request-close() {
+        if (root.is-open && !root.changing) {
+            root.close-button-click();
+            root.dismiss(TeachingTipCloseReason.close-button);
+        }
+    }
+
+    function dismiss(reason: TeachingTipCloseReason) {
+        if (!root.is-open || root.changing) { return; }
+        root.changing = true;
+        root.pending-reason = reason;
+        root.raising-closing = true;
+        let cancel = root.closing(reason);
+        root.raising-closing = false;
+        if (cancel || !root.deferred) { root.finish-close(cancel); }
+    }
+
+    function finish-close(cancel: bool) {
+        root.deferred = false;
+        root.changing = false;
+        if (cancel) { return; }
+        let reason = root.pending-reason;
+        let restore = root.focus-inside || root.buttons-focused;
+        root.is-open = false;
+        root.focus-inside = false;
+        if (restore) { root.restore-focus(); }
+        root.closed(reason);
+    }
+
+    changed geometry => {
+        if (root.is-open && !root.geometry.fits) { root.hide(); }
+    }
+
+    key-pressed(event) => {
+        if (root.is-open && event.text == Key.F6 && root.toggle-keyboard-focus()) { return accept; }
+        if (root.is-open && event.text == Key.Escape) {
+            root.dismiss(TeachingTipCloseReason.escape);
+            return accept;
+        }
+        return reject;
+    }
+
+    if root.is-open && root.is-light-dismiss-enabled : TouchArea {
+        clicked => { root.dismiss(TeachingTipCloseReason.light-dismiss); }
+    }
+
+    bubble := Rectangle {
+        visible: root.is-open && root.geometry.fits;
+        x: root.geometry.x;
+        y: root.geometry.y;
+        width: root.body-width;
+        height: root.body-height;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: root.outline;
+        background: root.surface;
+        drop-shadow-blur: 16px;
+        drop-shadow-offset-y: 8px;
+        drop-shadow-color: #00000030;
+
+        if root.is-open : Rectangle {
+            accessible-role: region;
+            accessible-label: root.accessible-name;
+            accessible-description: root.subtitle;
+        }
+
+        if root.show-tail : Path {
+            property <bool> vertical: root.geometry.side == TeachingTipSide.top || root.geometry.side == TeachingTipSide.bottom;
+            width: self.vertical ? 20px : 10px;
+            height: self.vertical ? 10px : 20px;
+            x: self.vertical ? root.geometry.tail-center - 10px
+                : root.geometry.side == TeachingTipSide.left ? bubble.width - 1px : -9px;
+            y: !self.vertical ? root.geometry.tail-center - 10px
+                : root.geometry.side == TeachingTipSide.top ? bubble.height - 1px : -9px;
+            viewbox-width: self.width / 1px;
+            viewbox-height: self.height / 1px;
+            fill: root.surface;
+            stroke: root.outline;
+            stroke-width: 1px;
+            commands: root.geometry.side == TeachingTipSide.top ? "M 0 0 L 10 9 L 20 0"
+                : root.geometry.side == TeachingTipSide.bottom ? "M 0 10 L 10 1 L 20 10"
+                : root.geometry.side == TeachingTipSide.left ? "M 0 0 L 9 10 L 0 20"
+                : "M 10 0 L 1 10 L 10 20";
+        }
+
+        TouchArea {
+            enabled: root.is-open;
+            clicked => { root.focus-inside = true; fallback.focus(); }
+        }
+        fallback := FocusScope {
+            enabled: root.is-open;
+            width: 0px;
+            height: 0px;
+            focus-on-click: false;
+            focus-on-tab-navigation: false;
+        }
+
+        hero-panel := VerticalLayout {
+            y: root.hero-bottom ? bubble.height - root.hero-height : 0px;
+            width: bubble.width;
+            height: min(root.hero-height, bubble.height);
+            vertical-stretch: 0;
+            hero {}
+        }
+
+        scroll := ScrollView {
+            y: root.hero-bottom ? 0px : root.hero-height;
+            width: bubble.width;
+            height: max(0px, bubble.height - root.hero-height);
+            horizontal-scrollbar-policy: always-off;
+            content-height: contents.preferred-height;
+            content-width: self.visible-width;
+
+            contents := VerticalLayout {
+                width: parent.width;
+                padding: 12px;
+                alignment: start;
+
+                clips := Rectangle {
+                    private property <length> leading: root.icon-source.width > 0 ? 28px : 0px;
+                    private property <length> trailing: root.header-close ? 28px : 0px;
+                    min-height: max(captions.preferred-height, root.header-close ? 16px : leading > 0px ? 16px : 0px);
+                    preferred-height: self.min-height;
+                    if root.icon-source.width > 0 : Image {
+                        x: root.rtl ? parent.width - self.width : 0px;
+                        y: 0px;
+                        width: 16px;
+                        height: 16px;
+                        source: root.icon-source;
+                        colorize: Palette.foreground;
+                        accessible-role: none;
+                    }
+                    captions := VerticalLayout {
+                        x: root.rtl ? clips.trailing : clips.leading;
+                        width: max(0px, root.content-width - clips.leading - clips.trailing);
+                        alignment: start;
+                        if root.title != "" : Text {
+                            text: root.title;
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: Palette.foreground;
+                            wrap: word-wrap;
+                            horizontal-alignment: root.rtl ? right : left;
+                            accessible-role: none;
+                        }
+                        if root.subtitle != "" : Text {
+                            text: root.subtitle;
+                            font-size: 14px;
+                            color: Palette.foreground;
+                            wrap: word-wrap;
+                            horizontal-alignment: root.rtl ? right : left;
+                            accessible-role: none;
+                        }
+                    }
+                }
+
+                extra := VerticalLayout {
+                    padding-top: extra-body.preferred-height > 0px ? 12px : 0px;
+                    extra-body := VerticalLayout { @children }
+                }
+
+                if root.footer-buttons : Rectangle { height: 12px; }
+                Rectangle {
+                    height: root.footer-buttons ? 32px : 0px;
+                    private property <length> column: max(0px, round((self.width - 8px) / 4px) * 2px);
+                    action := Button {
+                        text: root.action-button-content;
+                        visible: root.action-button-content != "" && root.is-open;
+                        enabled: root.action-enabled && self.visible;
+                        x: root.rtl ? parent.width - self.width : 0px;
+                        width: root.two-buttons ? parent.column : parent.width;
+                        height: parent.height;
+                        min-width: 0px;
+                        clicked => { root.focus-inside = true; root.action-button-click(); }
+                    }
+                    close := Button {
+                        text: root.close-button-content;
+                        visible: root.close-button-content != "" && root.is-open;
+                        enabled: self.visible;
+                        x: root.two-buttons && !root.rtl ? parent.column + 8px : 0px;
+                        width: root.two-buttons ? max(0px, parent.width - parent.column - 8px) : parent.width;
+                        height: parent.height;
+                        min-width: 0px;
+                        clicked => { root.request-close(); }
+                    }
+                }
+            }
+        }
+
+        dismiss-icon := Button {
+            x: root.rtl ? 0px : bubble.width - self.width;
+            y: root.hero-bottom ? 0px : root.hero-height;
+            width: 40px;
+            height: 40px;
+            icon: @image-url("../../icons/dismiss_16_regular.svg");
+            visible: root.header-close && root.is-open;
+            enabled: self.visible;
+            accessible-label: @tr("Close");
+            colorize-icon: true;
+            clicked => { root.request-close(); }
+        }
+    }
+}

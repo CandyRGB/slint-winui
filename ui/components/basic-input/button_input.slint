@@ -1,0 +1,154 @@
+import { Palette } from "std-widgets.slint";
+
+export enum ButtonClickMode { release, press, hover }
+
+export component ButtonInput inherits Rectangle {
+    in property <bool> enabled: true;
+    in property <bool> accepts-return: true;
+    in property <bool> accepts-space: true;
+    in property <bool> tab-stop: true;
+    in property <ButtonClickMode> click-mode: ButtonClickMode.release;
+    out property <bool> has-focus: keyboard.has-focus;
+    out property <bool> keyboard-focused: root.has-focus && !root.pointer-focus;
+    out property <bool> has-hover: pointer.has-hover && root.enabled
+        && pointer.mouse-x >= 0px && pointer.mouse-x < root.width
+        && pointer.mouse-y >= 0px && pointer.mouse-y < root.height;
+    out property <bool> pointer-held: root.pointer-armed && pointer.pressed;
+    out property <bool> space-held: root.held-key == Key.Space;
+    out property <bool> pressed: root.click-mode == ButtonClickMode.hover ? root.has-hover
+        : (root.pointer-held && root.has-hover) || root.held-key != "";
+    callback clicked();
+    callback unhandled-key-pressed(KeyEvent) -> EventResult;
+
+    private property <bool> pointer-focus;
+    private property <bool> pointer-armed;
+    private property <int> pressed-finger;
+    private property <bool> released-inside;
+    private property <string> held-key;
+
+    forward-focus: keyboard;
+
+    changed has-focus => {
+        if !root.has-focus {
+            root.pointer-focus = false;
+            root.pointer-armed = false;
+            root.held-key = "";
+        }
+    }
+    changed enabled => {
+        if !root.enabled {
+            root.pointer-armed = false;
+            root.held-key = "";
+        }
+    }
+    changed click-mode => {
+        root.pointer-armed = false;
+        root.held-key = "";
+    }
+    changed has-hover => {
+        if root.has-hover && root.click-mode == ButtonClickMode.hover {
+            root.clicked();
+        }
+    }
+
+    pointer := TouchArea {
+        enabled: root.enabled;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left
+                && root.click-mode != ButtonClickMode.hover {
+                root.held-key = "";
+                root.pointer-focus = true;
+                root.pointer-armed = true;
+                root.pressed-finger = event.touch-finger-id;
+                root.released-inside = false;
+                keyboard.focus();
+                if root.click-mode == ButtonClickMode.press {
+                    root.clicked();
+                }
+            }
+            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                let activate = root.released-inside && root.pointer-armed
+                    && root.pressed-finger == event.touch-finger-id && root.click-mode == ButtonClickMode.release;
+                root.pointer-armed = false;
+                root.released-inside = false;
+                if activate { root.clicked(); }
+            } else if event.kind == PointerEventKind.cancel {
+                root.pointer-armed = false;
+                root.released-inside = false;
+            }
+        }
+        // TouchArea reports the hit before delivering the release's finger ID.
+        clicked => { root.released-inside = true; }
+    }
+
+    keyboard := FocusScope {
+        x: 0px;
+        width: 0px;
+        enabled: root.enabled;
+        focus-on-tab-navigation: root.tab-stop;
+
+        key-pressed(event) => {
+            if root.click-mode == ButtonClickMode.hover {
+                return reject;
+            }
+            if (root.accepts-space && event.text == Key.Space) || (root.accepts-return && event.text == Key.Return) {
+                root.pointer-focus = false;
+                if root.held-key == "" && !pointer.pressed {
+                    root.held-key = event.text;
+                    if root.click-mode == ButtonClickMode.press {
+                        root.clicked();
+                    }
+                }
+                return accept;
+            }
+            if event.text == Key.Escape && root.held-key != "" {
+                root.held-key = "";
+                return accept;
+            }
+            let result = root.unhandled-key-pressed(event);
+            if result == accept {
+                root.pointer-focus = false;
+                root.pointer-armed = false;
+                root.held-key = "";
+            }
+            return result;
+        }
+        key-released(event) => {
+            if root.held-key != "" && event.text == root.held-key {
+                root.held-key = "";
+                if root.click-mode == ButtonClickMode.release {
+                    root.clicked();
+                }
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component ButtonFocusVisual inherits Rectangle {
+    in property <length> control-width;
+    in property <length> control-height;
+    in property <length> control-radius: 4px;
+    in property <length> horizontal-margin: 4px;
+    in property <length> vertical-margin: 4px;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    x: -root.horizontal-margin;
+    y: -root.vertical-margin;
+    width: root.control-width + 2 * root.horizontal-margin;
+    height: root.control-height + 2 * root.vertical-margin;
+    border-width: 2px;
+    border-radius: root.control-radius + 2px;
+    border-color: root.dark ? white : #000000e4;
+
+    Rectangle {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        border-width: 1px;
+        border-radius: root.control-radius;
+        border-color: root.dark ? #000000b3 : white;
+    }
+}

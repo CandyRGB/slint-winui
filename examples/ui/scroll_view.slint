@@ -1,0 +1,347 @@
+import { Button, CheckBox, ComboBox } from "std-widgets.slint";
+import { ScrollView, ScrollViewer, ScrollMode, ScrollBarVisibility, ScrollViewMotion }
+    from "../../ui/components/scrolling/scroll_view.slint";
+import { ScrollSnapAlignment } from "../../ui/components/scrolling/scroll_snap.slint";
+import { ScrollAnchorCandidate } from "../../ui/components/scrolling/scroll_anchor.slint";
+import { ScrollControllerResult } from "../../ui/components/scrolling/scroll_controller.slint";
+
+export struct ScrollPhoto { name: string, image: image, height: length }
+export struct ScrollPhotoStrip { photos: [ScrollPhoto], height: length }
+
+export component ScrollViewExample inherits Window {
+    title: "ScrollView and ScrollViewer";
+    preferred-width: 892px;
+    preferred-height: 578px;
+    min-width: 872px;
+    min-height: 556px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+    in property <image> cliff;
+    in property <bool> transform-content: true;
+    in property <ScrollPhotoStrip> animation-strip;
+    in property <ScrollPhotoStrip> velocity-strip;
+    private property <bool> photo: sample.current-index == 0;
+    private property <bool> nested: sample.current-index == 3;
+    private property <bool> snap-sample: sample.current-index == 4;
+    private property <bool> anchor-sample: sample.current-index == 5;
+    private property <bool> controller-sample: sample.current-index == 6;
+    private property <bool> marked-sample: root.snap-sample || root.controller-sample;
+    private property <int> last-controller-request: -1;
+    private property <string> controller-result;
+    private property <length> anchor-prefix: prepend.checked ? 64px : 0px;
+    private property <[ScrollAnchorCandidate]> anchor-rows: [
+        root.anchor-row(0), root.anchor-row(1), root.anchor-row(2),
+        root.anchor-row(3), root.anchor-row(4), root.anchor-row(5),
+    ];
+    private property <[length]> snap-marks: [0px, 96px, 236px, 430px, 520px, 600px, 680px, 760px, 900px];
+    private property <ScrollPhotoStrip> active-strip: sample.current-index == 2 ? root.velocity-strip : root.animation-strip;
+    private property <int> completions;
+    private property <length> nested-offset;
+
+    pure function anchor-row(index: int) -> ScrollAnchorCandidate {
+        return { id: "Row " + (index + 1), y: root.anchor-prefix + index * 96px, width: 400px, height: 96px };
+    }
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            VerticalLayout {
+                alignment: start;
+                spacing: 8px;
+                Text { text: "ScrollView"; font-size: 28px; }
+                sample := ComboBox {
+                    accessible-label: "Sample";
+                    model: ["Content image", "Animated scrolling", "Constant velocity", "Nested scrolling",
+                        "Snap points", "Scroll anchoring", "External controller"];
+                    current-index: 0;
+                    selected(_) => {
+                        root.nested-offset = 0px;
+                        modern.set-view(0px, 0px, 1);
+                    }
+                }
+                modern := ScrollView {
+                    width: 400px;
+                    height: root.photo ? 266px : root.anchor-sample && short-view.checked ? 240px : 300px;
+                    label: "Gallery ScrollView";
+                    is-tab-stop: true;
+                    rtl: mirror.checked;
+                    auto-hide-scroll-bars: !persist.checked;
+                    zoom-enabled: zooming.checked;
+                    mouse-pan-enabled: root.snap-sample;
+                    transform-content: root.transform-content;
+                    private property <float> layout-scale: root.transform-content ? 1 : self.zoom-factor;
+                    center-content: root.photo;
+                    extent-width: root.photo ? max(640px, root.cliff.width * 1px) : root.marked-sample ? 940px : 400px;
+                    extent-height: root.photo ? max(480px, root.cliff.height * 1px)
+                        : root.nested ? 900px : root.marked-sample ? 1100px
+                        : root.anchor-sample ? root.anchor-prefix + 576px + (append.checked ? 64px : 0px) : root.active-strip.height;
+                    vertical-anchor-ratio: !root.anchor-sample || anchor-alignment.current-index == 3 ? -1
+                        : anchor-alignment.current-index == 0 ? 0 : anchor-alignment.current-index == 1 ? 0.5 : 1;
+                    anchor-candidates: root.anchor-sample ? root.anchor-rows : [];
+                    horizontal-scroll-mode: axes.current-index == 1 ? ScrollMode.disabled : ScrollMode.auto;
+                    vertical-scroll-mode: axes.current-index == 2 || (root.controller-sample && block-vertical.checked)
+                        ? ScrollMode.disabled : ScrollMode.auto;
+                    vertical-scroll-bar-visibility: hidden.checked ? ScrollBarVisibility.hidden : ScrollBarVisibility.auto;
+                    horizontal-scroll-bar-visibility: self.vertical-scroll-bar-visibility;
+                    vertical-snap-interval: snap.checked ? 100px : 0px;
+                    horizontal-snap-points: root.marked-sample ? {
+                        points: [
+                            { value: 0px },
+                            { value: 480px, alignment: ScrollSnapAlignment.center },
+                            { value: 840px, alignment: ScrollSnapAlignment.far },
+                        ],
+                    } : {};
+                    vertical-snap-points: root.marked-sample ? {
+                        aligned-points: [0px, 96px, 236px, 430px, 900px],
+                        ranges: [{ offset: 520px, interval: 80px, start: 512px, end: 782px }],
+                    } : {};
+                    view-completed(_) => { root.completions += 1; }
+                    scroll-animation-starting(_, _, _) => { return 420ms; }
+                    controller-scroll-completed(operation, result) => {
+                        root.controller-result = "#" + operation.id + " "
+                            + (operation.axis == Orientation.horizontal ? "horizontal " : "vertical ")
+                            + (result == ScrollControllerResult.completed ? "completed" : "interrupted");
+                    }
+
+                    if root.photo: Image {
+                        x: 0px;
+                        y: 0px;
+                        width: modern.extent-width * modern.layout-scale;
+                        height: modern.extent-height * modern.layout-scale;
+                        source: root.cliff;
+                        image-fit: cover;
+                        accessible-label: "cliff";
+                    }
+                    if !root.photo && !root.nested && !root.marked-sample && !root.anchor-sample: VerticalLayout {
+                        x: 0px;
+                        y: 0px;
+                        width: 400px * modern.layout-scale;
+                        height: modern.extent-height * modern.layout-scale;
+                        for photo in root.active-strip.photos: Image {
+                            height: photo.height * modern.layout-scale;
+                            source: photo.image;
+                            image-fit: cover;
+                            accessible-label: photo.name;
+                        }
+                    }
+                    if root.marked-sample: Rectangle {
+                        x: 0px; y: 0px;
+                        width: modern.extent-width * modern.layout-scale;
+                        height: modern.extent-height * modern.layout-scale;
+                        background: #eaf1f8;
+                        for mark[index] in root.snap-marks: Rectangle {
+                            x: 0px; y: mark * modern.layout-scale;
+                            width: parent.width; height: 2px * modern.layout-scale;
+                            background: #4074a5;
+                            Text {
+                                x: 12px * modern.layout-scale;
+                                y: 6px * modern.layout-scale;
+                                text: round(mark / 1px) + " px";
+                                font-size: 14px * modern.layout-scale;
+                            }
+                        }
+                        Rectangle {
+                            x: 480px * modern.layout-scale; y: 0px;
+                            width: 2px * modern.layout-scale; height: parent.height;
+                            background: #4074a5;
+                        }
+                        Rectangle {
+                            x: 840px * modern.layout-scale; y: 0px;
+                            width: 2px * modern.layout-scale; height: parent.height;
+                            background: #4074a5;
+                        }
+                    }
+                    if root.anchor-sample: Rectangle {
+                        width: modern.extent-width * modern.layout-scale;
+                        height: modern.extent-height * modern.layout-scale;
+                        background: #d9e9f9;
+                        for row[index] in root.anchor-rows: Rectangle {
+                            x: 0px; y: row.y * modern.layout-scale;
+                            width: parent.width;
+                            height: (row.height - 2px) * modern.layout-scale;
+                            background: mod(index, 2) == 0 ? #eaf1f8 : #f9fafb;
+                            Text {
+                                x: 12px * modern.layout-scale;
+                                height: parent.height;
+                                vertical-alignment: center;
+                                text: row.id;
+                                font-size: 14px * modern.layout-scale;
+                            }
+                        }
+                    }
+                    if root.nested: Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: 400px * modern.layout-scale;
+                        height: 900px * modern.layout-scale;
+                        background: #e4eaf2;
+                        nested-viewport := ScrollViewer {
+                            x: 20px * modern.layout-scale;
+                            y: 20px * modern.layout-scale;
+                            width: 324px * modern.layout-scale;
+                            height: 180px * modern.layout-scale;
+                            extent-width: self.width;
+                            extent-height: 480px * modern.layout-scale;
+                            label: "Nested ScrollViewer";
+                            chain-wheel: chaining.checked;
+                            scroll-chained(dx, dy) => { return modern.handle-chained-scroll(dx, dy); }
+                            view-changed(position, _) => { root.nested-offset = position.vertical; }
+                            Image {
+                                width: nested-viewport.extent-width;
+                                height: nested-viewport.extent-height;
+                                source: root.cliff;
+                                image-fit: cover;
+                                accessible-label: "cliff nested";
+                            }
+                        }
+                    }
+                }
+                Text { text: "Offset " + round(modern.horizontal-offset / 1px) + ", "
+                    + round(modern.vertical-offset / 1px) + "   Zoom " + round(modern.zoom-factor * 100) + "%"
+                    + (root.nested ? "   Inner " + round(root.nested-offset / 1px) : "   Completed " + root.completions); }
+                Text {
+                    visible: root.anchor-sample || root.controller-sample;
+                    text: root.anchor-sample ? "Anchor: " + (modern.current-anchor == "" ? "None" : modern.current-anchor)
+                        : "Request " + root.last-controller-request + "   " + root.controller-result;
+                }
+            }
+
+            VerticalLayout {
+                alignment: start;
+                spacing: 8px;
+                Text { text: "ScrollViewer"; font-size: 28px; }
+                axes := ComboBox {
+                    accessible-label: "Scroll axes";
+                    model: ["Both axes", "Vertical only", "Horizontal only"];
+                    current-index: 0;
+                }
+                legacy := ScrollViewer {
+                    width: 400px;
+                    height: 266px;
+                    label: "Gallery ScrollViewer";
+                    is-tab-stop: true;
+                    rtl: mirror.checked;
+                    zoom-enabled: zooming.checked;
+                    transform-content: root.transform-content;
+                    private property <float> layout-scale: root.transform-content ? 1 : self.zoom-factor;
+                    auto-hide-scroll-bars: !persist.checked;
+                    extent-width: max(640px, root.cliff.width * 1px);
+                    extent-height: max(480px, root.cliff.height * 1px);
+                    horizontal-scroll-mode: axes.current-index == 1 ? ScrollMode.disabled : ScrollMode.auto;
+                    vertical-scroll-mode: axes.current-index == 2 ? ScrollMode.disabled : ScrollMode.auto;
+                    horizontal-scroll-bar-visibility: hidden.checked ? ScrollBarVisibility.hidden : ScrollBarVisibility.auto;
+                    vertical-scroll-bar-visibility: hidden.checked ? ScrollBarVisibility.hidden : ScrollBarVisibility.visible;
+                    Image {
+                        x: 0px;
+                        y: 0px;
+                        width: legacy.extent-width * legacy.layout-scale;
+                        height: legacy.extent-height * legacy.layout-scale;
+                        source: root.cliff;
+                        image-fit: cover;
+                        accessible-label: "cliff legacy";
+                    }
+                }
+                Text { text: "Legacy offset " + round(legacy.horizontal-offset / 1px) + ", "
+                    + round(legacy.vertical-offset / 1px) + "   Zoom " + round(legacy.zoom-factor * 100) + "%"; }
+            }
+        }
+        Rectangle {
+            height: 32px;
+            HorizontalLayout {
+                visible: root.anchor-sample;
+                width: parent.width; height: parent.height;
+                alignment: start;
+                spacing: 8px;
+                anchor-alignment := ComboBox {
+                    width: 124px;
+                    accessible-label: "Anchor alignment";
+                    model: ["Near", "Center", "Far", "Off"];
+                    current-index: 0;
+                }
+                prepend := CheckBox { text: "Insert before rows"; }
+                append := CheckBox { text: "Append after rows"; }
+                short-view := CheckBox { text: "Shorter viewport"; }
+                Button {
+                    text: "Scroll to end";
+                    clicked => { modern.scroll-to(0px, modern.scrollable-height); }
+                }
+            }
+            HorizontalLayout {
+                visible: !root.anchor-sample && !root.controller-sample;
+                width: parent.width; height: parent.height;
+                alignment: start;
+                spacing: 16px;
+                zooming := CheckBox { text: "Zoom enabled"; checked: true; }
+                persist := CheckBox { text: "Always show bars"; }
+                hidden := CheckBox { text: "Hide bars"; }
+                mirror := CheckBox { text: "Right to left"; }
+                snap := CheckBox { text: "Snap to 100px"; }
+                chaining := CheckBox { text: "Chain wheel"; checked: true; visible: root.nested; }
+            }
+            HorizontalLayout {
+                visible: root.controller-sample;
+                width: parent.width; height: parent.height;
+                alignment: start;
+                spacing: 8px;
+                Button {
+                    text: "Horizontal +80";
+                    enabled: modern.horizontal-controller-state.can-scroll;
+                    clicked => {
+                        root.last-controller-request = modern.controller-scroll-by(Orientation.horizontal, 80px,
+                            { ignore-snap-points: true });
+                    }
+                }
+                Button {
+                    text: "Vertical to 240";
+                    clicked => {
+                        root.last-controller-request = modern.controller-scroll-to(Orientation.vertical, 240px, {
+                            duration: 300ms, ignore-snap-points: ignore-controller-snaps.checked,
+                        });
+                    }
+                }
+                Button {
+                    text: "Add vertical velocity";
+                    clicked => {
+                        root.last-controller-request = modern.controller-add-velocity(Orientation.vertical, 900, 0.94);
+                    }
+                }
+                ignore-controller-snaps := CheckBox { text: "Ignore snap points"; }
+                block-vertical := CheckBox { text: "Disable vertical"; }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button {
+                text: "Reset";
+                clicked => {
+                    modern.set-view(0px, 0px, 1);
+                    legacy.change-view(0px, 0px, 1);
+                }
+            }
+            Button {
+                text: "Scroll to (80, 240)";
+                clicked => { modern.scroll-to-with-options(80px, 240px, sample.current-index == 1 ? 300ms : 0ms, snap.checked || root.snap-sample); }
+            }
+            Button {
+                text: "Scroll down at steady speed";
+                clicked => {
+                    if modern.motion == ScrollViewMotion.velocity { modern.stop-scroll-velocity(); }
+                    else { modern.start-scroll-velocity(0, 440); }
+                }
+            }
+            Button {
+                text: "Zoom to 200%";
+                clicked => { modern.zoom-to(2, { x: modern.viewport-width / 2, y: modern.viewport-height / 2 }); }
+            }
+            Button {
+                text: "Change legacy view";
+                clicked => { legacy.change-view(80px, 240px, 1.5); }
+            }
+        }
+    }
+}

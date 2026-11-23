@@ -1,0 +1,68 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { AutoSuggestBox, AutoSuggestion, AutoSuggestTextChangeReason } from "../../ui/components/text/auto_suggest_box.slint";
+
+export { AutoSuggestion }
+
+export component AutoSuggestBoxExample inherits Window {
+    title: "AutoSuggestBox";
+    width: 432px;
+    height: 336px;
+    in property <bool> dark;
+    in property <bool> above;
+    in-out property <[AutoSuggestion]> cities;
+    callback suggestions-requested(string, int);
+    private property <string> activity: "No query submitted";
+
+    changed dark => { Palette.color-scheme = root.dark ? ColorScheme.dark : ColorScheme.light; }
+
+    public pure function is-current(revision: int) -> bool {
+        return search.is-current(revision);
+    }
+
+    search := AutoSuggestBox {
+        x: 24px;
+        y: root.above ? parent.height - 112px : 24px;
+        width: 288px;
+        header: "Destination";
+        placeholder-text: "Enter a city";
+        suggestions: root.cities;
+        maximum-suggestion-list-height: 148px;
+        popup-viewport: { width: root.width, height: root.height };
+        query-icon: @image-url("../../ui/icons/search_16_regular.svg");
+        update-text-on-select: preview.checked;
+        enabled: !disable.checked;
+        text-changed(value, reason, revision) => {
+            if (reason == AutoSuggestTextChangeReason.user-input) {
+                root.suggestions-requested(value, revision);
+            }
+        }
+        suggestion-chosen(item) => {
+            root.activity = "Suggestion: " + item.label;
+        }
+        query-submitted(query, has-suggestion, item) => {
+            root.activity = "Query: " + query + (has-suggestion ? " • " + item.id : "");
+        }
+    }
+
+    VerticalLayout {
+        x: 24px;
+        y: root.above ? 24px : 244px;
+        width: parent.width - 48px;
+        height: self.preferred-height;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 12px;
+            preview := CheckBox { text: "Preview text"; checked: true; }
+            disable := CheckBox { text: "Disable search"; }
+        }
+        Button {
+            text: "Prefill Berlin";
+            clicked => {
+                root.cities = [];
+                search.text = "Berlin";
+            }
+        }
+        Text { text: root.activity; }
+    }
+}

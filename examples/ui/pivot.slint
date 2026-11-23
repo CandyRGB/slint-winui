@@ -1,0 +1,102 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { Pivot, PivotBehavior, PivotHeaderFocusPlacement, PivotItem, PivotLayout, PivotMeasurement, PivotHeaderRow } from "../../ui/components/navigation/pivot.slint";
+
+export { PivotBehavior, PivotItem, PivotLayout, PivotMeasurement, PivotHeaderRow }
+
+export component PivotExample inherits Window {
+    title: "Pivot";
+    background: #f3f3f3;
+    min-width: 656px;
+    preferred-height: 536px;
+    default-font-family: "Segoe UI";
+
+    in property <brush> accent: Palette.accent-background;
+    private property <bool> narrow;
+    private property <bool> rtl;
+    private property <bool> locked;
+    private property <bool> side-headers;
+    private property <bool> unread-disabled;
+    private property <bool> omit-flagged;
+    private property <int> changes;
+
+    VerticalLayout {
+        x: 24px;
+        y: 16px;
+        width: parent.width - 48px;
+        alignment: start;
+        spacing: 8px;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Narrow"; clicked => { root.narrow = !root.narrow; } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+            Button { text: "Lock"; clicked => { root.locked = !root.locked; } }
+            Button { text: "Toggle headers"; clicked => { root.side-headers = !root.side-headers; } }
+            Button { text: "Disable Unread"; clicked => { root.unread-disabled = !root.unread-disabled; } }
+            Button { text: "Remove Flagged"; clicked => { root.omit-flagged = !root.omit-flagged; } }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Focus headers"; clicked => { pivot.focus-header(); } }
+            Button { text: "Select Urgent"; clicked => { pivot.selected-id = "urgent"; } }
+        }
+    }
+
+    pivot := Pivot {
+        x: 24px;
+        y: 108px;
+        width: root.narrow ? 194px : parent.width - 48px;
+        height: 400px;
+        title: "EMAIL";
+        background: #f0f0f0;
+        rtl: root.rtl;
+        is-locked: root.locked;
+        indicator-color: root.accent;
+        header-focus-visual-placement: root.side-headers ? PivotHeaderFocusPlacement.selected-item-header : PivotHeaderFocusPlacement.whole-header;
+        items: root.omit-flagged ? [
+            { id: "all", label: "All", accessible-name: "all emails go here." },
+            { id: "unread", label: "Unread", disabled: root.unread-disabled, accessible-name: "unread emails go here." },
+            { id: "urgent", label: "Urgent", accessible-name: "urgent emails go here." },
+        ] : [
+            { id: "all", label: "All", accessible-name: "all emails go here." },
+            { id: "unread", label: "Unread", disabled: root.unread-disabled, accessible-name: "unread emails go here." },
+            { id: "flagged", label: "Flagged", accessible-name: "flagged emails go here." },
+            { id: "urgent", label: "Urgent", accessible-name: "urgent emails go here." },
+        ];
+        selection-changed(id) => { root.changes += 1; }
+
+        left-header << HorizontalLayout {
+            if root.side-headers: Button { text: "Left"; }
+        }
+        right-header << HorizontalLayout {
+            if root.side-headers: Button { text: "Right"; }
+        }
+        Text {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            text: pivot.selected-index >= 0 ? pivot.items[pivot.selected-index].accessible-name : "";
+            font-size: 14px;
+            color: #1b1b1b;
+            horizontal-alignment: root.rtl ? right : left;
+            accessible-label: self.text;
+        }
+        if root.side-headers: Button {
+            x: 0px;
+            y: 32px;
+            width: 116px;
+            height: 32px;
+            text: "Page action";
+        }
+    }
+
+    Text {
+        x: 24px;
+        y: 516px;
+        text: "Selected \{pivot.selected-id} · Index \{pivot.selected-index} · Changes \{root.changes}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+}

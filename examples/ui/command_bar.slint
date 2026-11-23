@@ -1,0 +1,120 @@
+import { Button, CheckBox } from "std-widgets.slint";
+import {
+    AppBarLabelPosition, CommandBar, CommandBarAccelerators, CommandBarBehavior, CommandBarClosedDisplayMode,
+    CommandBarEntry, CommandBarItem, CommandBarItemKind, CommandBarLayout, CommandBarOverflowButtonVisibility,
+} from "../../ui/components/menus-toolbars/command_bar.slint";
+import {
+    FlyoutPlacement, MenuFlyout, MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel,
+} from "../../ui/components/menus-toolbars/menu_flyout.slint";
+
+export {
+    AppBarLabelPosition, CommandBarBehavior, CommandBarEntry, CommandBarItem, CommandBarItemKind,
+    CommandBarLayout, CommandBarOverflowButtonVisibility,
+    MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel,
+}
+
+export component CommandBarExample inherits Window {
+    title: "CommandBar";
+    preferred-width: root.narrow ? 344px : 680px;
+    preferred-height: 408px;
+    min-width: 304px;
+    min-height: 360px;
+    in property <bool> narrow;
+    in property <bool> bottom;
+    in property <bool> ordered;
+    private property <bool> menu-in-overflow;
+    private property <string> result: "No command selected";
+
+    CommandBarAccelerators {
+        width: parent.width;
+        height: parent.height;
+        primary: bar.primary-commands;
+        secondary: bar.secondary-commands;
+        accelerators-enabled: bar.enabled && !settings.is-open;
+        invoked(index, secondary) => { bar.invoke-shortcut(index, secondary); }
+
+        bar := CommandBar {
+            x: 16px;
+            y: root.bottom ? parent.height - self.height - 16px : 24px;
+            width: parent.width - 32px;
+            popup-viewport: { width: root.width, height: root.height };
+            bottom-app-bar: root.bottom;
+            dynamic-overflow-enabled: dynamic.checked;
+            sticky: sticky-option.checked;
+            default-label-position: labels-right.checked ? AppBarLabelPosition.right : AppBarLabelPosition.bottom;
+            closed-display-mode: minimal.checked ? CommandBarClosedDisplayMode.minimal : CommandBarClosedDisplayMode.compact;
+            primary-commands: [
+                { id: "shuffle", label: "Shuffle", kind: CommandBarItemKind.toggle,
+                    icon: @image-url("../../ui/icons/arrow_shuffle_16_regular.svg"),
+                    overflow-order: root.ordered ? 1 : 0 },
+                { id: "repeat", label: "Repeat", kind: CommandBarItemKind.toggle,
+                    icon: @image-url("../../ui/icons/arrow_repeat_all_16_regular.svg"),
+                    disabled: true },
+                { kind: CommandBarItemKind.separator },
+                { id: "previous", label: "Previous",
+                    icon: @image-url("../../ui/icons/previous_16_regular.svg") },
+                { id: "play", label: "Play", icon: @image-url("../../ui/icons/play_16_regular.svg"),
+                    shortcut: @keys(Control + P) },
+                { id: "next", label: "Next", icon: @image-url("../../ui/icons/next_16_regular.svg"),
+                    overflow-order: root.ordered ? 1 : 0 },
+            ];
+            secondary-commands: [
+                { id: "like", label: "Like", kind: CommandBarItemKind.toggle,
+                    icon: @image-url("../../ui/icons/thumb_like_16_regular.svg") },
+                { id: "dislike", label: "Dislike",
+                    icon: @image-url("../../ui/icons/thumb_dislike_16_regular.svg") },
+                { id: "settings", label: "Settings", has-flyout: true, flyout-open: settings.is-open,
+                    icon: @image-url("../../ui/icons/settings_16_regular.svg") },
+            ];
+
+            invoked(item) => {
+                root.result = item.kind == CommandBarItemKind.toggle
+                    ? item.label + (item.checked ? " on" : " off") : item.label + " selected";
+            }
+            open-flyout(item, anchor, overflow) => {
+                root.menu-in-overflow = overflow;
+                settings.show-for(anchor);
+            }
+
+            Text {
+                text: "Now playing";
+                font-size: 14px;
+                vertical-alignment: center;
+            }
+        }
+
+        VerticalLayout {
+            x: 16px;
+            y: root.bottom ? 16px : 98px;
+            width: parent.width - 32px;
+            height: self.preferred-height;
+            spacing: 10px;
+            HorizontalLayout {
+                spacing: 16px;
+                dynamic := CheckBox { text: "Dynamic overflow"; checked: true; }
+                labels-right := CheckBox { text: "Labels on right"; }
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                sticky-option := CheckBox { text: "Sticky"; }
+                minimal := CheckBox { text: "Minimal"; }
+            }
+            Button {
+                text: "Open command bar";
+                clicked => { bar.show(); }
+            }
+            Text { text: root.result; }
+        }
+
+        settings := MenuFlyout {
+            width: parent.width;
+            height: parent.height;
+            placement: root.menu-in-overflow ? FlyoutPlacement.left-edge-aligned-top : FlyoutPlacement.bottom-edge-aligned-right;
+            items: [{ id: "equalizer", text: "Equalizer" }, { id: "device", text: "Output device" }];
+            invoked(item) => {
+                bar.hide();
+                root.result = item.text + " selected";
+            }
+        }
+    }
+}

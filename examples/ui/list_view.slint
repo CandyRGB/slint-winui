@@ -1,0 +1,176 @@
+import { Button, CheckBox, ComboBox, Palette } from "std-widgets.slint";
+import { ListView, ListViewBehavior, ListViewEntry, ListViewHeaderPosition } from "../../ui/components/collections/list_view.slint";
+import { ListViewItem } from "../../ui/components/collections/list_view_item.slint";
+import { ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode } from "../../ui/components/collections/items_view.slint";
+import { ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout,
+    ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch,
+    ItemsRepeaterWindow } from "../../ui/components/collections/items_repeater.slint";
+
+export { ListViewBehavior, ListViewEntry, ListViewHeaderPosition, ItemsViewBehavior, ItemsViewItem,
+    ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior,
+    ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions,
+    ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
+
+export component ListViewExample inherits Window {
+    title: "ListView";
+    preferred-width: 692px;
+    preferred-height: 628px;
+    min-width: 630px;
+    min-height: 596px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+
+    in-out property <[ListViewEntry]> contacts <=> view.entries;
+    in property <color> accent: Palette.accent-background;
+    callback load-contacts(bool, bool);
+    private property <bool> grouped: sample.current-index == 2;
+    private property <bool> reorder: sample.current-index == 3;
+    private property <bool> custom: sample.current-index == 1 || root.grouped;
+    private property <int> clicked-count;
+    private property <int> selection-at-click;
+    private property <int> reorders;
+    private property <string> clicked-name;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+        Text { text: "ListView"; font-size: 28px; }
+        HorizontalLayout {
+            spacing: 12px;
+            sample := ComboBox {
+                accessible-label: "Sample";
+                model: ["Basic contacts", "Contact template", "Grouped headers", "Drag reordering"];
+                width: 228px;
+                current-index: 0;
+                selected(_) => {
+                    view.deselect-all();
+                    root.load-contacts(root.grouped, large.checked);
+                    view.scroll-into-view(0, true);
+                }
+            }
+            large := CheckBox { text: "10,000 items"; toggled => { root.load-contacts(root.grouped, self.checked); } }
+            rtl := CheckBox { text: "Right to left"; }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            Rectangle {
+                width: 350px;
+                height: 400px;
+                border-width: 1px;
+                border-color: #00000072;
+                view := ListView {
+                    x: 1px;
+                    y: 1px;
+                    width: parent.width - 2px;
+                    height: parent.height - 2px;
+                    label: "Contacts";
+                    group-header-background: root.background;
+                    are-sticky-group-headers-enabled: pinned.checked;
+                    custom-template: root.custom;
+                    row-height: root.custom ? 50px : 40px;
+                    accent: root.accent;
+                    rtl: rtl.checked;
+                    is-item-click-enabled: clicking.checked;
+                    is-multi-select-check-box-enabled: checks.checked;
+                    selection-mode: mode.current-index == 0 ? ItemsViewSelectionMode.none
+                        : mode.current-index == 2 ? ItemsViewSelectionMode.multiple
+                        : mode.current-index == 3 ? ItemsViewSelectionMode.extended : ItemsViewSelectionMode.single;
+                    single-selection-follows-focus: follow.checked;
+                    can-drag-items: root.reorder;
+                    can-reorder-items: root.reorder;
+                    allow-drop: root.reorder;
+                    item-click(index) => {
+                        root.clicked-count += 1;
+                        root.selection-at-click = self.selected-keys.length;
+                        root.clicked-name = self.entries[index].label;
+                    }
+                    items-reordered(_, _) => { root.reorders += 1; }
+
+                    for rect in (root.custom ? view.realized : []): row := ListViewItem {
+                        x: rect.x;
+                        y: rect.y + view.header-height(rect.index);
+                        width: rect.width;
+                        height: rect.height - view.header-height(rect.index);
+                        label: view.entries[rect.index].label;
+                        item-index: rect.index;
+                        item-count: view.entries.length;
+                        enabled: view.entries[rect.index].enabled;
+                        selected: view.is-selected(rect.index);
+                        show-indicator: view.show-selection-indicator;
+                        selectable: view.selection-mode != ItemsViewSelectionMode.none;
+                        show-check: view.show-multi-select-check;
+                        focused: view.keyboard-focused && view.current-item-index == rect.index;
+                        accent: root.accent;
+                        rtl: view.rtl;
+                        activated(mods) => { view.tap-item(rect.index, mods); }
+                        automation-action => { view.automation-item(rect.index); }
+                        Rectangle {
+                            x: view.rtl ? row.content-width - 38px : 6px;
+                            y: (row.content-height - self.height) / 2;
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 16px;
+                            background: #00000066;
+                        }
+                        Rectangle {
+                            x: view.rtl ? 0px : 56px;
+                            width: max(0px, row.content-width - 56px);
+                            height: row.content-height;
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: view.entries[rect.index].label;
+                                    font-weight: 600;
+                                    color: Palette.foreground;
+                                    horizontal-alignment: view.rtl ? right : left;
+                                    overflow: elide;
+                                    accessible-role: none;
+                                }
+                                Text {
+                                    text: view.entries[rect.index].detail;
+                                    color: Palette.foreground;
+                                    horizontal-alignment: view.rtl ? right : left;
+                                    overflow: elide;
+                                    accessible-role: none;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: start;
+                spacing: 8px;
+                mode := ComboBox {
+                    accessible-label: "SelectionMode";
+                    model: ["None", "Single", "Multiple", "Extended"];
+                    current-index: 1;
+                    width: 180px;
+                }
+                clicking := CheckBox { text: "ItemClick enabled"; }
+                checks := CheckBox { text: "Multi-select checkboxes"; checked: true; }
+                follow := CheckBox { text: "Selection follows focus"; checked: true; }
+                pinned := CheckBox { text: "Sticky group headers"; }
+                Button {
+                    text: "Scroll to item 20";
+                    clicked => { view.scroll-into-view(19, true); }
+                }
+                Button {
+                    text: "Show last item";
+                    clicked => { view.scroll-into-view(view.entries.length - 1, false); }
+                }
+            }
+        }
+        Text {
+            text: "Selected: " + view.selected-keys.length + "  Current index: " + view.current-item-index
+                + "  Reorders: " + root.reorders;
+        }
+        Text {
+            text: "Clicks: " + root.clicked-count + "  Selected before click: " + root.selection-at-click
+                + "  " + root.clicked-name;
+        }
+        Text { text: "Realized: " + view.realized.length + " / " + view.entries.length; }
+    }
+}

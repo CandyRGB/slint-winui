@@ -1,0 +1,148 @@
+import { CheckBox, LineEdit } from "std-widgets.slint";
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../../ui/components/collections/items_repeater.slint";
+import {
+    RelativePanel, RelativePanelAlignment, RelativePanelAxis, RelativePanelBehavior,
+    RelativePanelChild, RelativePanelInsets, RelativePanelIssue, RelativePanelLayout
+} from "../../ui/components/layout/relative_panel.slint";
+
+export {
+    ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize,
+    RelativePanelAlignment, RelativePanelAxis, RelativePanelBehavior, RelativePanelChild,
+    RelativePanelInsets, RelativePanelIssue, RelativePanelLayout
+}
+
+component ExampleHeading inherits Text {
+    color: #000000e4;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+export component RelativePanelExample inherits Window {
+    title: "WinUI RelativePanel";
+    min-width: 728px;
+    preferred-width: 728px;
+    min-height: 370px;
+    preferred-height: 370px;
+    default-font-family: "Segoe UI";
+    default-font-size: 14px;
+    background: #f3f3f3;
+
+    private property <bool> wide;
+    private property <bool> rtl;
+    private property <bool> collapse-base;
+    private property <bool> use-cycle;
+    private property <bool> missing-target;
+    private property <bool> use-insets;
+    private property <[string]> gallery-ids: ["Red", "Blue", "Green", "Yellow"];
+    private property <[color]> gallery-colors: [#ff0000, #0000ff, #008000, #ffff00];
+    private property <[RelativePanelChild]> gallery-items: [
+        { id: "Red", size: { width: 50px, height: 50px }, fixed-width: true, fixed-height: true, collapsed: root.collapse-base },
+        { id: "Blue", size: { width: 50px, height: 50px }, fixed-width: true, fixed-height: true,
+          margin: { left: 8px }, horizontal: { after: "Red" } },
+        { id: "Green", size: { width: 50px, height: 50px }, fixed-width: true, fixed-height: true,
+          horizontal: { align-end-with-panel: true } },
+        { id: "Yellow", size: { width: 50px, height: 50px }, fixed-width: true, fixed-height: true,
+          margin: { top: 8px }, horizontal: { align-center-with: "Green" }, vertical: { after: "Green" } },
+    ];
+    private property <[RelativePanelChild]> form-items: [
+        { id: "Editor", size: { width: 120px, height: 32px },
+          margin: { left: 8px, right: 8px },
+          horizontal: { after: "Leading", before: root.missing-target ? "Missing" : "Trailing" },
+          vertical: { align-center-with: "Leading" } },
+        { id: "Leading", size: { width: 44px, height: 44px },
+          horizontal: { align-start-with-panel: true, before: root.use-cycle ? "Editor" : "" },
+          vertical: { align-start-with-panel: true } },
+        { id: "Trailing", size: { width: 44px, height: 44px },
+          horizontal: { align-end-with-panel: true }, vertical: { align-end-with: "Leading" } },
+        { id: "Below", size: { width: 228px, height: 32px }, margin: { top: 8px },
+          horizontal: { align-start-with: "Leading", align-end-with: "Trailing" },
+          vertical: { after: "Leading" } },
+    ];
+
+    ExampleHeading { x: 24px; y: 24px; text: "RelativePanel"; }
+    HorizontalLayout {
+        x: 24px; y: 56px; width: 380px; height: 34px; spacing: 12px; alignment: start;
+        CheckBox { text: "Wide"; checked <=> root.wide; }
+        CheckBox { text: "Right to left"; checked <=> root.rtl; }
+        CheckBox { text: "Collapse red"; checked <=> root.collapse-base; }
+    }
+
+    Rectangle {
+        x: 24px; y: 106px;
+        width: root.wide ? 340px : 300px;
+        height: gallery.preferred-height;
+        background: #fdfdfd;
+        accessible-role: groupbox;
+        accessible-label: "Gallery layout";
+        gallery := RelativePanel {
+            width: parent.width;
+            height: parent.height;
+            rtl: root.rtl;
+            items: root.gallery-items;
+            for shade[index] in root.gallery-colors: Rectangle {
+                property <ItemsRepeaterPlacement> slot: gallery.placements[index];
+                x: gallery.child-x(slot);
+                y: gallery.child-y(slot);
+                width: slot.width;
+                height: slot.height;
+                visible: slot.width > 0px && slot.height > 0px;
+                background: shade;
+                accessible-role: groupbox;
+                accessible-label: root.gallery-ids[index];
+            }
+        }
+    }
+
+    ExampleHeading { x: 388px; y: 24px; text: "Sibling constraints"; }
+    HorizontalLayout {
+        x: 388px; y: 56px; width: 316px; height: 34px; spacing: 10px; alignment: start;
+        CheckBox { text: "Insets"; checked <=> root.use-insets; }
+        CheckBox { text: "Missing target"; checked <=> root.missing-target; }
+        CheckBox { text: "Cycle"; checked <=> root.use-cycle; }
+    }
+    Rectangle {
+        x: 388px; y: 106px;
+        width: 316px;
+        height: 136px;
+        accessible-role: groupbox;
+        accessible-label: "Constraint layout";
+        form := RelativePanel {
+            x: 0px; y: 0px; width: parent.width; height: parent.height;
+            background: #fdfdfd;
+            border-width: 1px;
+            border-color: #0000000f;
+            border-radius: 4px;
+            content-insets: root.use-insets ? { left: 12px, top: 12px, right: 12px, bottom: 12px } : {};
+            rtl: root.rtl;
+            items: root.form-items;
+
+            editor := LineEdit {
+                property <ItemsRepeaterPlacement> slot: form.placements[0];
+                x: form.child-x(slot); y: form.child-y(slot);
+                width: slot.width; height: slot.height;
+                visible: form.layout-issue == RelativePanelIssue.none;
+                enabled: self.visible;
+                accessible-label: "Constrained editor";
+                placeholder-text: "Type here";
+            }
+            for label[index] in ["Leading", "Trailing", "Below"]: Rectangle {
+                property <ItemsRepeaterPlacement> slot: form.placements[index + 1];
+                x: form.child-x(slot); y: form.child-y(slot);
+                width: slot.width; height: slot.height;
+                visible: form.layout-issue == RelativePanelIssue.none;
+                background: #eaeaea;
+                border-radius: 4px;
+                accessible-role: groupbox;
+                accessible-label: label;
+            }
+            Text {
+                x: 12px; y: 12px; width: parent.width - 24px;
+                color: #a4262c;
+                text: form.layout-issue == RelativePanelIssue.missing-target ? "Missing target: " + form.issue-target
+                    : form.layout-issue == RelativePanelIssue.circular-dependency ? "Circular dependency: " + form.issue-target
+                    : "";
+                visible: form.layout-issue != RelativePanelIssue.none;
+            }
+        }
+    }
+}

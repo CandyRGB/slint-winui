@@ -1,0 +1,92 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { DropDownButton, SplitButton, ToggleSplitButton } from "../../ui/components/basic-input/flyout_button.slint";
+import { Flyout, FlyoutPlacement } from "../../ui/components/dialogs-flyouts/flyout.slint";
+import { MenuFlyout, MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel } from "../../ui/components/menus-toolbars/menu_flyout.slint";
+
+export { MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel }
+
+export component FlyoutButtonsExample inherits Window {
+    title: "Flyout buttons";
+    width: 432px;
+    height: 304px;
+    forward-focus: dropdown;
+
+    in property <bool> dark;
+    private property <bool> bold;
+    private property <bool> bold-menu;
+    private property <string> result: "No command selected";
+
+    changed dark => { Palette.color-scheme = root.dark ? ColorScheme.dark : ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+
+            dropdown := DropDownButton {
+                text: "Options";
+                enabled: !disable.checked;
+                flyout-open: options.is-open;
+                open-flyout(anchor) => { options.show(); }
+            }
+
+            split := SplitButton {
+                text: "Share";
+                icon: @image-url("../../ui/icons/share_16_regular.svg");
+                enabled: !disable.checked;
+                flyout-open: menu.is-open && !root.bold-menu;
+                clicked => { root.result = "Shared"; }
+                open-flyout(anchor) => {
+                    root.bold-menu = false;
+                    menu.show-for(anchor);
+                }
+            }
+
+            toggle := ToggleSplitButton {
+                text: "Bold";
+                icon: @image-url("../../ui/icons/text_bold_16_regular.svg");
+                enabled: !disable.checked;
+                checked <=> root.bold;
+                flyout-open: menu.is-open && root.bold-menu;
+                checked-changed(value) => { root.result = value ? "Bold enabled" : "Bold disabled"; }
+                open-flyout(anchor) => {
+                    root.bold-menu = true;
+                    menu.show-for(anchor);
+                }
+            }
+        }
+
+        disable := CheckBox { text: "Disable buttons"; }
+        Text { text: root.result; }
+    }
+
+    options := Flyout {
+        width: parent.width;
+        height: parent.height;
+        anchor: dropdown.flyout-anchor;
+        placement: FlyoutPlacement.bottom-edge-aligned-left;
+
+        Text { text: "Share preferences"; }
+        Button { text: "Done"; clicked => { options.hide(); } }
+    }
+
+    menu := MenuFlyout {
+        width: parent.width;
+        height: parent.height;
+        placement: FlyoutPlacement.bottom-edge-aligned-left;
+        items: root.bold-menu
+            ? [{ id: "bold-on", text: "Enable bold" }, { id: "bold-off", text: "Disable bold" }]
+            : [{ id: "copy-link", text: "Copy link" }, { id: "send-link", text: "Send link" }];
+        invoked(item) => {
+            if (root.bold-menu) {
+                root.bold = item.id == "bold-on";
+            } else {
+                root.result = item.text + " selected";
+            }
+        }
+    }
+}

@@ -1,0 +1,108 @@
+import { Button, Palette } from "std-widgets.slint";
+import { ContextFlyoutArea } from "../../ui/components/dialogs-flyouts/context_flyout_area.slint";
+import { MenuFlyout, MenuFlyoutAccelerators, MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel, FlyoutPlacement } from "../../ui/components/menus-toolbars/menu_flyout.slint";
+
+export { MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel }
+
+export component MenuFlyoutExample inherits Window {
+    title: "MenuFlyout";
+    width: root.compact ? 200px : 520px;
+    height: root.compact ? 180px : 440px;
+    forward-focus: opener;
+
+    in property <bool> dark;
+    in property <bool> compact;
+    in property <bool> edge;
+    in property <bool> scoped-shortcuts;
+    changed dark => {
+        Palette.color-scheme = root.dark ? ColorScheme.dark : ColorScheme.light;
+    }
+
+    private property <string> result: "No command selected";
+
+    MenuFlyoutAccelerators {
+        width: parent.width;
+        height: parent.height;
+        items: menu.items;
+        accelerators-enabled: !menu.is-open && !root.scoped-shortcuts;
+        invoked(index) => { menu.invoke-accelerator(index); }
+
+        opener := Button {
+            x: root.edge ? parent.width - self.width - 16px : 16px;
+            y: 16px;
+            width: 128px;
+            height: 32px;
+            text: "Open menu";
+            clicked => { menu.show(); }
+        }
+
+        MenuFlyoutAccelerators {
+            x: root.edge ? parent.width - self.width - 16px : 16px;
+            y: parent.height - 106px;
+            width: 128px;
+            height: 48px;
+            items: menu.items;
+            accelerators-enabled: !menu.is-open && root.scoped-shortcuts;
+            invoked(index) => { menu.invoke-accelerator(index); }
+
+            context := ContextFlyoutArea {
+                width: parent.width;
+                height: parent.height;
+                accessible-role: groupbox;
+                accessible-label: "Context target";
+                context-requested(anchor) => { menu.show-for(anchor); }
+                context-requested-at(position) => { menu.show-at(position); }
+
+                Rectangle {
+                    background: Palette.alternate-background;
+                    border-radius: 4px;
+                    border-width: context.has-focus ? 2px : 0px;
+                    border-color: Palette.foreground;
+                    Text {
+                        text: "Context target";
+                        color: Palette.foreground;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+                }
+            }
+        }
+
+        Text {
+            x: 16px;
+            y: parent.height - 42px;
+            text: root.result;
+        }
+    }
+
+    menu := MenuFlyout {
+        width: parent.width;
+        height: parent.height;
+        anchor: { x: opener.x, y: opener.y, width: opener.width, height: opener.height };
+        placement: FlyoutPlacement.bottom-edge-aligned-left;
+        items: [
+            { id: "copy", text: "Copy", icon: @image-url("../../ui/icons/copy_16_regular.svg"),
+                shortcut: @keys(Control + C), accelerator-text: "Ctrl+C" },
+            { kind: MenuFlyoutItemKind.separator },
+            { id: "paste", text: "Paste", disabled: true, shortcut: @keys(Control + V) },
+            { kind: MenuFlyoutItemKind.separator },
+            { id: "lyrics", text: "Show lyrics", kind: MenuFlyoutItemKind.toggle, checked: true },
+            { id: "options", text: "More options", kind: MenuFlyoutItemKind.submenu },
+            { id: "share", text: "Share", kind: MenuFlyoutItemKind.split,
+                icon: @image-url("../../ui/icons/share_16_regular.svg") },
+            { id: "refresh", text: "Refresh", kind: MenuFlyoutItemKind.split,
+                secondary-label: "Other refresh commands" },
+            { id: "title", text: "Sort by title", kind: MenuFlyoutItemKind.radio, group: "sort", checked: true },
+            { id: "artist", text: "Sort by artist", kind: MenuFlyoutItemKind.radio, group: "sort" },
+            { id: "pin", parent-id: "options", text: "Pin to top", kind: MenuFlyoutItemKind.toggle },
+            { id: "export", parent-id: "options", text: "Export", kind: MenuFlyoutItemKind.submenu },
+            { id: "playlist", parent-id: "export", text: "Playlist file" },
+            { id: "copy-link", parent-id: "share", text: "Copy link" },
+            { id: "send-link", parent-id: "share", text: "Send link", shortcut: @keys(Control + Shift + L) },
+        ];
+        invoked(item) => {
+            root.result = item.text + (item.checked ? " (checked)" : "");
+        }
+    }
+}

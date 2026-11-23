@@ -1,0 +1,165 @@
+import { CheckBox, LineEdit, Slider } from "std-widgets.slint";
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../../ui/components/collections/items_repeater.slint";
+import {
+    Grid, GridBehavior, GridChild, GridDefinition, GridLayoutResult, GridLengthKind,
+    GridMeasureRequest, GridOptions, GridTrackPlacement
+} from "../../ui/components/layout/grid.slint";
+
+export {
+    GridBehavior, GridChild, GridDefinition, GridLayoutResult, GridLengthKind, GridMeasureRequest, GridOptions,
+    GridTrackPlacement, ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize
+}
+
+component Heading inherits Text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #000000e4;
+}
+
+export component GridExample inherits Window {
+    title: "WinUI Grid";
+    min-width: 768px;
+    min-height: 420px;
+    preferred-width: 768px;
+    preferred-height: 420px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI";
+    default-font-size: 14px;
+
+    private property <bool> rtl;
+    private property <bool> narrow;
+    private property <bool> capped: true;
+    private property <bool> wide-editor: true;
+    private property <bool> tall-editor;
+    private property <bool> hide-filter;
+    private property <[GridDefinition]> fixed-tracks: [
+        { kind: GridLengthKind.pixel, pixels: 50px },
+        { kind: GridLengthKind.pixel, pixels: 50px },
+        { kind: GridLengthKind.pixel, pixels: 50px },
+    ];
+    private property <[GridChild]> color-cells: [
+        { key: "Red", size: { width: 50px, height: 50px }, row: round(row-slider.value), column: round(column-slider.value) },
+        { key: "Blue", size: { width: 50px, height: 50px }, row: 1 },
+        { key: "Green", size: { width: 50px, height: 50px }, column: 1 },
+        { key: "Yellow", size: { width: 50px, height: 50px }, row: 1, column: 1 },
+    ];
+    private property <[color]> colors: [#ff0000, #0000ff, #008000, #ffff00];
+    private property <[string]> names: ["Red", "Blue", "Green", "Yellow"];
+    private property <[string]> mixed-labels: ["Fixed", "Auto", "First star", "Second star", "Auto cell", "Editor", "Footer"];
+    private property <[GridChild]> mixed-cells: [
+        { key: "Fixed", size: { width: 64px, height: 36px } },
+        { key: "Auto", size: { width: 72px, height: 36px }, column: 1, collapsed: root.hide-filter },
+        { key: "First star", size: { width: 32px, height: 30px }, column: 2 },
+        { key: "Second star", size: { width: 48px, height: 30px }, column: 3 },
+        { key: "Auto column", size: { width: 64px, height: 44px }, row: 1, column: 1 },
+        { key: "Editor", size: { width: 84px, height: 38px }, row: 1, column: 2,
+            column-span: root.wide-editor ? 2 : 1, row-span: root.tall-editor ? 2 : 1 },
+        { key: "Footer", size: { width: root.tall-editor ? 72px : 144px, height: 36px },
+            row: 2, column-span: root.tall-editor ? 2 : 4 },
+    ];
+
+    Heading { x: 24px; y: 24px; text: "Fixed rows and columns"; }
+    HorizontalLayout {
+        x: 24px; y: 60px;
+        width: 320px; height: 100px; spacing: 12px;
+        VerticalLayout {
+            spacing: 4px;
+            Text { text: "Column spacing"; }
+            columns-gap := Slider { accessible-label: "Column spacing"; minimum: 0; maximum: 16; value: 8; height: 24px; }
+            Text { text: "Red column"; }
+            column-slider := Slider { accessible-label: "Red column"; minimum: 0; maximum: 2; height: 24px; }
+        }
+        VerticalLayout {
+            spacing: 4px;
+            Text { text: "Row spacing"; }
+            rows-gap := Slider { accessible-label: "Row spacing"; minimum: 0; maximum: 16; value: 8; height: 24px; }
+            Text { text: "Red row"; }
+            row-slider := Slider { accessible-label: "Red row"; minimum: 0; maximum: 2; height: 24px; }
+        }
+    }
+    gallery := Grid {
+        x: 24px; y: 184px;
+        width: 240px; height: 160px;
+        measure-width: 240px; measure-height: 160px;
+        columns: root.fixed-tracks;
+        rows: root.fixed-tracks;
+        column-spacing: round(columns-gap.value / 2) * 2px;
+        row-spacing: round(rows-gap.value / 2) * 2px;
+        rtl: root.rtl;
+        items: root.color-cells;
+        background-brush: #808080;
+        accessible-role: groupbox;
+        accessible-label: "Gallery grid";
+        for shade[index] in root.colors: Rectangle {
+            property <ItemsRepeaterPlacement> slot: gallery.placements[index];
+            x: slot.x; y: slot.y; width: slot.width; height: slot.height;
+            background: shade;
+            accessible-role: groupbox;
+            accessible-label: root.names[index];
+        }
+    }
+
+    Heading { x: 384px; y: 24px; text: "Auto and star sizing"; }
+    HorizontalLayout {
+        x: 384px; y: 60px; width: 360px; height: 32px; spacing: 12px; alignment: start;
+        CheckBox { text: "Narrow"; checked <=> root.narrow; }
+        CheckBox { text: "Cap 1*"; checked <=> root.capped; }
+        CheckBox { text: "Right to left"; checked <=> root.rtl; }
+    }
+    HorizontalLayout {
+        x: 384px; y: 94px; width: 360px; height: 32px; spacing: 12px; alignment: start;
+        CheckBox { text: "Editor spans two columns"; checked <=> root.wide-editor; }
+        CheckBox { text: "Collapse Auto label"; checked <=> root.hide-filter; }
+    }
+    Text {
+        x: 384px; y: 148px;
+        text: "Columns · " + round(mixed.column-tracks[0].size / 1px) + " / " + round(mixed.column-tracks[1].size / 1px)
+            + " / " + round(mixed.column-tracks[2].size / 1px) + " / " + round(mixed.column-tracks[3].size / 1px);
+    }
+    CheckBox { x: 572px; y: 138px; height: 32px; text: "Span rows"; checked <=> root.tall-editor; }
+    mixed := Grid {
+        x: 384px; y: 184px;
+        width: root.narrow ? 260px : 360px;
+        height: 216px;
+        measure-width: self.width; measure-height: self.height;
+        rtl: root.rtl;
+        column-spacing: 8px; row-spacing: 8px;
+        background-brush: #fdfdfd;
+        accessible-role: groupbox;
+        accessible-label: "Mixed grid";
+        columns: [
+            { kind: GridLengthKind.pixel, pixels: 64px },
+            { kind: GridLengthKind.auto },
+            { kind: GridLengthKind.star, weight: 1, min-size: 32px, max-size: 56px, has-max: root.capped },
+            { kind: GridLengthKind.star, weight: 2, min-size: 48px },
+        ];
+        rows: [
+            { kind: GridLengthKind.auto },
+            { kind: GridLengthKind.star, weight: 1, min-size: 44px },
+            { kind: GridLengthKind.pixel, pixels: 36px },
+        ];
+        items: root.mixed-cells;
+        for label[index] in root.mixed-labels: Rectangle {
+            property <ItemsRepeaterPlacement> slot: mixed.placements[index];
+            x: slot.x; y: slot.y; width: slot.width; height: slot.height;
+            visible: !root.mixed-cells[index].collapsed;
+            background: index == 5 ? #e8f1fa : #eeeeee;
+            accessible-role: groupbox;
+            accessible-label: label;
+            if index != 5: Text {
+                width: parent.width; height: parent.height;
+                text: index == 2 ? "1*" : index == 3 ? "2*" : label;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+                color: #000000e4;
+            }
+            if index == 5: LineEdit {
+                x: 4px; y: 8px;
+                width: max(0px, parent.width - 8px); height: 32px;
+                accessible-label: "Grid editor";
+                placeholder-text: "Type here";
+            }
+        }
+    }
+}

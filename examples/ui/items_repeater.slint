@@ -1,0 +1,151 @@
+import { Palette, ScrollView } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { ToggleButton } from "../../ui/components/basic-input/toggle_button.slint";
+import { ItemsRepeater, ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow } from "../../ui/components/collections/items_repeater.slint";
+
+export { ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
+
+export struct SampleItem { label: string, length: length }
+
+export component ItemsRepeaterExample inherits Window {
+    title: "ItemsRepeater";
+    min-width: 820px;
+    preferred-height: 460px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+
+    in property <[SampleItem]> items;
+    in property <[string]> keys;
+    in property <[ItemsRepeaterSize]> sizes;
+    in property <[ItemsRepeaterPlacement]> custom-placements;
+    in property <color> accent: Palette.accent-background;
+    callback load-sample(bool);
+    callback add-item();
+    callback remove-item();
+
+    private property <ItemsRepeaterLayout> layout: ItemsRepeaterLayout.stack;
+    private property <bool> horizontal;
+    private property <bool> rtl;
+    private property <bool> long-model;
+    private property <bool> spaced;
+    private property <bool> narrow;
+    private property <bool> bars: !root.long-model && root.layout == ItemsRepeaterLayout.stack;
+    private property <bool> circles: !root.long-model && root.layout == ItemsRepeaterLayout.uniform-grid;
+    private property <bool> chart: root.bars || root.circles;
+
+    function go-to-start() {
+        scroll.content-x = root.rtl ? min(0px, scroll.visible-width - repeater.extent-width) : 0px;
+        scroll.content-y = 0px;
+    }
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Add item"; enabled: !root.long-model; clicked => { root.add-item(); } }
+            Button { text: "Remove first"; enabled: !root.long-model && root.items.length > 0; clicked => { root.remove-item(); } }
+            Button {
+                text: root.layout == ItemsRepeaterLayout.stack ? "Stack" : root.layout == ItemsRepeaterLayout.uniform-grid ? "Uniform grid"
+                    : root.layout == ItemsRepeaterLayout.flow ? "Flow" : "Custom layout";
+                clicked => {
+                    root.layout = root.layout == ItemsRepeaterLayout.stack ? ItemsRepeaterLayout.uniform-grid
+                        : root.layout == ItemsRepeaterLayout.uniform-grid ? ItemsRepeaterLayout.flow
+                        : root.layout == ItemsRepeaterLayout.flow ? ItemsRepeaterLayout.custom : ItemsRepeaterLayout.stack;
+                    root.go-to-start();
+                }
+            }
+            Button { text: "Change orientation"; clicked => { root.horizontal = !root.horizontal; root.go-to-start(); } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; root.go-to-start(); } }
+            Button { text: "Space evenly"; clicked => { root.spaced = !root.spaced; } }
+            Button { text: "Narrow"; clicked => { root.narrow = !root.narrow; } }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            Button {
+                text: root.long-model ? "Three bars" : "10,000 items";
+                clicked => { root.long-model = !root.long-model; root.load-sample(root.long-model); root.go-to-start(); }
+            }
+            Button { text: "First item"; clicked => { repeater.scroll-into-view(0); } }
+            Button { text: "Last item"; clicked => { repeater.scroll-into-view(root.items.length - 1); } }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            scroll := ScrollView {
+                width: root.narrow ? 332px : 520px;
+                height: 268px;
+                content-width: max(self.visible-width, repeater.extent-width);
+                content-height: max(self.visible-height, repeater.extent-height);
+                horizontal-scrollbar-policy: as-needed;
+                vertical-scrollbar-policy: as-needed;
+
+                repeater := ItemsRepeater {
+                    width: scroll.content-width;
+                    height: scroll.content-height;
+                    viewport-width: scroll.visible-width;
+                    viewport-height: scroll.visible-height;
+                    scroll-x: -scroll.content-x;
+                    scroll-y: -scroll.content-y;
+                    item-count: root.items.length;
+                    item-keys: root.keys;
+                    layout: root.layout;
+                    orientation: root.layout == ItemsRepeaterLayout.stack
+                        ? (root.horizontal ? Orientation.horizontal : Orientation.vertical)
+                        : (root.horizontal ? Orientation.vertical : Orientation.horizontal);
+                    rtl: root.rtl;
+                    justification: root.spaced ? ItemsRepeaterJustification.space-evenly : ItemsRepeaterJustification.start;
+                    item-width: root.bars ? (root.horizontal ? 48px : 426px) : root.circles ? 70px : 96px;
+                    item-height: root.bars ? (root.horizontal ? 106px : 24px) : root.circles ? 70px : 64px;
+                    item-sizes: root.layout == ItemsRepeaterLayout.flow ? root.sizes : [];
+                    custom-placements: root.custom-placements;
+                    column-spacing: 8px;
+                    row-spacing: 8px;
+                    scroll-requested(x, y) => { scroll.content-x = -x; scroll.content-y = -y; }
+
+                    for rect in repeater.realized: Rectangle {
+                        x: rect.x;
+                        y: rect.y;
+                        width: rect.width;
+                        height: rect.height;
+                        accessible-role: none;
+                        background: root.chart ? (Palette.color-scheme == ColorScheme.dark ? #171717 : #f2f2f2)
+                            : (Palette.color-scheme == ColorScheme.dark ? #ffffff0f : #ffffffb3);
+                        border-radius: root.circles ? 36px : root.bars ? 0px : 4px;
+                        border-width: root.chart ? 0px : 1px;
+                        border-color: Palette.border;
+
+                        if root.chart: Rectangle {
+                            private property <length> value: root.items[rect.index].length;
+                            private property <length> diameter: round(self.value / 12px) * 2px;
+                            width: root.circles ? self.diameter : root.horizontal ? parent.width : self.value;
+                            height: root.circles ? self.diameter : root.horizontal ? round(self.value / 8px) * 2px : parent.height;
+                            x: root.circles ? (parent.width - self.width) / 2 : root.rtl ? parent.width - self.width : 0px;
+                            y: root.circles ? (parent.height - self.height) / 2 : 0px;
+                            border-radius: root.circles ? 36px : 0px;
+                            background: root.accent;
+                            accessible-role: text;
+                            accessible-label: root.items[rect.index].label;
+                        }
+                        if !root.chart: ToggleButton {
+                            x: 8px;
+                            y: (parent.height - self.height) / 2;
+                            width: parent.width - 16px;
+                            text: root.items[rect.index].label;
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "Items \{root.items.length} · Realized \{repeater.realized.length} · Extent \{round(repeater.extent-width / 1px)} × \{round(repeater.extent-height / 1px)}";
+            color: Palette.foreground;
+            accessible-label: self.text;
+        }
+    }
+}

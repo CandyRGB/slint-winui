@@ -1,0 +1,88 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { TreeView, TreeViewItem, TreeViewSelectionMode, TreeViewDropMode } from "../../ui/components/collections/tree_view.slint";
+export { TreeViewBehavior, TreeViewRow, TreeViewItem, TreeViewSelectionMode, TreeViewCheckState, TreeViewDropMode } from "../../ui/components/collections/tree_view.slint";
+
+export component TreeViewExample inherits Window {
+    title: "WinUI TreeView";
+    preferred-width: 640px;
+    preferred-height: 440px;
+
+    private property <image> folder: @image-url("../../ui/icons/folder_16_regular.svg");
+    private property <image> open-folder: @image-url("../../ui/icons/folder_open_16_regular.svg");
+    private property <image> document: @image-url("../../ui/icons/document_16_regular.svg");
+    private property <[TreeViewItem]> sample: [
+        { id: "work", label: "Work", icon: root.folder, expanded-icon: root.open-folder, can-have-children: true },
+        { id: "reports", parent-id: "work", label: "Reports", icon: root.folder, expanded-icon: root.open-folder, can-have-children: true },
+        { id: "review", parent-id: "reports", label: "Review", icon: root.document },
+        { id: "draft", parent-id: "work", label: "Draft", icon: root.document },
+        { id: "locked", parent-id: "work", label: "Locked", icon: root.document, disabled: true },
+        { id: "archive", label: "Archive", icon: root.folder, expanded-icon: root.open-folder, can-have-children: true },
+        { id: "download", label: "Downloads", icon: root.folder, expanded-icon: root.open-folder, can-have-children: true, has-unrealized-children: true },
+    ];
+    in-out property <[TreeViewItem]> nodes: root.sample;
+    private property <string> result: "Ready";
+    callback load-children(string);
+    callback load-large-tree();
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+
+        HorizontalLayout {
+            height: 32px;
+            alignment: start;
+            spacing: 12px;
+            multi := CheckBox { text: "Multiple selection"; }
+            no-selection := CheckBox { text: "No selection"; }
+            rtl := CheckBox { text: "RTL"; }
+            Button {
+                text: "Reset";
+                clicked => {
+                    root.nodes = root.sample;
+                    tree.expanded-ids = ["work"];
+                    tree.selected-ids = [];
+                    root.result = "Reset";
+                }
+            }
+            Button {
+                text: "Large tree";
+                clicked => {
+                    tree.selected-ids = [];
+                    root.load-large-tree();
+                    root.result = "Loaded 10,000 nodes";
+                }
+            }
+        }
+
+        Rectangle {
+            border-width: 1px;
+            border-color: Palette.foreground.with-alpha(0.08);
+            border-radius: 8px;
+            tree := TreeView {
+                x: 4px;
+                y: 4px;
+                width: parent.width - 8px;
+                height: parent.height - 8px;
+                items <=> root.nodes;
+                expanded-ids: ["work"];
+                selection-mode: no-selection.checked ? TreeViewSelectionMode.none
+                    : multi.checked ? TreeViewSelectionMode.multiple : TreeViewSelectionMode.single;
+                rtl: rtl.checked;
+                item-invoked(id) => { root.result = "Invoked " + id; }
+                expanding(id) => {
+                    root.result = "Expanded " + id;
+                    if (id == "download") { root.load-children(id); }
+                }
+                collapsed(id) => { root.result = "Collapsed " + id; }
+                items-reordered(ids, target, mode) => { root.result = "Moved " + ids[0] + " to " + target; }
+            }
+        }
+        Text {
+            text: root.result;
+            height: 22px;
+            color: Palette.foreground;
+        }
+    }
+}

@@ -1,0 +1,261 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual } from "button_input.slint";
+
+export component ToggleSwitch inherits Rectangle {
+    in property <string> header;
+    in property <string> on-content: @tr("On");
+    in property <string> off-content: @tr("Off");
+    in property <string> accessible-name: root.header == "" ? root.accessible-content
+        : root.accessible-content == "" ? root.header : root.header + " " + root.accessible-content;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <bool> animations-enabled: true;
+    in property <color> accent: Palette.accent-background;
+    in-out property <bool> is-on;
+    out property <bool> has-focus: root.enabled && keyboard.has-focus;
+    out property <color> foreground: root.enabled ? (root.dark ? white : #000000e4)
+        : (root.dark ? #ffffff5d : #0000005c);
+    callback toggled(bool);
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <string> accessible-content: root.is-on
+        ? (root.on-content == @tr("On") ? "" : root.on-content)
+        : (root.off-content == @tr("Off") ? "" : root.off-content);
+    private property <bool> interactive: root.enabled && root.visible;
+    private property <bool> pointer-focus;
+    private property <bool> space-armed;
+    private property <bool> pointer-armed;
+    private property <bool> tap-cancelled;
+    private property <length> drag-distance;
+    private property <bool> reported-on;
+    private property <bool> hovered: pointer.has-hover && root.interactive
+        && pointer.mouse-x >= 0px && pointer.mouse-x < pointer.width
+        && pointer.mouse-y >= 0px && pointer.mouse-y < pointer.height;
+    private property <length> resting-position: root.is-on ? 20px : 0px;
+    private property <length> knob-position: clamp(root.resting-position + root.drag-distance, 0px, 20px);
+    private property <length> knob-width: root.pointer-armed ? 18px : root.hovered ? 14px : 12px;
+    private property <length> knob-height: root.pointer-armed || root.hovered ? 14px : 12px;
+    private property <color> disabled-stroke: root.dark ? #ffffff28 : #00000037;
+    private property <color> track-fill: root.is-on
+        ? (!root.enabled ? root.disabled-stroke : root.accent.with-alpha(root.pointer-armed ? 0.8 : root.hovered ? 0.9 : 1))
+        : (!root.enabled ? transparent : root.pointer-armed ? (root.dark ? #ffffff12 : #00000018)
+        : root.hovered ? (root.dark ? #ffffff0b : #0000000f) : (root.dark ? #00000019 : #00000006));
+    private property <color> knob-fill: root.is-on
+        ? (root.dark ? (root.enabled ? black : #ffffff87) : white)
+        : (!root.enabled ? root.foreground : root.dark ? #ffffffc5 : #0000009e);
+    private property <length> label-width: round(max(off-label.preferred-width,
+        on-label.preferred-width, state-content.preferred-width) / 2px) * 2px;
+    private property <length> body-height: max(40px, round(state-content.preferred-height / 2px) * 2px);
+    private property <length> body-width: min(root.width, 52px + root.label-width);
+    private property <length> header-height: root.header == "" ? 0px : round(heading.preferred-height / 2px) * 2px + 4px;
+    private property <length> header-width: round(heading.preferred-width / 2px) * 2px;
+
+    min-width: max(154px, round(max(52px + state-content.min-width, heading.min-width) / 2px) * 2px);
+    preferred-width: max(154px, 52px + root.label-width, root.header-width);
+    min-height: root.header-height + root.body-height;
+    preferred-height: root.min-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: keyboard;
+
+    init => { root.reported-on = root.is-on; }
+    changed is-on => {
+        root.cancel-pointer();
+        root.notify-toggle();
+    }
+    changed interactive => {
+        if !root.interactive {
+            root.cancel-pointer();
+            root.space-armed = false;
+        }
+    }
+
+    animate knob-position {
+        duration: root.animations-enabled && !root.pointer-armed ? 120ms : 0ms;
+        easing: cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+    animate knob-width, knob-height {
+        duration: !root.animations-enabled ? 0ms : root.enabled ? 83ms : 250ms;
+        easing: cubic-bezier(0, 0, 0, 1);
+    }
+
+    function notify-toggle() {
+        if root.is-on != root.reported-on {
+            root.reported-on = root.is-on;
+            root.toggled(root.is-on);
+        }
+    }
+
+    function toggle() {
+        if root.interactive {
+            root.is-on = !root.is-on;
+            root.notify-toggle();
+        }
+    }
+
+    function cancel-pointer() {
+        root.pointer-armed = false;
+        root.tap-cancelled = false;
+        root.drag-distance = 0px;
+    }
+
+    heading := Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: max(0px, root.header-height - 4px);
+        text: root.header;
+        font-family: "Segoe UI Variable Text";
+        font-size: 14px;
+        color: root.foreground;
+        wrap: word-wrap;
+        horizontal-alignment: root.rtl ? right : left;
+        accessible-role: none;
+    }
+
+    surface := Rectangle {
+        width: max(root.body-width, min(root.width, root.header-width));
+        height: root.header-height + root.body-height;
+        x: root.rtl ? root.width - self.width : 0px;
+        y: 0px;
+        accessible-role: switch;
+        accessible-enabled: root.enabled;
+        accessible-label: root.accessible-name;
+        accessible-checkable: true;
+        accessible-checked: root.is-on;
+        accessible-action-default => { root.toggle(); }
+
+        body := Rectangle {
+            width: root.body-width;
+            height: root.body-height;
+            x: root.rtl ? parent.width - self.width : 0px;
+            y: root.header-height;
+
+            track := Rectangle {
+                width: 40px;
+                height: 20px;
+                x: root.rtl ? parent.width - self.width : 0px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 10px;
+                border-width: root.is-on ? 0px : 1px;
+                border-color: !root.enabled ? root.disabled-stroke : root.dark ? #ffffff8b : #00000072;
+                background: root.track-fill;
+
+                Rectangle {
+                    private property <length> inset: !root.pointer-armed ? 10px - self.width / 2
+                        : root.is-on ? 16px - self.width : 4px;
+                    private property <length> left: clamp(root.knob-position + self.inset, 0px, parent.width - self.width);
+                    width: root.knob-width;
+                    height: root.knob-height;
+                    x: root.rtl ? parent.width - self.width - self.left : self.left;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 10px;
+                    background: root.knob-fill;
+                }
+            }
+
+            off-label := Text {
+                x: root.rtl ? 0px : 52px;
+                y: 0px;
+                width: max(0px, parent.width - 52px);
+                height: parent.height;
+                text: root.off-content;
+                visible: !root.is-on;
+                font-family: "Segoe UI Variable Text";
+                font-size: 14px;
+                color: root.foreground;
+                horizontal-alignment: root.rtl ? right : left;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+            on-label := Text {
+                x: off-label.x;
+                y: 0px;
+                width: off-label.width;
+                height: parent.height;
+                text: root.on-content;
+                visible: root.is-on;
+                font-family: "Segoe UI Variable Text";
+                font-size: 14px;
+                color: root.foreground;
+                horizontal-alignment: root.rtl ? right : left;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+            state-content := VerticalLayout {
+                x: off-label.x;
+                width: off-label.width;
+                height: parent.height;
+                alignment: center;
+                @children
+            }
+
+            pointer := TouchArea {
+                enabled: root.interactive;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        root.space-armed = false;
+                        root.pointer-focus = true;
+                        keyboard.focus();
+                        root.pointer-armed = true;
+                    }
+                    if event.kind == PointerEventKind.move && root.pointer-armed {
+                        let delta = self.mouse-x - self.pressed-x;
+                        root.drag-distance = root.rtl ? -delta : delta;
+                        root.tap-cancelled = root.tap-cancelled || abs(delta) > 2px || abs(self.mouse-y - self.pressed-y) > 2px;
+                    }
+                    if event.kind == PointerEventKind.up && event.button == PointerEventButton.left && root.pointer-armed {
+                        let crossed-midpoint = root.is-on ? root.drag-distance <= -10px : root.drag-distance >= 10px;
+                        let tapped = !root.tap-cancelled && root.hovered;
+                        root.cancel-pointer();
+                        if crossed-midpoint || tapped {
+                            root.toggle();
+                        }
+                    }
+                    if event.kind == PointerEventKind.cancel {
+                        root.cancel-pointer();
+                    }
+                }
+            }
+            keyboard := FocusScope {
+                x: 0px;
+                width: 0px;
+                enabled: root.interactive;
+
+                key-pressed(event) => {
+                    if event.text == Key.Space && !root.pointer-armed {
+                        root.pointer-focus = false;
+                        root.space-armed = true;
+                        return accept;
+                    }
+                    return reject;
+                }
+                key-released(event) => {
+                    if event.text == Key.Space && root.space-armed {
+                        root.space-armed = false;
+                        root.toggle();
+                        return accept;
+                    }
+                    return reject;
+                }
+                focus-lost(reason) => {
+                    root.pointer-focus = false;
+                    root.space-armed = false;
+                    root.cancel-pointer();
+                }
+            }
+
+            if root.has-focus && !root.pointer-focus && root.visible: Rectangle {
+                x: 0px;
+                y: 6px;
+                width: parent.width;
+                height: max(0px, parent.height - 12px);
+                ButtonFocusVisual {
+                    control-width: parent.width;
+                    control-height: parent.height;
+                    horizontal-margin: 8px;
+                }
+            }
+        }
+    }
+}

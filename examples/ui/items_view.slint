@@ -1,0 +1,213 @@
+import { Button, CheckBox, ComboBox, Palette } from "std-widgets.slint";
+import { ItemsView, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction,
+    ItemsViewSelectionMode } from "../../ui/components/collections/items_view.slint";
+import { ItemContainer } from "../../ui/components/collections/item_container.slint";
+import { ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout,
+    ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch,
+    ItemsRepeaterWindow } from "../../ui/components/collections/items_repeater.slint";
+
+export { ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode,
+    ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout,
+    ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
+
+export struct GalleryPhoto { title: string, likes: int, image: image }
+
+export component ItemsViewExample inherits Window {
+    title: "ItemsView";
+    preferred-width: 748px;
+    preferred-height: 628px;
+    min-width: 540px;
+    min-height: 556px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+    in property <[ItemsViewItem]> items;
+    in property <[GalleryPhoto]> photos;
+    in property <[ItemsRepeaterSize]> photo-sizes;
+    in property <color> accent: Palette.accent-background;
+    callback load-items(bool);
+
+    private property <bool> basic: sample.current-index == 0;
+    private property <bool> swappable: sample.current-index == 1;
+    private property <bool> stack: root.basic || (root.swappable && layouts.current-index == 2);
+    private property <bool> lined: root.swappable && layouts.current-index == 0;
+    private property <string> last-invocation;
+    private property <int> invocation-count;
+    private property <int> selection-count;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+        Text { text: "ItemsView"; font-size: 28px; }
+        HorizontalLayout {
+            spacing: 12px;
+            sample := ComboBox {
+                accessible-label: "Sample";
+                model: ["Basic ItemsView", "Swappable layouts", "Invocation and selection"];
+                current-index: 0;
+                width: 236px;
+                selected(_) => {
+                    view.deselect-all();
+                    view.bring-item-into-view(0);
+                    root.last-invocation = "";
+                }
+            }
+            large := CheckBox { text: "10,000 items"; toggled => { root.load-items(self.checked); } }
+            mirror := CheckBox { text: "Right to left"; }
+        }
+
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            Rectangle {
+                min-width: root.basic ? 220px : 260px;
+                max-width: root.basic ? 220px : 500px;
+                preferred-width: root.basic ? 220px : 500px;
+                horizontal-stretch: 1;
+                height: 400px;
+                background: #ffffffb3;
+                border-color: #0000000f;
+                border-width: 1px;
+                border-radius: 4px;
+                view := ItemsView {
+                    label: "Photos";
+                    items: root.items;
+                    rtl: mirror.checked;
+                    is-item-invoked-enabled: root.basic || (!root.swappable && invocation.checked);
+                    selection-mode: root.basic || root.swappable ? ItemsViewSelectionMode.single
+                        : modes.current-index == 0 ? ItemsViewSelectionMode.none
+                        : modes.current-index == 1 ? ItemsViewSelectionMode.single
+                        : modes.current-index == 2 ? ItemsViewSelectionMode.multiple : ItemsViewSelectionMode.extended;
+                    layout: root.stack ? ItemsRepeaterLayout.stack
+                        : root.lined ? ItemsRepeaterLayout.lined-flow : ItemsRepeaterLayout.uniform-grid;
+                    orientation: root.stack ? Orientation.vertical : Orientation.horizontal;
+                    item-width: root.basic ? 200px : root.stack ? 220px : root.lined ? 70px : 150px;
+                    item-height: root.basic ? 140px : root.stack ? 76px : root.lined ? (short-lines.checked ? 80px : 160px) : 120px;
+                    item-sizes: root.lined ? root.photo-sizes : [];
+                    stretch: root.lined ? ItemsRepeaterStretch.fill : ItemsRepeaterStretch.none;
+                    column-spacing: root.basic ? 0px : 6px;
+                    row-spacing: root.basic ? 0px : 6px;
+                    max-items-per-line: root.lined || root.stack ? -1 : 3;
+                    selection-changed => { root.selection-count += 1; }
+                    item-invoked(index) => {
+                        root.last-invocation = root.photos[index].title;
+                        root.invocation-count += 1;
+                    }
+
+                    for rect in view.realized: ItemContainer {
+                        x: rect.x;
+                        y: rect.y;
+                        width: rect.width;
+                        height: rect.height;
+                        item-index: rect.index;
+                        item-count: root.items.length;
+                        label: root.photos[rect.index].title;
+                        enabled: view.enabled && root.items[rect.index].enabled;
+                        selected: view.is-selected(rect.index);
+                        selectable: view.selection-mode != ItemsViewSelectionMode.none;
+                        multiple: view.selection-mode == ItemsViewSelectionMode.multiple;
+                        focused: view.keyboard-focused && rect.index == view.current-item-index;
+                        accent: root.accent;
+                        rtl: view.rtl;
+                        tapped(mods) => { view.tap-item(rect.index, mods); }
+                        double-tapped => { view.double-tap-item(rect.index); }
+                        automation-action => { view.automation-item(rect.index); }
+
+                        Rectangle {
+                            x: root.basic ? 4px : 0px;
+                            y: self.x;
+                            width: parent.width - 2 * self.x;
+                            height: parent.height - 2 * self.y;
+                            accessible-role: none;
+                            background: #e0e8ed;
+                            if root.photos[rect.index].image.width > 0: Image {
+                                x: root.stack && !root.basic && view.rtl ? parent.width - self.width : 0px;
+                                width: root.stack && !root.basic ? 76px : parent.width;
+                                height: parent.height;
+                                source: root.photos[rect.index].image;
+                                image-fit: cover;
+                                accessible-role: none;
+                            }
+                            if !root.basic: Rectangle {
+                                x: root.stack && !view.rtl ? 76px : 0px;
+                                y: root.stack ? 0px : parent.height - 40px;
+                                width: root.stack ? parent.width - 76px : parent.width;
+                                height: root.stack ? parent.height : 40px;
+                                background: root.stack ? #ffffff : #00000099;
+                                VerticalLayout {
+                                    alignment: center;
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    Text {
+                                        text: root.photos[rect.index].title;
+                                        color: root.stack ? #000000e4 : white;
+                                        overflow: elide;
+                                        horizontal-alignment: view.rtl ? right : left;
+                                        accessible-role: none;
+                                    }
+                                    Text {
+                                        text: root.photos[rect.index].likes + " Likes";
+                                        color: root.stack ? #0000009e : white;
+                                        font-size: 12px;
+                                        horizontal-alignment: view.rtl ? right : left;
+                                        accessible-role: none;
+                                    }
+                                }
+                            }
+                            if root.basic && root.photos[rect.index].image.width == 0: Text {
+                                text: root.photos[rect.index].title;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                accessible-role: none;
+                            }
+                        }
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: start;
+                spacing: 8px;
+                layouts := ComboBox {
+                    visible: root.swappable;
+                    accessible-label: "Layout";
+                    model: ["LinedFlowLayout", "UniformGridLayout", "StackLayout"];
+                    current-index: 0;
+                    width: 160px;
+                    height: root.swappable ? 32px : 0px;
+                    selected(_) => { view.bring-item-into-view(0); }
+                }
+                short-lines := CheckBox {
+                    text: "80px lines";
+                    visible: root.lined;
+                    height: root.lined ? 32px : 0px;
+                    toggled => { view.bring-item-into-view(0); }
+                }
+                modes := ComboBox {
+                    visible: !root.basic && !root.swappable;
+                    accessible-label: "SelectionMode";
+                    model: ["None", "Single", "Multiple", "Extended"];
+                    current-index: 2;
+                    width: 160px;
+                    height: self.visible ? 32px : 0px;
+                    selected(_) => { view.deselect-all(); }
+                }
+                invocation := CheckBox {
+                    text: "IsItemInvokedEnabled";
+                    checked: true;
+                    visible: modes.visible;
+                    height: self.visible ? 32px : 0px;
+                }
+                Button { text: "Select all"; clicked => { view.select-all(); } }
+                Button { text: "Deselect all"; clicked => { view.deselect-all(); } }
+                Button { text: "Invert selection"; clicked => { view.invert-selection(); } }
+                Button { text: "Bring last item into view"; clicked => { view.bring-item-into-view(root.items.length - 1); } }
+            }
+        }
+        Text {
+            text: "Selected: " + view.selected-keys.length + "  Current index: " + view.current-item-index
+                + "  Selection changes: " + root.selection-count;
+        }
+        Text { text: "Invoked: " + root.invocation-count + "  " + root.last-invocation; }
+        Text { text: "Realized: " + view.realized.length + " / " + root.items.length; }
+    }
+}

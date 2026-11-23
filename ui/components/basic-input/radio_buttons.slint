@@ -1,0 +1,198 @@
+import { Palette } from "std-widgets.slint";
+import { RadioButton } from "radio_button.slint";
+
+export struct RadioButtonsItem {
+    id: string,
+    text: string,
+    disabled: bool,
+}
+
+export global RadioButtonsBehavior {
+    pure callback index-of([RadioButtonsItem], string) -> int;
+    pure callback next-enabled([RadioButtonsItem], int, int) -> int;
+    pure callback across-columns([RadioButtonsItem], int, int, int) -> int;
+}
+
+export component RadioButtons inherits Rectangle {
+    in property <string> header;
+    in property <string> accessible-name: root.header;
+    in property <[RadioButtonsItem]> items;
+    in property <int> max-columns: 1;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <color> accent: Palette.accent-background;
+    in-out property <int> selected-index: -1;
+    out property <RadioButtonsItem> selected-item: root.selected-index >= 0 && root.selected-index < root.item-count
+        ? root.items[root.selected-index] : { id: "", text: "", disabled: false };
+    out property <int> focused-index: -1;
+    out property <int> column-count: root.item-count == 0 ? 0
+        : min(root.requested-columns, max(1, floor((root.width + 8px) / (root.largest-width + 8px))));
+    callback selection-changed(int, int);
+
+    private property <int> item-count: root.items.length;
+    private property <int> requested-columns: min(root.item-count, max(1, root.max-columns));
+    private property <length> largest-width: max(120px, round((measure-width.preferred-width + 28px) / 2px) * 2px);
+    private property <length> column-width: min(root.width, root.largest-width);
+    private property <length> row-height: max(32px, round((measure-height.preferred-height + 6px) / 2px) * 2px);
+    private property <int> rows-per-column: floor(root.item-count / max(1, root.column-count));
+    private property <int> longer-columns: Math.mod(root.item-count, max(1, root.column-count));
+    private property <int> max-rows: root.rows-per-column + (root.longer-columns > 0 ? 1 : 0);
+    private property <int> first-enabled: RadioButtonsBehavior.next-enabled(root.items, -1, 1);
+    private property <int> tab-index: root.focused-index >= 0 && root.focused-index < root.item-count
+        && !root.items[root.focused-index].disabled
+        ? root.focused-index : root.selected-index >= 0 && root.selected-index < root.item-count && !root.selected-item.disabled
+        ? root.selected-index : root.first-enabled;
+    private property <string> previous-id;
+    private property <int> previous-index: -1;
+    private property <int> focus-target: -1;
+    private property <int> focus-request;
+
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    min-width: root.item-count > 0 ? 120px : 0px;
+    preferred-width: max(heading.preferred-width,
+        root.requested-columns * root.largest-width + max(0, root.requested-columns - 1) * 8px);
+    min-height: root.preferred-height;
+    preferred-height: root.header-height + root.max-rows * root.row-height + max(0, root.max-rows - 1) * 8px;
+    private property <length> header-height: root.header == "" ? 0px : round(heading.preferred-height / 2px) * 2px + 8px;
+
+    accessible-role: radio-group;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+
+    changed selected-index => { root.publish-selection(); }
+    changed items => { root.restore-selection(); }
+    changed item-count => { root.restore-selection(); }
+
+    function publish-selection() {
+        if root.selected-index < -1 || root.selected-index >= root.item-count {
+            root.selected-index = -1;
+        }
+        let before = root.previous-index;
+        let item = root.selected-item;
+        if before != root.selected-index || root.previous-id != item.id {
+            root.previous-index = root.selected-index;
+            root.previous-id = item.id;
+            root.selection-changed(before, root.selected-index);
+        }
+    }
+
+    function restore-selection() {
+        if root.focused-index >= root.item-count {
+            root.focused-index = -1;
+        }
+        if root.previous-id != "" {
+            root.selected-index = RadioButtonsBehavior.index-of(root.items, root.previous-id);
+        }
+        root.publish-selection();
+    }
+
+    public function select-id(id: string) {
+        root.selected-index = RadioButtonsBehavior.index-of(root.items, id);
+        root.publish-selection();
+    }
+
+    pure function column-of(index: int) -> int {
+        let first-short = root.longer-columns * (root.rows-per-column + 1);
+        return index < first-short ? floor(index / (root.rows-per-column + 1))
+            : root.longer-columns + floor((index - first-short) / max(1, root.rows-per-column));
+    }
+
+    function move(index: int, event: KeyEvent) -> EventResult {
+        let key = event.text;
+        if key == Key.UpArrow || key == Key.DownArrow || key == Key.LeftArrow || key == Key.RightArrow {
+            let vertical = key == Key.UpArrow || key == Key.DownArrow;
+            let direction = (key == Key.DownArrow || key == (root.rtl ? Key.LeftArrow : Key.RightArrow)) ? 1 : -1;
+            let next = vertical ? RadioButtonsBehavior.next-enabled(root.items, index, direction)
+                : RadioButtonsBehavior.across-columns(root.items, index, root.column-count, direction);
+            if next >= 0 {
+                root.focus-target = next;
+                root.focus-request += 1;
+                if !event.modifiers.control {
+                    root.selected-index = next;
+                    root.publish-selection();
+                }
+            }
+            return accept;
+        }
+        return reject;
+    }
+
+    heading := Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: max(0px, root.header-height - 8px);
+        visible: root.header != "";
+        text: root.header;
+        font-family: "Segoe UI Variable Text";
+        font-size: 14px;
+        color: root.enabled ? (Palette.color-scheme == ColorScheme.dark ? white : #000000e4)
+            : Palette.color-scheme == ColorScheme.dark ? #ffffff5e : #0000005c;
+        horizontal-alignment: root.rtl ? right : left;
+        wrap: word-wrap;
+        accessible-role: none;
+    }
+
+    measure-width := VerticalLayout {
+        x: 0px;
+        visible: false;
+        for item in root.items: Text {
+            text: item.text;
+            font-family: "Segoe UI Variable Text";
+            font-size: 14px;
+            accessible-role: none;
+        }
+    }
+
+    measure-height := HorizontalLayout {
+        x: 0px;
+        visible: false;
+        for item in root.items: Text {
+            text: item.text;
+            font-family: "Segoe UI Variable Text";
+            font-size: 14px;
+            width: max(0px, root.column-width - 28px);
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+    }
+
+    for item[index] in root.items: RadioButton {
+        private property <int> item-column: root.column-of(index);
+        private property <int> item-row: index - item-column * root.rows-per-column - min(item-column, root.longer-columns);
+        private property <int> focus-ticket: root.focus-target == index ? root.focus-request : 0;
+
+        x: root.rtl ? root.width - self.width - item-column * (root.column-width + 8px)
+            : item-column * (root.column-width + 8px);
+        y: root.header-height + item-row * (root.row-height + 8px);
+        width: min(root.column-width, self.preferred-width);
+        height: self.preferred-height;
+        text: item.text;
+        enabled: root.enabled && !item.disabled;
+        rtl: root.rtl;
+        tab-stop: root.tab-index == index;
+        accent: root.accent;
+        checked: root.selected-index == index;
+        index-in-set: index;
+        size-of-set: root.item-count;
+
+        selection-requested => {
+            root.selected-index = index;
+            root.publish-selection();
+        }
+        unhandled-key-pressed(event) => { return root.move(index, event); }
+        changed focus-ticket => {
+            if self.focus-ticket > 0 && self.enabled {
+                self.focus();
+            }
+        }
+        changed has-focus => {
+            if self.has-focus {
+                root.focused-index = index;
+            } else if root.focused-index == index {
+                root.focused-index = -1;
+            }
+        }
+    }
+}

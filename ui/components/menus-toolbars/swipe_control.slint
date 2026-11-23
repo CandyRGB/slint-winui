@@ -1,0 +1,463 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "../basic-input/button_input.slint";
+
+export enum SwipeMode { reveal, execute }
+export enum SwipeBehaviorOnInvoked { auto, close, remain-open }
+export enum SwipeSide { none, left, right, top, bottom }
+
+export struct SwipeItem {
+    id: string,
+    text: string,
+    icon: image,
+    colorize-icon: bool,
+    background: brush,
+    foreground: brush,
+    use-background: bool,
+    use-foreground: bool,
+    behavior-on-invoked: SwipeBehaviorOnInvoked,
+}
+
+export struct SwipeItems {
+    mode: SwipeMode,
+    items: [SwipeItem],
+}
+
+component SwipeAction inherits Rectangle {
+    in property <SwipeItem> item;
+    in property <bool> actionable;
+    in property <bool> executing;
+    in property <brush> default-background;
+    in property <brush> default-foreground;
+    in property <brush> pressed-background;
+    callback invoked();
+
+    private property <brush> ink: root.item.use-foreground ? root.item.foreground : root.default-foreground;
+
+    min-width: 68px;
+    min-height: 40px;
+    preferred-width: max(68px, ceil((caption.preferred-width + 8px) / 2px) * 2px);
+    preferred-height: max(40px, ceil((body.preferred-height + 6px) / 2px) * 2px);
+    background: root.executing ? transparent : input.pressed ? root.pressed-background
+        : root.item.use-background ? root.item.background : root.default-background;
+    forward-focus: input;
+
+    body := VerticalLayout {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(self.preferred-width, max(0px, parent.width - 8px));
+        height: self.preferred-height;
+        spacing: 2px;
+
+        if root.item.icon.width > 0: Rectangle {
+            height: 16px;
+            Image {
+                x: (parent.width - self.width) / 2;
+                width: 16px;
+                height: 16px;
+                source: root.item.icon;
+                image-fit: contain;
+                colorize: root.item.colorize-icon ? root.ink : transparent;
+            }
+        }
+        caption := Text {
+            text: root.item.text;
+            color: root.ink;
+            font-size: 12px;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+    }
+
+    input := ButtonInput {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.actionable;
+        visible: root.actionable;
+        accessible-role: button;
+        accessible-label: root.item.text;
+        accessible-action-default => { if root.actionable { root.invoked(); } }
+        clicked => { root.invoked(); }
+    }
+    if input.keyboard-focused: ButtonFocusVisual {
+        control-width: parent.width;
+        control-height: parent.height;
+        control-radius: 0px;
+        horizontal-margin: 0px;
+        vertical-margin: 0px;
+    }
+}
+
+component SwipePointer inherits TouchArea {
+    in property <bool> horizontal;
+    in property <bool> near-enabled;
+    in property <bool> far-enabled;
+    callback dragged(length);
+    callback released(length);
+    callback cancelled();
+    callback tapped();
+
+    private property <int> finger: -1;
+    private property <Point> origin;
+    private property <bool> swiping;
+    private property <bool> moved-outside-slop;
+
+    public function cancel() {
+        root.finger = -1;
+        if root.swiping {
+            root.swiping = false;
+            root.cancelled();
+        }
+    }
+
+    pointer-event(event) => {
+        let position = { x: root.absolute-position.x + root.mouse-x, y: root.absolute-position.y + root.mouse-y };
+        let dx = position.x - root.origin.x;
+        let dy = position.y - root.origin.y;
+        let delta = root.horizontal ? dx : dy;
+        let across = root.horizontal ? dy : dx;
+        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+            root.finger = event.touch-finger-id;
+            root.origin = position;
+            root.moved-outside-slop = false;
+        } else if event.kind == PointerEventKind.cancel {
+            root.cancel();
+        } else if root.finger >= 0 && event.kind == PointerEventKind.move && event.touch-finger-id == root.finger {
+            if abs(delta) >= 8px || abs(across) >= 8px { root.moved-outside-slop = true; }
+            if abs(delta) >= max(8px, abs(across)) && (delta > 0px ? root.near-enabled : root.far-enabled) {
+                root.swiping = true;
+            }
+            if root.swiping { root.dragged(delta); }
+        } else if root.finger >= 0 && event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+            // Slint sends a release with the new finger's ID when a second finger joins.
+            if event.touch-finger-id != root.finger {
+                root.cancel();
+            } else {
+                let swiped = root.swiping;
+                root.finger = -1;
+                root.swiping = false;
+                if swiped {
+                    root.released(delta);
+                } else if !root.moved-outside-slop && abs(delta) < 8px && abs(across) < 8px {
+                    root.tapped();
+                }
+            }
+        }
+    }
+}
+
+export component SwipeControl inherits Rectangle {
+    slot content;
+
+    in property <SwipeItems> left-items;
+    in property <SwipeItems> right-items;
+    in property <SwipeItems> top-items;
+    in property <SwipeItems> bottom-items;
+    in property <bool> enabled: true;
+    in property <bool> keyboard-tab-stop;
+    in property <bool> animations-enabled: true;
+    in property <string> accessible-name;
+    in property <brush> content-background;
+    in property <brush> content-border-color;
+    in property <length> content-border-width;
+    in property <length> content-corner-radius;
+    in property <color> execute-accent: Palette.accent-background;
+
+    out property <SwipeSide> open-side: root.settled-side;
+    out property <bool> is-open: root.settled-side != SwipeSide.none;
+    out property <bool> is-interacting: root.tracking;
+    out property <bool> threshold-reached: root.visual-side != SwipeSide.none && abs(root.target-offset) >= root.threshold;
+    callback interaction-started();
+    callback opened(SwipeSide);
+    callback closed();
+    callback item-invoked(SwipeSide, SwipeItem);
+
+    private property <bool> has-horizontal: root.left-items.items.length > 0 || root.right-items.items.length > 0;
+    private property <bool> has-vertical: root.top-items.items.length > 0 || root.bottom-items.items.length > 0;
+    private property <bool> horizontal: root.has-horizontal || !root.has-vertical;
+    private property <bool> available: root.enabled && root.has-horizontal != root.has-vertical;
+    private property <length> extent: root.horizontal ? root.width : root.height;
+    private property <SwipeSide> near-side: root.horizontal ? SwipeSide.left : SwipeSide.top;
+    private property <SwipeSide> far-side: root.horizontal ? SwipeSide.right : SwipeSide.bottom;
+    private property <SwipeSide> visual-side: SwipeSide.none;
+    private property <SwipeSide> settled-side: SwipeSide.none;
+    private property <SwipeMode> settled-mode: SwipeMode.reveal;
+    private property <SwipeItems> active-actions: root.actions-for(root.visual-side);
+    private property <bool> executing: root.active-actions.mode == SwipeMode.execute;
+    private property <int> active-count: root.active-actions.items.length;
+    private property <SwipeItem> execute-item: root.active-count == 1 && root.executing ? root.active-actions.items[0] : {};
+    private property <bool> locked-open: root.is-open && root.executing
+        && root.execute-item.behavior-on-invoked == SwipeBehaviorOnInvoked.remain-open;
+    private property <bool> tracking;
+    private property <length> drag-offset;
+    private property <length> action-extent: root.executing ? root.extent
+        : root.horizontal ? horizontal-actions.width : vertical-actions.height;
+    private property <length> threshold: min(100px, root.action-extent);
+    private property <length> open-offset: root.is-open ? root.signed-extent(root.settled-side) : 0px;
+    private property <length> target-offset: root.tracking ? root.drag-offset : root.open-offset;
+    private property <length> offset: root.target-offset;
+    private property <length> exposed: min(abs(root.offset), root.extent);
+    private property <bool> near: root.visual-side == root.near-side;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <brush> normal-fill: root.dark ? #ffffff08 : #f9f9f94d;
+    private property <brush> pressed-fill: root.dark ? #ffffff12 : #00000018;
+    private property <brush> backdrop: root.active-count == 0 ? transparent
+        : root.executing ? (root.execute-item.use-background ? root.execute-item.background
+            : root.threshold-reached ? root.execute-accent : root.normal-fill)
+        : root.reveal-backdrop();
+
+    min-width: max(88px, face.min-width);
+    min-height: max(40px, face.min-height);
+    preferred-width: max(88px, ceil(face.preferred-width / 2px) * 2px);
+    preferred-height: max(40px, ceil(face.preferred-height / 2px) * 2px);
+    clip: true;
+    accessible-role: groupbox;
+    accessible-label: root.accessible-name;
+    forward-focus: keys;
+
+    changed available => { if !root.available { root.close(); } }
+    changed horizontal => { root.close(); }
+    changed active-count => {
+        if root.visual-side != SwipeSide.none && !root.valid(root.active-actions) { root.close(); }
+    }
+    changed executing => {
+        if root.is-open && root.active-actions.mode != root.settled-mode { root.close(); }
+    }
+    changed offset => {
+        if root.offset == 0px && !root.tracking && !root.is-open { root.visual-side = SwipeSide.none; }
+    }
+
+    animate offset {
+        duration: root.tracking || !root.animations-enabled ? 0ms : 160ms;
+        easing: ease-out;
+    }
+
+    public function close() {
+        face-pointer.cancel();
+        open-pointer.cancel();
+        execution.stop();
+        root.tracking = false;
+        if root.is-open {
+            root.settled-side = SwipeSide.none;
+            root.closed();
+        }
+        if root.offset == 0px { root.visual-side = SwipeSide.none; }
+    }
+
+    public function dismiss() {
+        if !root.locked-open { root.close(); }
+    }
+
+    pure function actions-for(side: SwipeSide) -> SwipeItems {
+        return side == SwipeSide.left ? root.left-items : side == SwipeSide.right ? root.right-items
+            : side == SwipeSide.top ? root.top-items : side == SwipeSide.bottom ? root.bottom-items : {};
+    }
+
+    pure function valid(actions: SwipeItems) -> bool {
+        return actions.mode == SwipeMode.execute ? actions.items.length == 1 : actions.items.length > 0;
+    }
+
+    pure function signed-extent(side: SwipeSide) -> length {
+        return (side == root.near-side ? 1 : -1) * min(root.extent, root.action-extent);
+    }
+
+    pure function reveal-backdrop() -> brush {
+        let edge = root.active-actions.items[root.near ? root.active-count - 1 : 0];
+        return edge.use-background ? edge.background : root.normal-fill;
+    }
+
+    function move-swipe(delta: length) {
+        if !root.tracking {
+            root.tracking = true;
+            root.interaction-started();
+        }
+        let total = root.open-offset + delta;
+        if root.is-open {
+            root.drag-offset = root.near ? clamp(total, 0px, root.extent) : clamp(total, -root.extent, 0px);
+        } else {
+            let side = total >= 0px ? root.near-side : root.far-side;
+            if root.valid(root.actions-for(side)) {
+                root.visual-side = side;
+                root.drag-offset = clamp(total, -root.extent, root.extent);
+            } else {
+                root.drag-offset = 0px;
+            }
+        }
+    }
+
+    function end-swipe(delta: length) {
+        // The last release can carry a position newer than the final move event.
+        root.move-swipe(delta);
+        let distance = abs(root.drag-offset);
+        if root.is-open {
+            root.tracking = false;
+            if distance < abs(root.open-offset) - 1px { root.dismiss(); }
+        } else if root.visual-side != SwipeSide.none && distance > 0px && distance >= root.threshold {
+            root.settle-open();
+        } else {
+            root.tracking = false;
+        }
+    }
+
+    function settle-open() {
+        root.settled-mode = root.active-actions.mode;
+        root.settled-side = root.visual-side;
+        root.tracking = false;
+        if root.executing { execution.start(); }
+        root.opened(root.settled-side);
+    }
+
+    function invoke(item: SwipeItem, restore-focus: bool) {
+        let side = root.settled-side;
+        root.item-invoked(side, item);
+        if item.behavior-on-invoked != SwipeBehaviorOnInvoked.remain-open && root.settled-side == side {
+            if restore-focus { keys.focus(); }
+            root.close();
+        }
+    }
+
+    execution := Timer {
+        interval: root.animations-enabled ? 160ms : 0ms;
+        running: false;
+        triggered => {
+            self.stop();
+            if root.is-open && root.executing && root.valid(root.active-actions) {
+                root.invoke(root.execute-item, false);
+            }
+        }
+    }
+
+    keys := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.available;
+        focus-on-tab-navigation: root.keyboard-tab-stop;
+        focus-on-click: false;
+        capture-key-pressed(event) => {
+            if event.text == Key.Escape && root.is-open && !root.locked-open {
+                self.focus();
+                root.dismiss();
+                return accept;
+            }
+            if !root.keyboard-tab-stop || (!self.has-focus && !root.is-open) || !event.modifiers.control
+                || event.repeat || root.locked-open || execution.running || root.tracking { return reject; }
+            let side = root.horizontal
+                ? (event.text == Key.RightArrow ? SwipeSide.left : event.text == Key.LeftArrow ? SwipeSide.right : SwipeSide.none)
+                : (event.text == Key.DownArrow ? SwipeSide.top : event.text == Key.UpArrow ? SwipeSide.bottom : SwipeSide.none);
+            if side == SwipeSide.none { return reject; }
+            if root.is-open && root.settled-side != side {
+                self.focus();
+                root.dismiss();
+            } else if !root.is-open && root.valid(root.actions-for(side)) {
+                root.interaction-started();
+                root.visual-side = side;
+                root.settle-open();
+            } else {
+                return reject;
+            }
+            return accept;
+        }
+
+        face-pointer := SwipePointer {
+            width: parent.width;
+            height: parent.height;
+            enabled: root.available && !root.is-open;
+            horizontal: root.horizontal;
+            near-enabled: root.valid(root.actions-for(root.near-side));
+            far-enabled: root.valid(root.actions-for(root.far-side));
+            dragged(delta) => { root.move-swipe(delta); }
+            released(delta) => { root.end-swipe(delta); }
+            cancelled => { root.tracking = false; }
+        }
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            Rectangle {
+                x: root.horizontal && !root.near ? parent.width - self.width : 0px;
+                y: !root.horizontal && !root.near ? parent.height - self.height : 0px;
+                width: root.horizontal ? root.exposed : parent.width;
+                height: root.horizontal ? parent.height : root.exposed;
+                clip: true;
+                background: root.executing ? transparent : root.backdrop;
+
+                horizontal-actions := HorizontalLayout {
+                    x: root.near ? 0px : parent.width - self.width;
+                    width: self.preferred-width;
+                    height: root.height;
+                    for item in root.horizontal && !root.executing ? root.active-actions.items : []: SwipeAction {
+                        item: item;
+                        default-background: root.normal-fill;
+                        default-foreground: Palette.foreground;
+                        pressed-background: root.pressed-fill;
+                        actionable: root.is-open && !root.tracking;
+                        invoked => { root.invoke(item, true); }
+                    }
+                }
+                vertical-actions := VerticalLayout {
+                    y: root.near ? 0px : parent.height - self.height;
+                    width: root.width;
+                    height: self.preferred-height;
+                    for item in !root.horizontal && !root.executing ? root.active-actions.items : []: SwipeAction {
+                        item: item;
+                        default-background: root.normal-fill;
+                        default-foreground: Palette.foreground;
+                        pressed-background: root.pressed-fill;
+                        actionable: root.is-open && !root.tracking;
+                        invoked => { root.invoke(item, true); }
+                    }
+                }
+
+                if root.executing && root.active-count == 1: Rectangle {
+                    x: root.horizontal ? (parent.width - self.width) / 2 : 0px;
+                    y: root.horizontal ? 0px : (parent.height - self.height) / 2;
+                    width: root.width;
+                    height: root.height;
+                    background: root.backdrop;
+
+                    SwipeAction {
+                        width: parent.width;
+                        height: parent.height;
+                        executing: true;
+                        item: root.execute-item;
+                        default-foreground: root.threshold-reached ? (root.dark ? black : white)
+                            : root.dark ? #ffffff8b : #00000072;
+                    }
+                }
+            }
+
+            face := Rectangle {
+                x: root.horizontal ? clamp(root.offset, -root.width, root.width) : 0px;
+                y: root.horizontal ? 0px : clamp(root.offset, -root.height, root.height);
+                width: parent.width;
+                height: parent.height;
+                background: root.content-background;
+                border-color: root.content-border-color;
+                border-width: root.content-border-width;
+                border-radius: root.content-corner-radius;
+                content { }
+
+                open-pointer := SwipePointer {
+                    width: parent.width;
+                    height: parent.height;
+                    enabled: root.available && root.is-open && !root.locked-open && !execution.running;
+                    horizontal: root.horizontal;
+                    near-enabled: true;
+                    far-enabled: true;
+                    dragged(delta) => { root.move-swipe(delta); }
+                    released(delta) => { root.end-swipe(delta); }
+                    cancelled => { root.tracking = false; }
+                    tapped => { root.dismiss(); }
+                }
+            }
+        }
+
+        if keys.has-focus: ButtonFocusVisual {
+            control-width: parent.width;
+            control-height: parent.height;
+            control-radius: root.content-corner-radius;
+            horizontal-margin: 0px;
+            vertical-margin: 0px;
+        }
+    }
+}

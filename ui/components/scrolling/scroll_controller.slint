@@ -1,0 +1,9 @@
+export struct ScrollControllerState {
+    minimum: length, maximum: length, offset: length, viewport: length, can-scroll: bool,
+}
+
+export struct ScrollControllerOptions { duration: duration, ignore-snap-points: bool }
+
+export struct ScrollControllerOperation { id: int, axis: Orientation }
+
+export enum ScrollControllerResult { completed, interrupted }

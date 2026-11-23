@@ -1,0 +1,76 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { DatePicker, DatePickerBehavior, DatePickerColumn, DatePickerOptions, DatePickerPart, DatePickerState, PickerWheelRow } from "../../ui/components/date-time/date_picker.slint";
+
+export { DatePickerBehavior, DatePickerColumn, DatePickerOptions, DatePickerPart, DatePickerState, PickerWheelRow }
+
+export component DatePickerExample inherits Window {
+    title: "DatePicker";
+    min-width: 664px;
+    preferred-height: 604px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+    in property <int> today;
+    in property <int> leap-date;
+    in property <int> minimum;
+    in property <int> maximum;
+    in property <color> accent: Palette.accent-background;
+
+    private property <bool> british;
+    private property <bool> rtl;
+    private property <bool> hide-year;
+    private property <bool> bounds;
+    private property <bool> extra-format;
+    private property <int> changes;
+    private property <int> opens;
+    private property <int> closes;
+
+    VerticalLayout {
+        x: 24px; y: 24px;
+        width: parent.width - 48px;
+        height: 72px;
+        alignment: start;
+        spacing: 8px;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Set leap day"; clicked => { picker.selected-date = root.leap-date; } }
+            Button { text: "Clear"; clicked => { picker.selected-date = 0; } }
+            Button { text: "Toggle range"; clicked => { root.bounds = !root.bounds; } }
+            Button { text: "Toggle order"; clicked => { root.british = !root.british; } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Toggle year"; clicked => { root.hide-year = !root.hide-year; } }
+            Button { text: "Day format"; clicked => { root.extra-format = !root.extra-format; } }
+            Button { text: "Open picker"; clicked => { picker.open-picker(); } }
+        }
+    }
+
+    picker := DatePicker {
+        x: 186px; y: 244px;
+        width: 296px;
+        height: self.preferred-height;
+        header: "Pick a date";
+        today: root.today;
+        min-year: root.bounds ? root.minimum : 0;
+        max-year: root.bounds ? root.maximum : 0;
+        language: root.british ? "en-GB" : "en-US";
+        rtl: root.rtl;
+        year-visible: !root.hide-year;
+        day-format: root.extra-format ? "{day.integer} ({dayofweek.abbreviated})" : "{day.integer}";
+        popup-viewport: { width: root.width, height: root.height };
+        accent: root.accent;
+        selected-date-changed(old-date, new-date) => { root.changes += 1; }
+        opened => { root.opens += 1; }
+        closed => { root.closes += 1; }
+    }
+
+    Text {
+        x: 24px; y: root.height - 32px;
+        text: "Date \{picker.selected-date} · Changes \{root.changes} · Opens \{root.opens} · Closes \{root.closes}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+}

@@ -1,0 +1,183 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { ButtonFocusVisual, ButtonInput } from "../../ui/components/basic-input/button_input.slint";
+import { SplitView, SplitViewBehavior, SplitViewCloseReason, SplitViewDisplayMode, SplitViewOverlayMode, SplitViewPanePlacement } from "../../ui/components/layout/split_view.slint";
+
+export { SplitViewBehavior }
+
+component PaneLink inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> pane-on-right;
+    callback invoked();
+
+    height: 40px;
+    background: input.pressed ? #00000006 : input.has-hover ? #00000009 : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.invoked(); }
+    forward-focus: input;
+    Image {
+        x: root.pane-on-right ? parent.width - 38px : 18px;
+        width: 20px;
+        height: 20px;
+        source: root.icon;
+        colorize: Palette.foreground;
+        accessible-role: none;
+    }
+    Text {
+        x: root.pane-on-right ? 12px : 62px;
+        width: parent.width - 74px;
+        text: root.label;
+        font-family: "Segoe UI";
+        font-size: 14px;
+        color: Palette.foreground;
+        horizontal-alignment: root.pane-on-right ? right : left;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    input := ButtonInput { clicked => { root.invoked(); } }
+    if input.keyboard-focused: ButtonFocusVisual {
+        horizontal-margin: 0px;
+        vertical-margin: 0px;
+        control-width: root.width;
+        control-height: root.height;
+    }
+}
+
+export component SplitViewExample inherits Window {
+    title: "SplitView";
+    min-width: 756px;
+    preferred-height: 478px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+
+    private property <int> mode;
+    private property <bool> at-right;
+    private property <bool> rtl;
+    private property <bool> dim;
+    private property <bool> narrow;
+    private property <bool> prevent;
+    private property <int> opening;
+    private property <int> opened;
+    private property <int> closing;
+    private property <int> closed;
+    private property <int> activations;
+    private property <int> content-clicks;
+    private property <string> selected;
+    private property <string> reason;
+
+    VerticalLayout {
+        x: 24px; y: 24px;
+        width: parent.width - 48px;
+        height: 72px;
+        spacing: 8px;
+        alignment: start;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            toggle := Button {
+                text: view.is-pane-open ? "Close pane" : "Open pane";
+                clicked => { view.is-pane-open = !view.is-pane-open; }
+            }
+            Button {
+                text: root.mode == 0 ? "Inline" : root.mode == 1 ? "Compact inline" : root.mode == 2 ? "Overlay" : "Compact overlay";
+                clicked => { root.mode = Math.mod(root.mode + 1, 4); }
+            }
+            Button { text: "Right pane"; clicked => { root.at-right = !root.at-right; } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+            Button { text: "Toggle overlay"; clicked => { root.dim = !root.dim; } }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Button { text: "Resize"; clicked => { root.narrow = !root.narrow; } }
+            Button { text: "Cancel closing"; clicked => { root.prevent = !root.prevent; } }
+        }
+    }
+
+    view := SplitView {
+        x: 24px; y: 116px;
+        width: root.narrow ? 352px : 400px;
+        height: 300px;
+        is-pane-open: true;
+        open-pane-length: 256px;
+        compact-pane-length: 48px;
+        pane-placement: root.at-right ? SplitViewPanePlacement.right : SplitViewPanePlacement.left;
+        rtl: root.rtl;
+        display-mode: root.mode == 0 ? SplitViewDisplayMode.inline : root.mode == 1 ? SplitViewDisplayMode.compact-inline
+            : root.mode == 2 ? SplitViewDisplayMode.overlay : SplitViewDisplayMode.compact-overlay;
+        light-dismiss-overlay-mode: root.dim ? SplitViewOverlayMode.on : SplitViewOverlayMode.off;
+        pane-background: Palette.color-scheme == ColorScheme.dark ? #242424 : #f2f2f2;
+        background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+        pane-accessible-name: "Sample pane";
+
+        pane-opening => { root.opening += 1; }
+        pane-opened => { root.opened += 1; }
+        pane-closing(reason) => { root.closing += 1; return root.prevent; }
+        pane-closed(reason) => {
+            root.closed += 1;
+            root.reason = reason == SplitViewCloseReason.light-dismiss ? "outside"
+                : reason == SplitViewCloseReason.escape ? "escape" : reason == SplitViewCloseReason.resize ? "resize" : "programmatic";
+        }
+        restore-focus => { toggle.focus(); }
+
+        pane << Rectangle {
+            private property <bool> pane-on-right: root.at-right != root.rtl;
+            Text {
+                x: parent.pane-on-right ? 12px : 60px;
+                y: 12px;
+                width: parent.width - 72px;
+                text: "PANE CONTENT";
+                font-family: "Segoe UI";
+                font-size: 14px;
+                font-weight: 600;
+                color: Palette.foreground;
+                horizontal-alignment: parent.pane-on-right ? right : left;
+                accessible-label: self.text;
+            }
+            VerticalLayout {
+                x: 0px; y: 44px;
+                width: parent.width;
+                height: 160px;
+                PaneLink { label: "People"; icon: @image-url("../../ui/icons/people_16_regular.svg"); pane-on-right: root.at-right != root.rtl; invoked => { root.activations += 1; root.selected = self.label; } }
+                PaneLink { label: "Globe"; icon: @image-url("../../ui/icons/globe_16_regular.svg"); pane-on-right: root.at-right != root.rtl; invoked => { root.activations += 1; root.selected = self.label; } }
+                PaneLink { label: "Message"; icon: @image-url("../../ui/icons/chat_16_regular.svg"); pane-on-right: root.at-right != root.rtl; invoked => { root.activations += 1; root.selected = self.label; } }
+                PaneLink { label: "Mail"; icon: @image-url("../../ui/icons/mail_16_regular.svg"); pane-on-right: root.at-right != root.rtl; invoked => { root.activations += 1; root.selected = self.label; } }
+            }
+        }
+        content << Rectangle {
+            Text {
+                x: 12px; y: 12px;
+                width: max(0px, parent.width - 24px);
+                text: "SPLITVIEW CONTENT";
+                font-family: "Segoe UI";
+                font-size: 14px;
+                font-weight: 600;
+                wrap: word-wrap;
+                color: Palette.foreground;
+                accessible-label: self.text;
+            }
+            Text {
+                x: 12px; y: 68px;
+                text: root.selected;
+                color: Palette.foreground;
+                accessible-label: self.text;
+            }
+            Button {
+                x: max(0px, parent.width - self.width - 12px);
+                y: parent.height - 48px;
+                width: 108px;
+                height: 32px;
+                text: "Content action";
+                clicked => { root.content-clicks += 1; }
+            }
+        }
+    }
+
+    Text {
+        x: 24px; y: 432px;
+        text: "Pane \{round(view.visible-pane-width / 1px)} · Reserved \{round(view.reserved-pane-width / 1px)} · Content \{round(view.content-width / 1px)} · Opening \{root.opening} · Opened \{root.opened} · Closing \{root.closing} · Closed \{root.closed} · Activations \{root.activations} · Content clicks \{root.content-clicks} · \{root.reason}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+}

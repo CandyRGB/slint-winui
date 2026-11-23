@@ -1,0 +1,76 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { HyperlinkButton, HyperlinkButtonTheme, HyperlinkButtonAccentColors } from "../../ui/components/basic-input/hyperlink_button.slint";
+export { HyperlinkButtonTheme, HyperlinkButtonAccentColors }
+
+export component HyperlinkButtonExample inherits Window {
+    title: "WinUI HyperlinkButton";
+    preferred-width: 540px;
+    preferred-height: 240px;
+    background: #f3f3f3;
+    in property <string> demo-uri: "https://www.microsoft.com";
+    private property <int> count;
+    private property <string> status: "";
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            disabled := CheckBox { text: "Disable hyperlink buttons"; }
+            underline := CheckBox { text: "Show underline"; }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 16px;
+            external-link := HyperlinkButton {
+                text: "Microsoft home page";
+                navigate-uri: root.demo-uri;
+                enabled: !disabled.checked;
+                underline-visible: underline.checked;
+                clicked => { root.status = "Opening link"; }
+                navigation-failed(uri) => { root.status = "Could not open " + uri; }
+            }
+            internal-link := HyperlinkButton {
+                text: "Go to details";
+                enabled: !disabled.checked;
+                underline-visible: underline.checked;
+                clicked => {
+                    root.count += 1;
+                    root.status = "Details opened: \{root.count}";
+                }
+            }
+            Button { text: "Reset"; clicked => { root.count = 0; root.status = ""; } }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            more := HyperlinkButton {
+                accessible-name: "Continue to details";
+                enabled: !disabled.checked;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: "Continue to details"; color: more.foreground; vertical-alignment: center; accessible-role: none; }
+                    Image {
+                        width: 16px;
+                        height: 16px;
+                        source: @image-url("../../ui/icons/arrow_forward_16_regular.svg");
+                        colorize: more.foreground;
+                        accessible-role: none;
+                    }
+                }
+                clicked => {
+                    root.count += 1;
+                    root.status = "Details opened: \{root.count}";
+                }
+            }
+        }
+
+        if root.status != "": Text { text: root.status; color: Palette.foreground; }
+    }
+}

@@ -1,0 +1,655 @@
+import { Palette, ScrollView } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "button_input.slint";
+import { TextBoxField, ScrollingTextInput } from "../text/text_box_field.slint";
+
+export struct ComboBoxItem {
+    text: string,
+    font-family: string,
+    icon: image,
+    disabled: bool,
+}
+
+export enum ComboBoxSelectionChangedTrigger { committed, always }
+
+export global ComboBoxBehavior {
+    pure callback next([ComboBoxItem], int, int) -> int;
+    pure callback find([ComboBoxItem], string, int, bool) -> int;
+}
+
+component ComboBoxLabel inherits Rectangle {
+    in property <ComboBoxItem> item;
+    in property <bool> rtl;
+    in property <color> foreground;
+    in property <bool> placeholder;
+
+    Image {
+        x: root.rtl ? max(0px, parent.width - self.width) : 0px;
+        y: (parent.height - self.height) / 2;
+        width: 16px;
+        height: 16px;
+        source: root.item.icon;
+        visible: root.item.icon.width > 0;
+        accessible-role: none;
+    }
+    Text {
+        x: root.rtl || root.item.icon.width == 0 ? 0px : 24px;
+        y: 0px;
+        width: max(0px, parent.width - (root.item.icon.width > 0 ? 24px : 0px));
+        height: parent.height;
+        text: root.item.text;
+        color: root.foreground;
+        font-family: root.item.font-family == "" ? "Segoe UI Variable Text" : root.item.font-family;
+        font-size: 14px;
+        font-weight: root.placeholder ? 350 : 400;
+        horizontal-alignment: root.rtl ? right : left;
+        vertical-alignment: center;
+        overflow: elide;
+        accessible-role: none;
+    }
+}
+
+component ComboBoxOptions inherits Rectangle {
+    in property <[ComboBoxItem]> items;
+    in property <int> selected: -1;
+    in property <int> highlighted: -1;
+    in property <int> initial-first;
+    in property <bool> keyboard-mode;
+    in property <bool> rtl;
+    in property <color> accent;
+    callback selected-item(int);
+    callback pointer-used();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.dark ? #00000033 : #0000000f;
+    background: root.dark ? #2c2c2c : #f9f9f9;
+    accessible-role: list;
+
+    scroll := ScrollView {
+        x: 2px;
+        y: 4px;
+        width: max(0px, parent.width - 4px);
+        height: max(0px, parent.height - 8px);
+        horizontal-scrollbar-policy: always-off;
+        content-width: self.visible-width;
+        content-height: root.items.length * 36px;
+        content-y: -root.initial-first * 36px;
+
+        for item[index] in root.items: Rectangle {
+            x: 2px;
+            y: 2px + index * 36px;
+            width: max(0px, parent.width - 4px);
+            height: 32px;
+            border-radius: 4px;
+            background: item.disabled ? transparent : hit.pressed ? (root.dark ? #ffffff0a : #00000006)
+                : hit.has-hover || index == root.highlighted ? (root.dark ? #ffffff0f : #00000009) : transparent;
+            accessible-role: list-item;
+            accessible-label: item.text;
+            accessible-enabled: !item.disabled;
+            accessible-item-index: index;
+            accessible-item-count: root.items.length;
+            accessible-item-selectable: true;
+            accessible-item-selected: index == root.selected;
+            accessible-action-default => { if !item.disabled { root.selected-item(index); } }
+
+            if index == root.highlighted && !item.disabled: Rectangle {
+                x: root.rtl ? parent.width - self.width : 0px;
+                y: 8px;
+                width: 4px;
+                height: 16px;
+                border-radius: 2px;
+                background: root.accent;
+            }
+            if index == root.highlighted && root.keyboard-mode && !item.disabled: Rectangle {
+                border-width: 2px;
+                border-radius: 4px;
+                border-color: root.dark ? white : #000000e4;
+                Rectangle {
+                    x: 2px; y: 2px;
+                    width: parent.width - 4px;
+                    height: parent.height - 4px;
+                    border-width: 1px;
+                    border-radius: 2px;
+                    border-color: root.dark ? black : white;
+                }
+            }
+            ComboBoxLabel {
+                x: 12px;
+                width: max(0px, parent.width - 24px);
+                item: item;
+                rtl: root.rtl;
+                foreground: item.disabled ? (root.dark ? #ffffff5d : #0000005c)
+                    : root.dark ? white : #000000e4;
+            }
+            hit := TouchArea {
+                enabled: !item.disabled;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down { root.pointer-used(); }
+                }
+                clicked => { root.selected-item(index); }
+            }
+        }
+    }
+
+    changed highlighted => {
+        if root.highlighted >= 0 {
+            let top = root.highlighted * 36px;
+            let bottom = top + 36px;
+            if top < -scroll.content-y {
+                scroll.content-y = -top;
+            } else if bottom > scroll.visible-height - scroll.content-y {
+                scroll.content-y = min(0px, scroll.visible-height - bottom);
+            }
+        }
+    }
+}
+
+export component ComboBox inherits Rectangle {
+    in property <[ComboBoxItem]> items;
+    in property <string> header;
+    in property <string> placeholder-text;
+    in property <string> accessible-name: root.header != "" ? root.header : root.placeholder-text;
+    in property <bool> enabled: true;
+    in property <bool> is-editable;
+    in property <bool> text-search-enabled: true;
+    in property <bool> rtl;
+    in property <color> accent: Palette.accent-background;
+    in property <length> max-drop-down-height: 504px;
+    in property <Size> popup-viewport;
+    in property <ComboBoxSelectionChangedTrigger> selection-changed-trigger: ComboBoxSelectionChangedTrigger.committed;
+    in-out property <int> selected-index: -1;
+    in-out property <string> text;
+    out property <ComboBoxItem> selected-item: root.item-at(root.selected-index);
+    out property <string> selected-value;
+    out property <bool> is-drop-down-open: popup.is-open || root.editor-dropdown;
+    out property <bool> has-focus: root.enabled && (root.is-drop-down-open || input.has-focus || editor.has-focus);
+
+    callback selection-changed(int, int);
+    callback text-submitted(string) -> bool;
+    callback drop-down-opened();
+    callback drop-down-closed();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <length> header-height: root.header == "" ? 0px : round(title.preferred-height / 2px) * 2px + 8px;
+    private property <int> item-count: root.items.length;
+    private property <bool> keyboard-mode;
+    private property <bool> editor-dropdown;
+    private property <int> highlighted: -1;
+    private property <int> first-visible;
+    private property <int> saved-index: -1;
+    private property <int> reported-index: -1;
+    private property <string> saved-value;
+    private property <string> search;
+    private property <bool> exact-edit-search;
+    private property <length> ideal-height: min(root.max-drop-down-height, root.item-count * 36px + 8px);
+    private property <length> available-above: max(0px, root.absolute-position.y + root.header-height - 2px);
+    private property <length> available-below: root.popup-viewport.height <= 0px ? root.ideal-height
+        : max(0px, root.popup-viewport.height - root.absolute-position.y - root.height - 2px);
+    private property <bool> opens-up: root.is-editable && root.available-below < root.ideal-height
+        && root.available-above > root.available-below;
+    private property <length> popup-height: max(0px, min(root.ideal-height,
+        root.is-editable ? (root.opens-up ? root.available-above : root.available-below)
+            : root.popup-viewport.height > 0px ? root.popup-viewport.height - 4px : root.ideal-height));
+    private property <int> page-size: max(1, floor((root.popup-height - 8px) / 36px));
+    private property <length> popup-offset: root.header-height - max(0, root.saved-index - root.first-visible) * 36px - 4px;
+    private property <length> popup-y: root.popup-viewport.height <= 0px ? root.popup-offset : clamp(root.popup-offset,
+        2px - root.absolute-position.y, max(2px, root.popup-viewport.height - root.popup-height - 2px) - root.absolute-position.y);
+    private property <color> text-color: !root.enabled ? (root.dark ? #ffffff5d : #0000005c)
+        : input.pressed ? (root.dark ? #ffffffc5 : #0000009e) : (root.dark ? white : #000000e4);
+    private property <color> hint-color: !root.enabled ? (root.dark ? #ffffff5d : #0000005c)
+        : input.pressed ? (root.dark ? #ffffff87 : #00000072) : (root.dark ? #ffffffc5 : #0000009e);
+
+    min-width: max(64px, title.min-width);
+    preferred-width: max(160px, title.preferred-width);
+    min-height: root.header-height + 32px;
+    preferred-height: root.min-height;
+    vertical-stretch: 0;
+    horizontal-stretch: 0;
+    forward-focus: focus-proxy;
+    z: root.editor-dropdown ? 1 : 0;
+
+    init => {
+        root.reported-index = root.is-index(root.selected-index) ? root.selected-index : -1;
+        if root.is-index(root.selected-index) {
+            root.selected-value = root.item-at(root.selected-index).text;
+            root.text = root.selected-value;
+        } else if root.is-editable {
+            root.selected-value = root.text;
+        }
+        if root.selected-index != root.reported-index { root.selected-index = root.reported-index; }
+    }
+    changed selected-index => { root.apply-index(root.selected-index); }
+    changed selected-item => {
+        if root.is-index(root.selected-index) && root.selected-index == root.reported-index
+            && root.selected-item.text != root.selected-value {
+            root.sync-selection(root.selected-index, root.selected-item.text);
+        }
+    }
+    changed item-count => {
+        if !root.is-index(root.selected-index) && root.selected-index != -1 { root.apply-index(-1); }
+        if root.item-count == 0 && root.is-drop-down-open { root.hide(false); }
+    }
+    changed is-drop-down-open => {
+        if root.is-drop-down-open {
+            root.drop-down-opened();
+        } else {
+            root.highlighted = -1;
+            root.drop-down-closed();
+        }
+    }
+    changed enabled => { if !root.enabled && root.is-drop-down-open { root.hide(true); } }
+    changed is-editable => { if root.is-drop-down-open { root.hide(true); } }
+
+    pure function is-index(index: int) -> bool {
+        return index >= 0 && index < root.item-count;
+    }
+
+    pure function item-at(index: int) -> ComboBoxItem {
+        return root.is-index(index) ? root.items[index] : {};
+    }
+
+    function sync-selection(index: int, value: string) {
+        let old = root.reported-index;
+        let old-value = root.selected-value;
+        if root.selected-index != index { root.selected-index = index; }
+        root.reported-index = index;
+        root.selected-value = value;
+        root.text = value;
+        if old != index || old-value != value {
+            root.selection-changed(old, index);
+        }
+    }
+
+    function apply-index(index: int) {
+        if index == root.reported-index { return; }
+        root.select-index(index);
+    }
+
+    public function select-index(index: int) {
+        let next = root.is-index(index) ? index : -1;
+        root.sync-selection(next, root.item-at(next).text);
+    }
+
+    public function open-drop-down() {
+        if !root.enabled || !root.visible || root.is-drop-down-open || root.item-count == 0 || root.popup-height < 8px { return; }
+        root.saved-index = root.selected-index;
+        root.saved-value = root.selected-value;
+        let next = root.is-index(root.selected-index) && !root.selected-item.disabled
+            ? root.selected-index : root.is-editable ? -1 : ComboBoxBehavior.next(root.items, -1, 1);
+        root.highlighted = next;
+        root.first-visible = clamp(next - floor(root.page-size / 2), 0, max(0, root.item-count - root.page-size));
+        if root.is-editable {
+            editor.focus();
+            root.editor-dropdown = true;
+        } else {
+            input.focus();
+            popup.show();
+        }
+        if !root.is-editable && root.selection-changed-trigger == ComboBoxSelectionChangedTrigger.always && next >= 0 {
+            root.apply-index(next);
+        }
+    }
+
+    public function close-drop-down() {
+        if root.editor-dropdown { root.submit-edit(); }
+        else { root.hide(false); }
+    }
+
+    function hide(cancel: bool) {
+        if cancel {
+            if root.is-drop-down-open {
+                let initial = root.is-index(root.saved-index) ? root.saved-index : -1;
+                root.sync-selection(initial, initial >= 0 ? root.item-at(initial).text
+                    : root.is-editable ? root.saved-value : "");
+            } else if root.is-editable {
+                root.text = root.selected-value;
+            }
+        }
+        if popup.is-open { popup.close(); }
+        root.editor-dropdown = false;
+    }
+
+    function choose(index: int) {
+        if root.is-index(index) && !root.item-at(index).disabled {
+            root.sync-selection(index, root.item-at(index).text);
+        }
+        root.hide(false);
+    }
+
+    function submit-edit() {
+        let value = root.text;
+        let index = ComboBoxBehavior.find(root.items, value, -1, true);
+        if index >= 0 {
+            root.choose(index);
+        } else if value != root.selected-value {
+            if root.text-submitted(value) {
+                root.text = root.selected-value;
+            } else {
+                root.sync-selection(-1, value);
+            }
+        }
+        root.hide(false);
+    }
+
+    function preview(index: int) {
+        if index < 0 { return; }
+        root.highlighted = index;
+        if root.is-editable {
+            root.text = root.item-at(index).text;
+            editor.select-all();
+        }
+        if root.selection-changed-trigger == ComboBoxSelectionChangedTrigger.always {
+            root.apply-index(index);
+        }
+    }
+
+    function move-selection(direction: int, page: bool) {
+        let from = root.is-drop-down-open ? root.highlighted : root.selected-index;
+        let start = from < 0 && direction < 0 ? root.item-count : from;
+        let near = ComboBoxBehavior.next(root.items, start, direction);
+        let target = page ? ComboBoxBehavior.next(root.items,
+            clamp(start + direction * (root.page-size - 1), -1, root.item-count), direction) : near;
+        let next = target >= 0 ? target : page ? ComboBoxBehavior.next(root.items, direction > 0 ? root.item-count : -1, -direction) : -1;
+        if root.is-drop-down-open {
+            root.preview(next);
+        } else if next >= 0 {
+            root.apply-index(next);
+        }
+    }
+
+    function search-key(key: string) -> bool {
+        if !root.text-search-enabled || key == "" || root.is-editable { return false; }
+        let from = root.is-drop-down-open ? root.highlighted : root.selected-index;
+        let combined = root.search + key;
+        let index = ComboBoxBehavior.find(root.items, combined, root.search == "" ? from : from - 1, false);
+        let next = index >= 0 ? index : ComboBoxBehavior.find(root.items, key, from, false);
+        if next >= 0 {
+            root.search = index >= 0 ? combined : key;
+            search-timeout.restart();
+            if root.is-drop-down-open { root.preview(next); } else { root.apply-index(next); }
+            return true;
+        }
+        return false;
+    }
+
+    function key-pressed(event: KeyEvent) -> EventResult {
+        let key = event.text;
+        let opened = root.is-drop-down-open;
+        let f4 = key == Key.F4 && !event.modifiers.alt && !event.modifiers.shift && !event.modifiers.control;
+        if f4 || (event.modifiers.alt && (key == Key.DownArrow || key == Key.UpArrow)) {
+            if !event.repeat {
+                root.keyboard-mode = true;
+                if opened {
+                    if root.is-editable { root.submit-edit(); } else { root.hide(false); }
+                } else { root.open-drop-down(); }
+            }
+            return accept;
+        }
+        if key == Key.Escape && (opened || (root.is-editable && root.text != root.selected-value)) {
+            root.hide(true);
+            return accept;
+        }
+        if !root.is-editable && key == Key.Space && root.search != "" {
+            root.search-key(" ");
+            return accept;
+        }
+        if key == Key.Return || (!root.is-editable && key == Key.Space) {
+            if !event.repeat {
+                root.keyboard-mode = true;
+                if root.is-editable { root.submit-edit(); }
+                else if opened { root.choose(root.highlighted); }
+                else if root.search == "" { root.open-drop-down(); }
+            }
+            return accept;
+        }
+        if key == Key.DownArrow || key == Key.UpArrow || (opened && (key == Key.PageUp || key == Key.PageDown)) {
+            root.keyboard-mode = true;
+            if root.is-editable && !opened {
+                root.open-drop-down();
+            } else {
+                root.move-selection(key == Key.DownArrow || key == Key.PageDown ? 1 : -1,
+                    key == Key.PageUp || key == Key.PageDown);
+            }
+            return accept;
+        }
+        if !root.is-editable && (key == Key.Home || key == Key.End) {
+            let index = ComboBoxBehavior.next(root.items, key == Key.Home ? -1 : root.item-count, key == Key.Home ? 1 : -1);
+            root.keyboard-mode = true;
+            if opened { root.preview(index); } else if index >= 0 { root.apply-index(index); }
+            return accept;
+        }
+        if opened && (key == Key.Tab || key == Key.Backtab) {
+            if root.is-editable { root.submit-edit(); } else { root.hide(false); }
+            return reject;
+        }
+        if !root.is-editable && !event.modifiers.alt && !event.modifiers.control && root.search-key(key) {
+            root.keyboard-mode = true;
+            return accept;
+        }
+        return reject;
+    }
+
+    search-timeout := Timer {
+        interval: 1000ms;
+        triggered => { self.stop(); root.search = ""; }
+    }
+
+    if root.editor-dropdown && root.popup-viewport.width > 0px && root.popup-viewport.height > 0px: TouchArea {
+        x: -root.absolute-position.x;
+        y: -root.absolute-position.y;
+        width: root.popup-viewport.width;
+        height: root.popup-viewport.height;
+        clicked => { root.submit-edit(); }
+    }
+
+    title := Text {
+        x: 0px; y: 0px;
+        width: root.width;
+        height: max(0px, root.header-height - 8px);
+        text: root.header;
+        font-family: "Segoe UI Variable Text";
+        font-size: 14px;
+        color: root.enabled ? (root.dark ? white : #000000e4) : (root.dark ? #ffffff5d : #0000005c);
+        wrap: word-wrap;
+        horizontal-alignment: root.rtl ? right : left;
+        accessible-role: none;
+    }
+
+    focus-proxy := FocusScope {
+        x: 0px; width: 0px;
+        enabled: root.enabled;
+        focus-on-tab-navigation: false;
+        focus-gained(reason) => {
+            if root.is-editable { editor.focus(); } else { input.focus(); }
+        }
+    }
+
+    field := Rectangle {
+        x: 0px;
+        y: root.header-height;
+        width: root.width;
+        height: 32px;
+        border-radius: 4px;
+        accessible-role: combobox;
+        accessible-label: root.accessible-name;
+        accessible-enabled: root.enabled;
+        accessible-read-only: !root.is-editable;
+        accessible-placeholder-text: root.placeholder-text;
+        accessible-value: root.is-editable ? root.text : root.selected-value;
+        accessible-expandable: true;
+        accessible-expanded: root.is-drop-down-open;
+        accessible-action-expand => { root.open-drop-down(); }
+        accessible-action-default => { root.open-drop-down(); }
+        accessible-action-set-value(value) => { if root.is-editable && root.enabled { root.text = value; } }
+
+        if !root.is-editable: Rectangle {
+            border-radius: parent.border-radius;
+            border-width: 1px;
+            border-color: root.dark ? #ffffff18 : #0000000f;
+            background: !root.enabled ? (root.dark ? #ffffff0b : #f9f9f94d)
+                : input.pressed ? (root.dark ? #ffffff08 : #f9f9f94d)
+                : input.has-hover ? (root.dark ? #ffffff15 : #f9f9f980)
+                : root.dark ? #ffffff0f : #ffffffb3;
+            ComboBoxLabel {
+                x: root.rtl ? 38px : 12px;
+                width: max(0px, parent.width - 50px);
+                item: root.selected-index >= 0 ? root.selected-item : { text: root.placeholder-text };
+                placeholder: root.selected-index < 0;
+                foreground: root.selected-index < 0 ? root.hint-color : root.text-color;
+                rtl: root.rtl;
+            }
+        }
+        input := ButtonInput {
+            enabled: root.enabled && !root.is-editable;
+            accepts-return: false;
+            clicked => {
+                root.keyboard-mode = self.keyboard-focused;
+                if root.keyboard-mode && root.search != "" { root.search-key(" "); }
+                else { root.open-drop-down(); }
+            }
+            unhandled-key-pressed(event) => { return root.key-pressed(event); }
+        }
+        if !root.is-editable && input.keyboard-focused && !popup.is-open: ButtonFocusVisual {
+            control-width: parent.width;
+            control-height: parent.height;
+        }
+
+        TextBoxField {
+            visible: root.is-editable;
+            enabled: root.enabled;
+            editing: editor.has-focus;
+        }
+        Rectangle {
+            visible: root.is-editable;
+            x: root.rtl ? 38px : 12px;
+            width: max(0px, parent.width - 50px);
+            clip: true;
+
+            Text {
+                visible: root.text == "" && editor.preedit-text == "";
+                text: root.placeholder-text;
+                font-family: "Segoe UI Variable Text";
+                font-size: 14px;
+                color: root.hint-color;
+                horizontal-alignment: root.rtl ? right : left;
+                vertical-alignment: center;
+                overflow: elide;
+                accessible-role: none;
+            }
+            editor := ScrollingTextInput {
+                viewport-width: parent.width;
+                height: parent.height;
+                enabled: root.enabled && root.is-editable;
+                text <=> root.text;
+                single-line: true;
+                font-family: "Segoe UI Variable Text";
+                color: root.text-color;
+                horizontal-alignment: root.rtl ? right : left;
+                accessible-role: text-input;
+                accessible-label: root.accessible-name;
+                accessible-placeholder-text: root.placeholder-text;
+                accessible-enabled: root.enabled;
+                accessible-value: self.text;
+                accessible-expandable: true;
+                accessible-expanded: root.is-drop-down-open;
+                accessible-action-expand => { root.open-drop-down(); }
+                accessible-action-set-value(value) => { if root.enabled { root.text = value; } }
+                accessible-action-set-selection-offsets(start, end) => { self.set-selection-offsets(start, end); }
+                key-pressed(event) => {
+                    root.exact-edit-search = event.text == Key.Backspace || event.text == Key.Delete;
+                    if self.preedit-text != "" && event.text == Key.Return { return reject; }
+                    return root.key-pressed(event);
+                }
+                edited => {
+                    let typed-length = self.text.character-count;
+                    let matched = root.text-search-enabled
+                        ? ComboBoxBehavior.find(root.items, self.text, -1, root.exact-edit-search) : -1;
+                    if matched >= 0 && !root.exact-edit-search && self.preedit-text == "" {
+                        let suggestion = root.item-at(matched).text;
+                        let completed-length = suggestion.character-count;
+                        if completed-length > typed-length {
+                            root.text = suggestion;
+                            self.set-selection-offsets(typed-length, completed-length);
+                        }
+                    }
+                    if root.editor-dropdown {
+                        root.highlighted = matched;
+                    }
+                }
+                changed has-focus => {
+                    if !self.has-focus && root.is-editable && root.enabled
+                        && (root.editor-dropdown || root.text != root.selected-value) {
+                        root.submit-edit();
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            x: root.rtl ? 0px : parent.width - 38px;
+            width: 38px;
+            border-radius: 4px;
+            background: root.is-editable && arrow.has-hover
+                ? (root.dark ? #ffffff0f : #00000009) : transparent;
+            Image {
+                source: @image-url("../../icons/chevron_down_16_regular.svg");
+                width: 16px;
+                height: 16px;
+                x: root.rtl ? 12px : 10px;
+                y: (parent.height - self.height) / 2;
+                colorize: root.hint-color;
+                accessible-role: none;
+            }
+            arrow := TouchArea {
+                enabled: root.is-editable && root.enabled;
+                clicked => {
+                    root.keyboard-mode = false;
+                    if root.editor-dropdown { root.submit-edit(); } else { root.open-drop-down(); }
+                }
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: root.popup-y;
+        width: root.width;
+        height: root.popup-height;
+        close-policy: close-on-click-outside;
+        forward-focus: popup-keys;
+
+        popup-keys := FocusScope {
+            focus-on-click: false;
+            key-pressed(event) => { return root.key-pressed(event); }
+
+            ComboBoxOptions {
+                items: root.items;
+                selected: root.selected-index;
+                highlighted: root.highlighted;
+                initial-first: root.first-visible;
+                keyboard-mode: root.keyboard-mode;
+                rtl: root.rtl;
+                accent: root.accent;
+                pointer-used => { root.keyboard-mode = false; }
+                selected-item(index) => { root.choose(index); }
+            }
+        }
+    }
+
+    if root.editor-dropdown: ComboBoxOptions {
+        x: 0px;
+        y: root.opens-up ? root.header-height - root.popup-height - 2px : field.y + field.height + 2px;
+        width: root.width;
+        height: root.popup-height;
+        items: root.items;
+        selected: root.selected-index;
+        highlighted: root.highlighted;
+        initial-first: root.first-visible;
+        keyboard-mode: root.keyboard-mode;
+        rtl: root.rtl;
+        accent: root.accent;
+        pointer-used => { root.keyboard-mode = false; }
+        selected-item(index) => { root.choose(index); }
+    }
+}

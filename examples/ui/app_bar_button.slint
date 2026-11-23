@@ -1,0 +1,41 @@
+import { CheckBox } from "std-widgets.slint";
+import { AppBarButton, AppBarToggleButton, AppBarSeparator } from "../../ui/components/menus-toolbars/app_bar_button.slint";
+
+export component AppBarButtonsExample inherits Window {
+    title: "App bar buttons";
+    width: 336px;
+    height: 176px;
+    forward-focus: play;
+    private property <string> result: "No command selected";
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 10px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            play := AppBarButton {
+                label: "Play";
+                icon: @image-url("../../ui/icons/play_16_regular.svg");
+                compact: compact-mode.checked;
+                clicked => { root.result = "Play selected"; }
+            }
+            AppBarSeparator { }
+            AppBarToggleButton {
+                label: "Repeat";
+                icon: @image-url("../../ui/icons/arrow_repeat_all_16_regular.svg");
+                compact: compact-mode.checked;
+                toggled(value) => { root.result = value ? "Repeat on" : "Repeat off"; }
+            }
+            AppBarButton {
+                label: "Next";
+                icon: @image-url("../../ui/icons/next_16_regular.svg");
+                compact: compact-mode.checked;
+                enabled: false;
+            }
+        }
+        compact-mode := CheckBox { text: "Compact"; }
+        Text { text: root.result; }
+    }
+}

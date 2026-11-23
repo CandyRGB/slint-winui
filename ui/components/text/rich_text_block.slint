@@ -1,0 +1,348 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonFocusVisual } from "../basic-input/button_input.slint";
+import { ContextFlyoutArea } from "../dialogs-flyouts/context_flyout_area.slint";
+import { FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+
+export enum RichTextAlignment { leading, center, trailing, justified }
+export enum RichTextNavigation { previous, next, up, down, line-start, line-end }
+
+export struct RichTextRun {
+    text: string,
+    font-family: string,
+    font-size: length,
+    font-weight: int,
+    italic: bool,
+    underline: bool,
+    strikethrough: bool,
+    custom-foreground: bool,
+    foreground: color,
+    link: string,
+    image: image,
+    image-width: length,
+    image-height: length,
+    image-label: string,
+}
+
+export struct RichTextParagraph { runs: [RichTextRun] }
+
+export struct RichTextHighlight {
+    start: int,
+    length: int,
+    background: color,
+    custom-foreground: bool,
+    foreground: color,
+}
+
+export struct RichTextRect { x: length, y: length, width: length, height: length }
+
+export struct RichTextFormat {
+    font-family: string,
+    font-size: length,
+    font-weight: int,
+    foreground: color,
+    link-color: color,
+    alignment: RichTextAlignment,
+    wraps: bool,
+    rtl: bool,
+    paragraph-spacing: length,
+    scale-factor: float,
+}
+
+export struct RichTextHit { start: int, end: int, bounds: RichTextRect, rtl: bool }
+export struct RichTextFill { bounds: RichTextRect, color: color }
+export struct RichTextImage { bounds: RichTextRect, source: image, label: string }
+export struct RichTextLink { bounds: RichTextRect, start: int, end: int, label: string, target: string }
+export struct RichTextLocation { offset: int, link: string }
+export struct RichTextFrame {
+    region: RichTextRect,
+    ink: image,
+    ink-height: length,
+    hits: [RichTextHit],
+    fills: [RichTextFill],
+    images: [RichTextImage],
+    links: [RichTextLink],
+    text: string,
+}
+export struct RichTextLayout {
+    frames: [RichTextFrame],
+    text: string,
+    length: int,
+    consumed: int,
+    height: length,
+    has-overflow: bool,
+}
+
+export global RichTextBehavior {
+    pure callback layout([RichTextParagraph], [RichTextHighlight], [RichTextRect], RichTextFormat) -> RichTextLayout;
+    pure callback hit-test([RichTextFrame], Point) -> RichTextLocation;
+    pure callback select-rectangles([RichTextHit], int, int) -> [RichTextRect];
+    pure callback slice(string, int, int) -> string;
+    pure callback step([RichTextFrame], int, RichTextNavigation) -> int;
+}
+
+export component RichTextBlockOverflow inherits Rectangle {
+    in property <RichTextFrame> frame;
+    in property <string> accessible-name;
+    in property <int> selection-anchor;
+    in property <int> selection-cursor;
+    in property <color> selection-highlight-color: Palette.selection-background;
+    in property <color> selection-foreground-color: Palette.accent-foreground;
+    callback link-invoked(string);
+
+    private property <[RichTextRect]> selected: root.selection-anchor != root.selection-cursor
+        ? RichTextBehavior.select-rectangles(root.frame.hits, root.selection-anchor, root.selection-cursor) : [];
+
+    width: root.frame.region.width;
+    height: root.frame.region.height;
+    clip: true;
+    accessible-role: text;
+    accessible-label: root.accessible-name != "" ? root.accessible-name : root.frame.text;
+
+    for fill in root.frame.fills: Rectangle {
+        x: fill.bounds.x;
+        y: fill.bounds.y;
+        width: fill.bounds.width;
+        height: fill.bounds.height;
+        background: fill.color;
+    }
+
+    Image {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: root.frame.ink-height;
+        source: root.frame.ink;
+        image-fit: fill;
+        accessible-role: none;
+    }
+
+    for segment in root.selected: Rectangle {
+        x: segment.x;
+        y: segment.y;
+        width: segment.width;
+        height: segment.height;
+        background: root.selection-highlight-color;
+        clip: true;
+
+        Image {
+            x: -segment.x;
+            y: -segment.y;
+            width: root.width;
+            height: root.frame.ink-height;
+            source: root.frame.ink;
+            image-fit: fill;
+            colorize: root.selection-foreground-color;
+            accessible-role: none;
+        }
+    }
+
+    for attachment in root.frame.images: Image {
+        x: attachment.bounds.x;
+        y: attachment.bounds.y;
+        width: attachment.bounds.width;
+        height: attachment.bounds.height;
+        source: attachment.source;
+        image-fit: contain;
+        accessible-label: attachment.label;
+    }
+
+    for link in root.frame.links: FocusScope {
+        x: link.bounds.x;
+        y: link.bounds.y;
+        width: link.bounds.width;
+        height: link.bounds.height;
+        focus-on-click: false;
+        accessible-role: button;
+        accessible-label: link.label;
+        accessible-action-default => { root.link-invoked(link.target); }
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == Key.Space {
+                if !event.repeat { root.link-invoked(link.target); }
+                return accept;
+            }
+            return reject;
+        }
+
+        if self.has-focus: ButtonFocusVisual {
+            control-width: parent.width;
+            control-height: parent.height;
+            horizontal-margin: 0px;
+            vertical-margin: 0px;
+        }
+    }
+}
+
+export component RichTextBlock inherits Rectangle {
+    in property <[RichTextParagraph]> paragraphs;
+    in property <[RichTextHighlight]> highlights;
+    in property <[RichTextRect]> overflow-regions;
+    in property <length> region-height;
+    in property <bool> selection-enabled: true;
+    in property <bool> context-enabled: true;
+    in property <bool> wraps: true;
+    in property <bool> rtl;
+    in property <RichTextAlignment> alignment: RichTextAlignment.leading;
+    in property <string> accessible-name;
+    in property <string> font-family;
+    in property <length> font-size: 14px;
+    in property <int> font-weight: 400;
+    in property <length> paragraph-spacing;
+    in property <float> raster-scale: 1;
+    in property <color> foreground: Palette.foreground;
+    in property <color> link-color: Palette.accent-background;
+    in property <color> selection-highlight-color: Palette.selection-background;
+    in property <color> selection-foreground-color: Palette.accent-foreground;
+    out property <string> text: root.flow.text;
+    out property <string> selected-text: root.selection-anchor != root.selection-cursor
+        ? RichTextBehavior.slice(root.text, root.selection-anchor, root.selection-cursor) : "";
+    out property <bool> has-overflow-content: root.flow.has-overflow;
+    out property <string> overflow-text: root.flow.has-overflow
+        ? RichTextBehavior.slice(root.text, root.flow.consumed, root.flow.length) : "";
+
+    callback link-invoked(string);
+    callback copy-requested(string);
+    callback context-requested(FlyoutRect);
+    callback context-requested-at(Point);
+
+    private property <int> selection-anchor;
+    private property <int> selection-cursor;
+    private property <int> held-contact: -1;
+    private property <string> pressed-link;
+    private property <bool> dragging;
+    private property <[RichTextRect]> regions: root.overflow-regions.length > 0 ? root.overflow-regions
+        : [{ x: 0px, y: 0px, width: root.width, height: root.region-height }];
+    private property <RichTextLayout> flow: RichTextBehavior.layout(root.paragraphs, root.highlights, root.regions, {
+        font-family: root.font-family, font-size: root.font-size, font-weight: root.font-weight,
+        foreground: root.foreground, link-color: root.link-color, alignment: root.alignment,
+        wraps: root.wraps, rtl: root.rtl, paragraph-spacing: root.paragraph-spacing, scale-factor: root.raster-scale,
+    });
+
+    preferred-width: 480px;
+    preferred-height: max(2px, ceil(root.flow.height / 2px) * 2px);
+    min-height: self.preferred-height;
+    accessible-role: groupbox;
+    accessible-label: root.accessible-name;
+    forward-focus: keys;
+
+    changed text => { root.clear-selection(); }
+    changed selection-enabled => { if !root.selection-enabled { root.clear-selection(); } }
+
+    public function select-range(anchor: int, cursor: int) {
+        if root.selection-enabled {
+            root.selection-anchor = clamp(anchor, 0, root.flow.length);
+            root.selection-cursor = clamp(cursor, 0, root.flow.length);
+        }
+    }
+
+    public function select-all() { root.select-range(0, root.flow.length); }
+
+    public function clear-selection() { root.selection-anchor = 0; root.selection-cursor = 0; }
+
+    public function copy() {
+        if root.selection-enabled && root.selected-text != "" { root.copy-requested(root.selected-text); }
+    }
+
+    context := ContextFlyoutArea {
+        width: parent.width;
+        height: parent.height;
+        context-enabled: root.context-enabled && root.selection-enabled;
+        context-requested(anchor) => { root.context-requested(anchor); }
+        context-requested-at(point) => { root.context-requested-at(point); }
+        focus-on-tab-navigation: false;
+        forward-focus: keys;
+        keys := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            focus-on-tab-navigation: root.selection-enabled;
+            focus-on-click: false;
+            key-pressed(event) => {
+                if !root.selection-enabled { return reject; }
+                let key = event.text.to-lowercase();
+                if event.modifiers.control && key == "a" { root.select-all(); return accept; }
+                if event.modifiers.control && key == "c" { root.copy(); return accept; }
+                if event.text == Key.Escape && root.selection-anchor != root.selection-cursor {
+                    root.select-range(root.selection-cursor, root.selection-cursor);
+                    return accept;
+                }
+                if event.text == Key.RightArrow || event.text == Key.LeftArrow || event.text == Key.UpArrow
+                    || event.text == Key.DownArrow || event.text == Key.Home || event.text == Key.End {
+                    let direction = event.text == Key.Home ? RichTextNavigation.line-start
+                        : event.text == Key.End ? RichTextNavigation.line-end
+                        : event.text == Key.UpArrow ? RichTextNavigation.up
+                        : event.text == Key.DownArrow ? RichTextNavigation.down
+                        : (event.text == Key.RightArrow) != root.rtl ? RichTextNavigation.next
+                        : RichTextNavigation.previous;
+                    let offset = event.modifiers.control && event.text == Key.Home ? 0
+                        : event.modifiers.control && event.text == Key.End ? root.flow.length
+                        : RichTextBehavior.step(root.flow.frames, root.selection-cursor, direction);
+                    root.select-range(event.modifiers.shift ? root.selection-anchor : offset, offset);
+                    return accept;
+                }
+                return reject;
+            }
+
+            for page in root.flow.frames: RichTextBlockOverflow {
+                x: page.region.x;
+                y: page.region.y;
+                frame: page;
+                selection-anchor: root.selection-anchor;
+                selection-cursor: root.selection-cursor;
+                selection-highlight-color: root.selection-highlight-color;
+                selection-foreground-color: root.selection-foreground-color;
+                link-invoked(target) => { root.link-invoked(target); }
+            }
+
+            pointer := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                property <bool> right-pressed;
+                mouse-cursor: RichTextBehavior.hit-test(root.flow.frames, { x: self.mouse-x, y: self.mouse-y }).link != ""
+                    ? MouseCursor.pointer : root.selection-enabled ? MouseCursor.text : MouseCursor.default;
+
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.right {
+                        if event.kind == PointerEventKind.down { self.right-pressed = true; }
+                        if event.kind == PointerEventKind.up {
+                            if self.right-pressed && context.context-enabled && self.mouse-x >= 0px && self.mouse-x < self.width
+                                && self.mouse-y >= 0px && self.mouse-y < self.height {
+                                keys.focus();
+                                context.request-at({ x: self.mouse-x, y: self.mouse-y });
+                            }
+                            self.right-pressed = false;
+                        }
+                    } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        let at = RichTextBehavior.hit-test(root.flow.frames, { x: self.mouse-x, y: self.mouse-y });
+                        root.held-contact = event.touch-finger-id;
+                        root.dragging = false;
+                        root.pressed-link = at.link;
+                        if root.selection-enabled {
+                            keys.focus();
+                            root.select-range(event.modifiers.shift ? root.selection-anchor : at.offset, at.offset);
+                        }
+                    } else if event.kind == PointerEventKind.cancel {
+                        self.right-pressed = false;
+                        root.held-contact = -1;
+                        root.pressed-link = "";
+                    } else if root.held-contact >= 0 && event.kind == PointerEventKind.move
+                        && event.touch-finger-id == root.held-contact && self.pressed {
+                        if abs(self.mouse-x - self.pressed-x) >= 4px || abs(self.mouse-y - self.pressed-y) >= 4px {
+                            root.dragging = true;
+                        }
+                        if root.dragging && root.selection-enabled {
+                            let at = RichTextBehavior.hit-test(root.flow.frames, { x: self.mouse-x, y: self.mouse-y });
+                            root.select-range(root.selection-anchor, at.offset);
+                        }
+                    } else if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                        let at = RichTextBehavior.hit-test(root.flow.frames, { x: self.mouse-x, y: self.mouse-y });
+                        if event.touch-finger-id == root.held-contact {
+                            if root.dragging && root.selection-enabled { root.select-range(root.selection-anchor, at.offset); }
+                            else if root.pressed-link != "" && at.link == root.pressed-link { root.link-invoked(at.link); }
+                        }
+                        root.held-contact = -1;
+                        root.pressed-link = "";
+                    }
+                }
+            }
+        }
+    }
+}

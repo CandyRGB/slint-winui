@@ -1,0 +1,136 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { ComboBoxBehavior, ComboBoxItem } from "../../ui/components/basic-input/combo_box.slint";
+import { NumberBoxMath, NumberBoxParseResult, NumberBoxValue } from "../../ui/components/text/number_box.slint";
+import { PagerControl, PagerControlBehavior, PagerControlButtonVisibility, PagerControlDisplayMode } from "../../ui/components/scrolling/pager_control.slint";
+
+export { PagerControlBehavior, ComboBoxBehavior, ComboBoxItem, NumberBoxMath, NumberBoxParseResult, NumberBoxValue }
+
+export component PagerControlExample inherits Window {
+    title: "PagerControl";
+    background: #f3f3f3;
+    min-width: 720px;
+    preferred-height: 460px;
+    default-font-family: "Segoe UI";
+
+    in property <brush> accent: Palette.accent-background;
+    private property <int> count-option;
+    private property <[int]> counts: [12, 9, 10, 20, 0, -1];
+    private property <int> mode-option;
+    private property <int> visibility-option;
+    private property <bool> rtl;
+    private property <bool> show-edges: true;
+    private property <bool> disabled;
+    private property <int> changes;
+    private property <int> input-commits;
+    private property <string> command;
+    private property <Size> viewport: { width: root.width, height: root.height };
+    private property <PagerControlButtonVisibility> navigation-visibility: root.visibility-option == 0
+        ? PagerControlButtonVisibility.visible : root.visibility-option == 1
+        ? PagerControlButtonVisibility.hidden-on-edge : PagerControlButtonVisibility.hidden;
+
+    HorizontalLayout {
+        x: 24px;
+        y: 16px;
+        width: parent.width - 48px;
+        height: 32px;
+        alignment: start;
+        spacing: 8px;
+        Button { text: "Change count"; clicked => { root.count-option = Math.mod(root.count-option + 1, root.counts.length); } }
+        Button { text: "Change mode"; clicked => { root.mode-option = Math.mod(root.mode-option + 1, 4); } }
+        Button { text: "Button visibility"; clicked => { root.visibility-option = Math.mod(root.visibility-option + 1, 3); } }
+        Button { text: "Toggle endpoints"; clicked => { root.show-edges = !root.show-edges; } }
+        Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+        Button { text: "Disable"; clicked => { root.disabled = !root.disabled; } }
+    }
+
+    basic := PagerControl {
+        x: 24px; y: 68px;
+        width: self.preferred-width;
+        height: 40px;
+        number-of-pages: root.counts[root.count-option];
+        selected-page-index: 2;
+        display-mode: root.mode-option == 0 ? PagerControlDisplayMode.auto
+            : root.mode-option == 1 ? PagerControlDisplayMode.combo-box
+            : root.mode-option == 2 ? PagerControlDisplayMode.number-box : PagerControlDisplayMode.button-panel;
+        first-button-visibility: root.navigation-visibility;
+        previous-button-visibility: root.navigation-visibility;
+        next-button-visibility: root.navigation-visibility;
+        last-button-visibility: root.navigation-visibility;
+        button-panel-always-show-first-last-page-index: root.show-edges;
+        popup-viewport: root.viewport;
+        rtl: root.rtl;
+        enabled: !root.disabled;
+        indicator-color: root.accent;
+        selected-index-changed(old, new) => { root.changes += 1; }
+        input-committed(index) => { root.input-commits += 1; }
+        first-clicked => { root.command = "first"; }
+        previous-clicked => { root.command = "previous"; }
+        next-clicked => { root.command = "next"; }
+        last-clicked => { root.command = "last"; }
+    }
+
+    Text {
+        x: 24px; y: 116px;
+        text: "Count \{basic.number-of-pages} · Index \{basic.selected-page-index} · Changes \{root.changes} · Input \{root.input-commits} · \{root.command}";
+        color: Palette.foreground;
+        accessible-label: self.text;
+    }
+
+    Text {
+        x: 24px; y: 160px;
+        text: "Button panel";
+        font-size: 14px;
+        font-weight: 600;
+        color: Palette.foreground;
+    }
+    finite := PagerControl {
+        x: 24px; y: 184px;
+        width: self.preferred-width;
+        height: 40px;
+        accessible-name: "Button panel page selector";
+        number-of-pages: 20;
+        selected-page-index: 4;
+        display-mode: PagerControlDisplayMode.button-panel;
+        button-panel-always-show-first-last-page-index: root.show-edges;
+        rtl: root.rtl;
+        indicator-color: root.accent;
+    }
+
+    Text {
+        x: 24px; y: 250px;
+        text: "Unbounded number box";
+        font-size: 14px;
+        font-weight: 600;
+        color: Palette.foreground;
+    }
+    PagerControl {
+        x: 24px; y: 274px;
+        width: self.preferred-width;
+        height: 40px;
+        accessible-name: "Unbounded number box page selector";
+        number-of-pages: -1;
+        selected-page-index: 99;
+        popup-viewport: root.viewport;
+        rtl: root.rtl;
+    }
+
+    Text {
+        x: 24px; y: 340px;
+        text: "Unbounded button panel";
+        font-size: 14px;
+        font-weight: 600;
+        color: Palette.foreground;
+    }
+    PagerControl {
+        x: 24px; y: 364px;
+        width: self.preferred-width;
+        height: 40px;
+        accessible-name: "Unbounded button panel page selector";
+        number-of-pages: -1;
+        selected-page-index: 99;
+        display-mode: PagerControlDisplayMode.button-panel;
+        rtl: root.rtl;
+        indicator-color: root.accent;
+    }
+}

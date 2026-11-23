@@ -1,0 +1,73 @@
+import { Button, CheckBox, Palette } from "std-widgets.slint";
+import { NumberBox, NumberBoxMath, NumberBoxParseResult, NumberBoxSpinPlacement, NumberBoxValidationMode, NumberBoxValue } from "../../ui/components/text/number_box.slint";
+
+export { NumberBoxMath, NumberBoxParseResult, NumberBoxValue }
+
+export component NumberBoxExample inherits Window {
+    title: "NumberBox";
+    width: 456px;
+    height: 356px;
+    in property <bool> dark;
+    private property <NumberBoxValue> quantity: { number: 10, has-value: true };
+    private property <string> output: "Quantity is 10";
+
+    changed dark => { Palette.color-scheme = root.dark ? ColorScheme.dark : ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        alignment: start;
+
+        NumberBox {
+            header: "Quantity";
+            description: "0 to 20. Arithmetic allowed.";
+            spin-placement: NumberBoxSpinPlacement.inline;
+            accepts-expression: true;
+            minimum: 0;
+            maximum: 20;
+            small-change: 0.5;
+            large-change: 4;
+            enabled: !disable.checked;
+            value <=> root.quantity;
+            validation-mode: keep.checked ? NumberBoxValidationMode.disabled
+                : NumberBoxValidationMode.invalid-input-overwritten;
+            value-changed(old, next) => {
+                root.output = next.has-value ? "Quantity is " + next.number : "Quantity is empty";
+            }
+        }
+
+        NumberBox {
+            header: "Optional value";
+            placeholder-text: "Enter a number";
+            enabled: !disable.checked;
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            keep := CheckBox { text: "Keep invalid input"; }
+            disable := CheckBox { text: "Disable fields"; }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+            Button {
+                text: "Set quantity to 12";
+                clicked => { root.quantity = { number: 12, has-value: true }; }
+            }
+            Text { text: root.output; vertical-alignment: center; }
+        }
+
+        NumberBox {
+            header: "Angle";
+            spin-placement: NumberBoxSpinPlacement.compact;
+            popup-viewport: { width: root.width, height: root.height };
+            value: { number: 350, has-value: true };
+            minimum: 0;
+            maximum: 359;
+            small-change: 10;
+            wrap-enabled: true;
+            enabled: !disable.checked;
+        }
+    }
+}

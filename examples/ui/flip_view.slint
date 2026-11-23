@@ -1,0 +1,92 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { FlipView, FlipViewItem, FlipViewBehavior } from "../../ui/components/collections/flip_view.slint";
+
+export { FlipViewItem, FlipViewBehavior }
+
+export component FlipViewExample inherits Window {
+    title: "FlipView";
+    min-width: 820px;
+    preferred-height: 442px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+    in-out property <[FlipViewItem]> items;
+    out property <int> selected-index: gallery.selected-index;
+
+    private property <bool> vertical;
+    private property <bool> rtl;
+    private property <bool> disabled;
+    private property <int> changes;
+    callback remove-current();
+    callback restore-items();
+    callback move-current-first();
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        alignment: start;
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            Button { text: "Vertical"; clicked => { root.vertical = !root.vertical; } }
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+            Button { text: "Disable"; clicked => { root.disabled = !root.disabled; } }
+            Button { text: "Move selected first"; clicked => { root.move-current-first(); } }
+            Button { text: "Remove selected"; clicked => { root.remove-current(); } }
+            Button { text: "Restore pages"; clicked => { root.restore-items(); } }
+        }
+        HorizontalLayout {
+            spacing: 24px;
+            alignment: start;
+            gallery := FlipView {
+                width: 400px;
+                height: 270px;
+                items: root.items;
+                accessible-name: "Landscapes";
+                orientation: root.vertical ? Orientation.vertical : Orientation.horizontal;
+                rtl: root.rtl;
+                enabled: !root.disabled;
+                selection-changed(old, current) => { root.changes += 1; }
+            }
+            custom := FlipView {
+                width: 320px;
+                height: 270px;
+                items: root.items;
+                accessible-name: "Custom pages";
+                show-default-page: false;
+                enabled: !root.disabled;
+
+                Rectangle {
+                    width: 256px;
+                    height: 154px;
+                    border-radius: 8px;
+                    background: Palette.control-background;
+                    border-width: 1px;
+                    border-color: Palette.foreground.with-alpha(0.12);
+
+                    VerticalLayout {
+                        padding: 24px;
+                        spacing: 8px;
+                        alignment: center;
+                        Text {
+                            text: custom.selected-item.title;
+                            color: Palette.foreground;
+                            font-size: 24px;
+                            horizontal-alignment: center;
+                            accessible-role: none;
+                        }
+                        Text {
+                            text: "Page \{custom.selected-index + 1} of \{root.items.length}";
+                            color: Palette.foreground.with-alpha(0.70);
+                            horizontal-alignment: center;
+                            accessible-role: none;
+                        }
+                    }
+                }
+            }
+        }
+        Text {
+            text: "Selected \{gallery.selected-index}: \{gallery.selected-item.title} · Changes \{root.changes}";
+            color: Palette.foreground;
+        }
+    }
+}

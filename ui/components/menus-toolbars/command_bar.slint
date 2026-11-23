@@ -1,0 +1,712 @@
+import { Palette, ScrollView } from "std-widgets.slint";
+import { AppBarButton, AppBarSeparator, AppBarLabelPosition } from "app_bar_button.slint";
+import { FlyoutRect } from "../dialogs-flyouts/flyout_layout.slint";
+
+export { AppBarLabelPosition }
+export enum CommandBarItemKind { command, toggle, separator }
+export enum CommandBarClosedDisplayMode { compact, minimal, hidden }
+export enum CommandBarOverflowButtonVisibility { auto, visible, collapsed }
+
+export struct CommandBarItem {
+    id: string,
+    label: string,
+    icon: image,
+    kind: CommandBarItemKind,
+    disabled: bool,
+    hidden: bool,
+    checked: bool,
+    overflow-order: int,
+    width: length,
+    shortcut: keys,
+    accelerator-text: string,
+    has-flyout: bool,
+    flyout-open: bool,
+}
+
+export struct CommandBarEntry {
+    item: CommandBarItem,
+    source-index: int,
+    secondary: bool,
+    width: length,
+}
+
+export struct CommandBarLayout {
+    primary: [CommandBarEntry],
+    overflow: [CommandBarEntry],
+    primary-width: length,
+    overflow-height: length,
+    more: bool,
+    has-bottom-labels: bool,
+    overflow-has-icons: bool,
+    overflow-has-toggles: bool,
+}
+
+export global CommandBarBehavior {
+    pure callback arrange([CommandBarItem], [CommandBarItem], length, length, length, bool,
+        AppBarLabelPosition, CommandBarOverflowButtonVisibility, bool) -> CommandBarLayout;
+    pure callback next-item([CommandBarEntry], int, bool) -> int;
+    pure callback index-of([CommandBarEntry], string) -> int;
+    pure callback accessible-index([CommandBarEntry], int) -> int;
+    pure callback has-actions([CommandBarItem]) -> bool;
+    callback toggle([CommandBarItem], int) -> CommandBarItem;
+}
+
+// Wrap the window content for app-wide accelerators. A smaller scope limits where they apply.
+export component CommandBarAccelerators inherits FocusScope {
+    in property <[CommandBarItem]> primary;
+    in property <[CommandBarItem]> secondary;
+    in property <bool> accelerators-enabled: true;
+    callback invoked(int, bool);
+
+    enabled: false;
+    for item[index] in root.primary : KeyBinding {
+        keys: item.shortcut;
+        enabled: root.accelerators-enabled && !item.hidden && !item.disabled
+            && item.kind != CommandBarItemKind.separator && item.shortcut.to-string() != "";
+        activated => { root.invoked(index, false); }
+    }
+    for item[index] in root.secondary : KeyBinding {
+        keys: item.shortcut;
+        enabled: root.accelerators-enabled && !item.hidden && !item.disabled
+            && item.kind != CommandBarItemKind.separator && item.shortcut.to-string() != "";
+        activated => { root.invoked(index, true); }
+    }
+    @children
+}
+
+export component CommandBar inherits Rectangle {
+    // Use mutable models when a command can toggle. IDs identify commands across model changes.
+    in property <[CommandBarItem]> primary-commands;
+    in property <[CommandBarItem]> secondary-commands;
+    in property <bool> enabled: true;
+    in property <bool> dynamic-overflow-enabled: true;
+    in property <bool> sticky;
+    in property <bool> floating;
+    in property <bool> take-focus-on-click: true;
+    in property <bool> keep-expanded-on-invoke;
+    in property <length> secondary-viewport-height: 480px;
+    in property <bool> rtl;
+    in property <bool> bottom-app-bar;
+    in property <length> layout-available-width: root.width;
+    in property <length> content-min-width;
+    in property <Size> popup-viewport;
+    in property <string> accessible-name: @tr("Command bar");
+    in property <AppBarLabelPosition> default-label-position: AppBarLabelPosition.bottom;
+    in property <CommandBarClosedDisplayMode> closed-display-mode: CommandBarClosedDisplayMode.compact;
+    in property <CommandBarOverflowButtonVisibility> overflow-button-visibility: CommandBarOverflowButtonVisibility.auto;
+    in-out property <bool> is-open;
+    out property <int> overflow-count: root.arrangement.overflow.length;
+    out property <bool> has-command-focus: primary-focus.has-focus || overflow-focus.has-focus;
+    out property <Size> collapsed-size: {
+        width: root.arrangement.primary-width + root.more-width + 8px,
+        height: root.closed-height,
+    };
+    out property <Size> expanded-size: {
+        width: root.overflow-count > 0 ? max(root.collapsed-size.width, min(440px, max(136px, rows.preferred-width)))
+            : root.collapsed-size.width,
+        height: root.closed-height + (root.overflow-count > 0 ? root.desired-overflow-height : 0px),
+    };
+
+    callback opening();
+    callback opened();
+    callback closing();
+    callback closed();
+    callback invoked(CommandBarItem);
+    callback command-invoked(CommandBarItem, bool);
+    callback open-flyout(CommandBarItem, FlyoutRect, bool);
+    callback dismiss-requested();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <bool> visible-open;
+    private property <bool> changing;
+    private property <string> pending-secondary-flyout;
+    private property <bool> keyboard-focus: true;
+    private property <int> primary-index: CommandBarBehavior.next-item(root.arrangement.primary, -1, true);
+    private property <int> overflow-index: -1;
+    private property <string> primary-id;
+    private property <string> overflow-id;
+    private property <int> initial-overflow-focus;
+    private property <string> activation-key;
+    private property <length> closed-height: root.floating
+        ? (root.arrangement.primary.length == 0 ? 0px : root.arrangement.has-bottom-labels ? 60px : 48px)
+        : root.closed-display-mode == CommandBarClosedDisplayMode.hidden ? 0px
+        : root.closed-display-mode == CommandBarClosedDisplayMode.minimal ? 24px : 48px;
+    private property <length> measured-content-width: max(root.content-min-width, content.preferred-width + 4px);
+    private property <length> more-width: root.arrangement.more ? (root.floating ? 44px : 48px) : 0px;
+    private property <length> end-gap: root.arrangement.more ? 0px : 6px;
+    private property <length> full-height: root.floating ? root.closed-height : max(root.arrangement.has-bottom-labels ? 64px : 48px,
+        round(content.preferred-height / 2px) * 2px);
+    private property <length> bar-height: root.visible-open ? root.full-height : root.closed-height;
+    private property <length> desired-overflow-height: min(root.floating ? 480px : 198px, root.arrangement.overflow-height);
+    private property <length> available-below: root.popup-viewport.height > 0px
+        ? max(0px, root.popup-viewport.height - root.absolute-position.y - root.full-height)
+        : root.desired-overflow-height;
+    private property <length> available-above: root.popup-viewport.height > 0px
+        ? max(0px, root.absolute-position.y + root.closed-height - root.full-height) : root.desired-overflow-height;
+    private property <bool> opens-up: root.bottom-app-bar || (!root.floating
+        && root.available-below < root.desired-overflow-height && root.available-above >= root.available-below);
+    private property <length> overflow-height: floor(min(root.desired-overflow-height, root.floating
+        ? root.secondary-viewport-height : root.opens-up ? root.available-above : root.available-below) / 2px) * 2px;
+    private property <bool> overflow-visible: root.visible-open && root.overflow-count > 0 && root.overflow-height > 0px;
+    private property <bool> bar-commands-visible: root.floating || root.visible-open || root.closed-height == 48px;
+    private property <CommandBarLayout> arrangement: CommandBarBehavior.arrange(
+        root.primary-commands, root.secondary-commands, root.layout-available-width, root.measured-content-width,
+        root.floating ? (root.default-label-position == AppBarLabelPosition.bottom ? 60px : 40px) : 68px,
+        root.dynamic-overflow-enabled, root.default-label-position, root.overflow-button-visibility,
+        root.closed-display-mode != CommandBarClosedDisplayMode.compact || content.preferred-height > 48px);
+
+    height: root.closed-height;
+    horizontal-stretch: 1;
+    z: root.visible-open ? 1 : 0;
+    forward-focus: primary-focus;
+
+    init => { root.sync-open(); }
+    changed is-open => { root.sync-open(); }
+    changed enabled => { if (!root.enabled) { root.hide(); } }
+    changed arrangement => {
+        root.activation-key = "";
+        if (root.primary-id != "") {
+            let index = CommandBarBehavior.index-of(root.arrangement.primary, root.primary-id);
+            root.set-primary-index(index >= 0 || root.arrangement.more ? index
+                : CommandBarBehavior.next-item(root.arrangement.primary, -1, true));
+        } else if (root.primary-index >= root.arrangement.primary.length || !root.arrangement.more) {
+            root.set-primary-index(CommandBarBehavior.next-item(root.arrangement.primary, -1, true));
+        }
+        if (root.overflow-id != "" || root.overflow-index >= root.overflow-count) {
+            let index = CommandBarBehavior.index-of(root.arrangement.overflow, root.overflow-id);
+            root.set-overflow-index(index >= 0 ? index : CommandBarBehavior.next-item(root.arrangement.overflow, -1, true));
+            if (overflow-focus.has-focus && root.overflow-index < 0) {
+                root.focus-more();
+            }
+        }
+    }
+
+    public function show() {
+        if (root.enabled) {
+            root.is-open = true;
+            root.sync-open();
+        }
+    }
+
+    public function hide() {
+        root.pending-secondary-flyout = "";
+        root.is-open = false;
+        root.sync-open();
+    }
+
+    public function focus-first-command() {
+        let first = CommandBarBehavior.next-item(root.arrangement.primary, -1, true);
+        if (first >= 0 || root.arrangement.more) {
+            root.focus-primary(first);
+        } else {
+            root.focus-overflow(true);
+        }
+    }
+
+    public function open-secondary-flyout(id: string) {
+        root.pending-secondary-flyout = id;
+    }
+
+    function sync-open() {
+        if (root.changing || root.is-open == root.visible-open) { return; }
+        if (root.is-open && !root.enabled) {
+            root.is-open = false;
+            return;
+        }
+        root.changing = true;
+        if (root.is-open) {
+            root.opening();
+            if (root.is-open) {
+                root.visible-open = true;
+                if (root.initial-overflow-focus != 0) {
+                    root.focus-overflow(root.initial-overflow-focus > 0);
+                }
+                root.opened();
+            }
+        } else {
+            let restore = overflow-focus.has-focus;
+            root.closing();
+            if (!root.is-open) {
+                root.visible-open = false;
+                root.set-overflow-index(-1);
+                if (restore) { root.focus-more(); }
+                root.closed();
+            }
+        }
+        root.initial-overflow-focus = 0;
+        root.activation-key = "";
+        root.changing = false;
+    }
+
+    function set-primary-index(index: int) {
+        root.activation-key = "";
+        root.primary-index = index;
+        root.primary-id = index >= 0 ? root.arrangement.primary[index].item.id : "";
+    }
+
+    function set-overflow-index(index: int) {
+        root.activation-key = "";
+        root.overflow-index = index;
+        root.overflow-id = index >= 0 ? root.arrangement.overflow[index].item.id : "";
+    }
+
+    function focus-primary(index: int) {
+        root.set-primary-index(index);
+        root.keyboard-focus = true;
+        primary-focus.focus();
+    }
+
+    function focus-more() {
+        root.focus-primary(root.arrangement.more ? -1
+            : CommandBarBehavior.next-item(root.arrangement.primary, -1, false));
+    }
+
+    function focus-overflow(first: bool) {
+        let index = CommandBarBehavior.next-item(root.arrangement.overflow, -1, first);
+        if (root.overflow-visible && index >= 0) {
+            root.set-overflow-index(index);
+            root.keyboard-focus = true;
+            overflow-focus.focus();
+        }
+    }
+
+    function open-or-focus-overflow(first: bool) {
+        if (root.visible-open) {
+            root.focus-overflow(first);
+        } else {
+            root.initial-overflow-focus = first ? 1 : -1;
+            root.show();
+        }
+    }
+
+    function select-primary(index: int) {
+        root.set-primary-index(index);
+        root.keyboard-focus = false;
+        if (root.take-focus-on-click) { primary-focus.focus(); }
+    }
+
+    function select-overflow(index: int) {
+        root.set-overflow-index(index);
+        root.keyboard-focus = false;
+        overflow-focus.focus();
+    }
+
+    function dismiss() {
+        if (!root.sticky) { root.hide(); }
+    }
+
+    function toggle-open() {
+        if (root.visible-open) {
+            root.hide();
+        } else {
+            root.show();
+            if (root.floating) { root.focus-more(); }
+        }
+    }
+
+    public function invoke-shortcut(index: int, secondary: bool) {
+        let commands = secondary ? root.secondary-commands : root.primary-commands;
+        if (index >= 0 && index < commands.length && !commands[index].hidden) {
+            root.invoke-entry({ item: commands[index], source-index: index, secondary: secondary }, {
+                x: bar.absolute-position.x, y: bar.absolute-position.y, width: bar.width, height: bar.height,
+            }, false);
+        }
+    }
+
+    function invoke-entry(entry: CommandBarEntry, anchor: FlyoutRect, overflow: bool) {
+        let item = entry.item;
+        if (!root.enabled || item.disabled || item.kind == CommandBarItemKind.separator) { return; }
+        if (item.has-flyout) {
+            root.open-flyout(item, anchor, overflow);
+        } else {
+            let invoked-item = item.kind == CommandBarItemKind.toggle
+                ? CommandBarBehavior.toggle(entry.secondary ? root.secondary-commands : root.primary-commands, entry.source-index)
+                : item;
+            if (!root.floating || (!overflow && !root.keep-expanded-on-invoke)) { root.hide(); }
+            root.invoked(invoked-item);
+            root.command-invoked(invoked-item, overflow);
+        }
+    }
+
+    function activate-focused() {
+        if (overflow-focus.has-focus && root.overflow-index >= 0 && root.overflow-index < root.overflow-count) {
+            root.invoke-entry(root.arrangement.overflow[root.overflow-index], overflow-focus.active-anchor, true);
+        } else if (primary-focus.has-focus) {
+            if (root.primary-index < 0 && root.arrangement.more) {
+                root.toggle-open();
+            } else if (root.primary-index >= 0 && root.primary-index < root.arrangement.primary.length) {
+                root.invoke-entry(root.arrangement.primary[root.primary-index], primary-focus.active-anchor, false);
+            }
+        }
+    }
+
+    function move-primary(forward: bool) {
+        if (root.primary-index < 0 && forward) { return; }
+        let next = CommandBarBehavior.next-item(root.arrangement.primary, root.primary-index, forward);
+        if (next >= 0 || (forward && root.arrangement.more)) {
+            root.focus-primary(next);
+        }
+    }
+
+    function move-overflow(forward: bool) {
+        let next = CommandBarBehavior.next-item(root.arrangement.overflow, root.overflow-index, forward);
+        if (next >= 0) {
+            root.set-overflow-index(next);
+            root.keyboard-focus = true;
+        } else if (root.floating && forward) {
+            root.focus-first-command();
+        } else if (root.floating && !root.arrangement.more && root.arrangement.primary.length == 0) {
+            root.focus-overflow(false);
+        } else {
+            root.focus-more();
+        }
+    }
+
+    function move-floating-primary(forward: bool) {
+        let next = root.primary-index < 0 && forward ? -1
+            : CommandBarBehavior.next-item(root.arrangement.primary, root.primary-index, forward);
+        if (next >= 0) {
+            root.focus-primary(next);
+        } else if (forward && root.primary-index >= 0 && root.arrangement.more) {
+            root.focus-more();
+        } else if (CommandBarBehavior.next-item(root.arrangement.overflow, -1, forward) >= 0) {
+            root.open-or-focus-overflow(forward);
+        } else if (forward) {
+            root.focus-first-command();
+        } else {
+            root.focus-more();
+        }
+    }
+
+    FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        key-pressed(event) => {
+            if ((root.floating || root.visible-open) && event.text == Key.Escape) {
+                if (root.floating) {
+                    root.dismiss-requested();
+                } else {
+                    root.dismiss();
+                    root.focus-more();
+                }
+                return accept;
+            }
+            if ((primary-focus.has-focus || overflow-focus.has-focus)
+                && (event.text == Key.Space || event.text == Key.Return)) {
+                if (!event.repeat) { root.activation-key = event.text; }
+                return accept;
+            }
+            return reject;
+        }
+        key-released(event) => {
+            if (root.activation-key != "" && event.text == root.activation-key) {
+                root.activation-key = "";
+                root.activate-focused();
+                return accept;
+            }
+            return reject;
+        }
+
+        if !root.floating && root.visible-open && !root.sticky && root.popup-viewport.width > 0px && root.popup-viewport.height > 0px : TouchArea {
+            x: -root.absolute-position.x;
+            y: -root.absolute-position.y;
+            width: root.popup-viewport.width;
+            height: root.popup-viewport.height;
+            clicked => { root.dismiss(); }
+        }
+
+        bar := Rectangle {
+            y: root.visible-open && root.opens-up ? root.closed-height - root.bar-height : 0px;
+            width: parent.width;
+            height: root.bar-height;
+            clip: true;
+            background: root.floating || root.visible-open ? (root.dark ? #2c2c2c : #f3f3f3) : transparent;
+            border-width: root.floating || root.visible-open ? 1px : 0px;
+            border-color: root.dark ? #ffffff14 : #0000000f;
+            border-radius: root.floating ? 8px : root.visible-open ? 4px : 0px;
+            border-top-left-radius: root.floating && root.overflow-visible && root.opens-up ? 0px : self.border-radius;
+            border-top-right-radius: self.border-top-left-radius;
+            border-bottom-left-radius: root.floating && root.overflow-visible && !root.opens-up ? 0px : self.border-radius;
+            border-bottom-right-radius: self.border-bottom-left-radius;
+
+            if root.floating || root.visible-open : TouchArea { }
+
+            Rectangle {
+                x: root.rtl ? parent.width - self.width - 4px : 4px;
+                width: max(0px, parent.width - root.arrangement.primary-width - root.more-width - root.end-gap - 4px);
+                height: parent.height;
+                clip: true;
+                visible: root.bar-commands-visible;
+
+                content := HorizontalLayout {
+                    padding-left: 4px;
+                    padding-right: 4px;
+                    alignment: root.rtl ? end : start;
+                    @children
+                }
+            }
+
+            primary-focus := FocusScope {
+                property <FlyoutRect> active-anchor;
+                property <int> command-count: CommandBarBehavior.accessible-index(root.arrangement.primary, root.arrangement.primary.length);
+                property <int> ordinal: CommandBarBehavior.accessible-index(root.arrangement.primary, root.primary-index);
+                x: root.floating ? 0px : root.rtl ? root.end-gap : parent.width - self.width - root.end-gap;
+                width: root.floating ? parent.width
+                    : (root.bar-commands-visible ? root.arrangement.primary-width : 0px) + root.more-width;
+                enabled: root.enabled && root.bar-height > 0px && (root.arrangement.more
+                    || CommandBarBehavior.next-item(root.arrangement.primary, -1, true) >= 0);
+                focus-on-click: false;
+                focus-on-tab-navigation: self.enabled;
+                accessible-role: groupbox;
+                accessible-label: root.accessible-name;
+                accessible-delegate-focus: root.primary-index >= 0 && root.bar-commands-visible
+                    ? (root.rtl ? self.command-count - self.ordinal - 1 : self.ordinal)
+                    : root.arrangement.more ? (root.bar-commands-visible ? self.command-count : 0) : -1;
+                changed has-focus => {
+                    root.activation-key = "";
+                    if (self.has-focus) {
+                        root.set-primary-index(root.bar-commands-visible ? root.primary-index : -1);
+                    }
+                }
+                key-pressed(event) => {
+                    if (!event.modifiers.alt && (event.text == Key.LeftArrow || event.text == Key.RightArrow)) {
+                        if (root.bar-commands-visible) {
+                            root.move-primary((event.text == Key.RightArrow) != root.rtl);
+                        }
+                        return accept;
+                    }
+                    if (root.floating && !event.modifiers.alt && (event.text == Key.DownArrow || event.text == Key.UpArrow)) {
+                        root.move-floating-primary(event.text == Key.DownArrow);
+                        return accept;
+                    }
+                    if (!event.modifiers.alt && root.primary-index < 0 && root.arrangement.more
+                        && (event.text == Key.DownArrow || event.text == Key.UpArrow)) {
+                        root.open-or-focus-overflow(event.text == Key.DownArrow);
+                        return accept;
+                    }
+                    if (event.text == Key.Tab || event.text == Key.Backtab) {
+                        if (root.floating) {
+                            if (CommandBarBehavior.next-item(root.arrangement.overflow, -1, true) >= 0) {
+                                root.open-or-focus-overflow(true);
+                            }
+                            return accept;
+                        }
+                        let forward = event.text == Key.Tab && !event.modifiers.shift;
+                        let next = root.bar-commands-visible
+                            ? CommandBarBehavior.next-item(root.arrangement.primary, root.primary-index, forward) : -1;
+                        if ((root.primary-index >= 0 || !forward) && next >= 0) {
+                            root.focus-primary(next);
+                            return accept;
+                        }
+                        if (root.primary-index >= 0 && forward && root.arrangement.more) {
+                            root.focus-more();
+                            return accept;
+                        }
+                        if (forward && root.overflow-visible && !root.sticky
+                            && CommandBarBehavior.next-item(root.arrangement.overflow, -1, true) >= 0) {
+                            root.focus-overflow(true);
+                            return accept;
+                        }
+                    }
+                    return reject;
+                }
+
+                Rectangle {
+                    x: root.rtl ? root.more-width : root.floating ? 4px : 0px;
+                    y: root.floating ? 4px : 0px;
+                    width: root.floating ? max(0px, parent.width - root.more-width - 8px)
+                        : root.bar-commands-visible ? root.arrangement.primary-width : 0px;
+                    height: root.floating ? max(0px, parent.height - 8px) : parent.height;
+                    visible: root.bar-commands-visible;
+                    clip: root.floating;
+
+                    HorizontalLayout {
+                        x: root.floating && root.rtl ? parent.width - self.width : 0px;
+                        width: root.floating ? root.arrangement.primary-width : parent.width;
+                        height: parent.height;
+                        alignment: start;
+                        for row[position] in root.arrangement.primary : Rectangle {
+                            private property <int> index: root.rtl ? root.arrangement.primary.length - 1 - position : position;
+                            private property <CommandBarEntry> entry: root.arrangement.primary[self.index];
+                            width: self.entry.width;
+
+                            if self.entry.item.kind == CommandBarItemKind.separator : AppBarSeparator { }
+                            if self.entry.item.kind != CommandBarItemKind.separator : AppBarButton {
+                                private property <FlyoutRect> anchor: {
+                                    x: self.absolute-position.x, y: self.absolute-position.y,
+                                    width: self.width, height: self.height,
+                                };
+                                private property <FlyoutRect> active-anchor: index == root.primary-index ? self.anchor : {};
+                                width: parent.width;
+                                hosted: true;
+                                floating: root.floating;
+                                rtl: root.rtl;
+                                compact: !root.floating && !root.visible-open;
+                                label-position: root.default-label-position;
+                                label: entry.item.label;
+                                icon: entry.item.icon;
+                                enabled: root.enabled && !entry.item.disabled;
+                                has-flyout: entry.item.has-flyout;
+                                expanded: entry.item.flyout-open;
+                                toggleable: entry.item.kind == CommandBarItemKind.toggle;
+                                checked: entry.item.checked;
+                                keyboard-highlight: root.take-focus-on-click && index == root.primary-index
+                                    && primary-focus.has-focus && root.keyboard-focus;
+                                changed active-anchor => { if (index == root.primary-index) { primary-focus.active-anchor = self.active-anchor; } }
+                                focus-requested => { root.select-primary(index); }
+                                clicked => { root.invoke-entry(entry, self.anchor, false); }
+                            }
+                        }
+                    }
+                }
+
+                if root.arrangement.more : AppBarButton {
+                    x: root.rtl ? 0px : parent.width - self.width;
+                    y: 0px;
+                    width: root.more-width;
+                    height: parent.height;
+                    hosted: true;
+                    floating: root.floating;
+                    rtl: root.rtl;
+                    more-button: true;
+                    compact: true;
+                    label-position: AppBarLabelPosition.collapsed;
+                    label: @tr("More options");
+                    icon: @image-url("../../icons/more_horizontal_16_regular.svg");
+                    enabled: root.enabled;
+                    expanded: root.visible-open;
+                    keyboard-highlight: root.take-focus-on-click && root.primary-index < 0
+                        && primary-focus.has-focus && root.keyboard-focus;
+                    focus-requested => { root.select-primary(-1); }
+                    clicked => { root.toggle-open(); }
+                }
+            }
+        }
+
+        overflow-focus := FocusScope {
+            property <FlyoutRect> active-anchor;
+            property <length> desired-width: root.floating ? root.width : root.popup-viewport.width > 0px && root.popup-viewport.width <= 480px
+                ? max(160px, root.width) : min(480px, max(160px, rows.preferred-width));
+            property <length> natural-x: root.rtl ? 0px : root.width - self.width;
+            x: root.popup-viewport.width > 0px
+                ? max(-root.absolute-position.x, min(self.natural-x,
+                    root.popup-viewport.width - root.absolute-position.x - self.width)) : self.natural-x;
+            y: root.opens-up ? bar.y - self.height : bar.y + bar.height;
+            width: root.popup-viewport.width > 0px ? min(self.desired-width, root.popup-viewport.width) : self.desired-width;
+            height: root.overflow-height;
+            visible: root.overflow-visible;
+            enabled: root.enabled && self.visible;
+            focus-on-click: false;
+            focus-on-tab-navigation: false;
+            accessible-role: list;
+            accessible-label: @tr("More commands");
+            accessible-item-count: CommandBarBehavior.accessible-index(root.arrangement.overflow, root.overflow-count);
+            accessible-delegate-focus: root.overflow-index < 0 ? -1
+                : CommandBarBehavior.accessible-index(root.arrangement.overflow, root.overflow-index);
+            changed has-focus => { root.activation-key = ""; }
+            key-pressed(event) => {
+                if (event.text == Key.UpArrow || event.text == Key.DownArrow) {
+                    root.move-overflow(event.text == Key.DownArrow);
+                    return accept;
+                }
+                if (event.text == Key.LeftArrow || event.text == Key.RightArrow) { return accept; }
+                if (event.text == Key.Tab || event.text == Key.Backtab) {
+                    if (root.floating) {
+                        root.focus-first-command();
+                        return accept;
+                    }
+                    let forward = event.text == Key.Tab && !event.modifiers.shift;
+                    let next = CommandBarBehavior.next-item(root.arrangement.overflow, root.overflow-index, forward);
+                    if (next >= 0) {
+                        root.set-overflow-index(next);
+                        root.keyboard-focus = true;
+                    } else if (!forward || root.sticky) {
+                        root.focus-more();
+                    } else {
+                        root.focus-primary(CommandBarBehavior.next-item(root.arrangement.primary, -1, true));
+                    }
+                    return accept;
+                }
+                return reject;
+            }
+
+            Rectangle {
+                width: parent.width;
+                height: parent.height;
+                border-width: 1px;
+                border-color: root.dark ? #00000033 : #0000000f;
+                border-radius: 8px;
+                border-top-left-radius: root.floating && root.closed-height > 0px && !root.opens-up ? 0px : self.border-radius;
+                border-top-right-radius: self.border-top-left-radius;
+                border-bottom-left-radius: root.floating && root.closed-height > 0px && root.opens-up ? 0px : self.border-radius;
+                border-bottom-right-radius: self.border-bottom-left-radius;
+                background: root.dark ? #2c2c2c : #f3f3f3;
+                drop-shadow-color: root.dark ? #00000042 : #00000024;
+                drop-shadow-blur: 16px;
+                drop-shadow-offset-y: 8px;
+                TouchArea { }
+            }
+
+            overflow-scroll := ScrollView {
+                horizontal-scrollbar-policy: always-off;
+                content-width: self.visible-width;
+                content-height: max(self.visible-height, root.arrangement.overflow-height);
+                rows := VerticalLayout {
+                    padding-top: 4px;
+                    padding-bottom: 4px;
+                    for entry[index] in root.arrangement.overflow : Rectangle {
+                        height: entry.item.kind == CommandBarItemKind.separator ? 8px : 36px;
+                        preferred-width: row.preferred-width;
+                        AppBarSeparator {
+                            overflow: true;
+                            visible: entry.item.kind == CommandBarItemKind.separator;
+                        }
+                        row := AppBarButton {
+                            private property <FlyoutRect> anchor: {
+                                x: self.absolute-position.x, y: self.absolute-position.y,
+                                width: self.width, height: self.height,
+                            };
+                            private property <FlyoutRect> active-anchor: index == root.overflow-index ? self.anchor : {};
+                            width: parent.width;
+                            visible: entry.item.kind != CommandBarItemKind.separator;
+                            hosted: true;
+                            floating: root.floating;
+                            rtl: root.rtl;
+                            overflow: true;
+                            label: entry.item.label;
+                            icon: entry.item.icon;
+                            enabled: root.enabled && !entry.item.disabled;
+                            has-flyout: entry.item.has-flyout;
+                            expanded: entry.item.flyout-open;
+                            toggleable: entry.item.kind == CommandBarItemKind.toggle;
+                            checked: entry.item.checked;
+                            show-check-column: root.arrangement.overflow-has-toggles;
+                            show-icon-column: root.arrangement.overflow-has-icons;
+                            accelerator-text: entry.item.accelerator-text == "" ? entry.item.shortcut.to-string() : entry.item.accelerator-text;
+                            keyboard-highlight: index == root.overflow-index && overflow-focus.has-focus && root.keyboard-focus;
+                            changed active-anchor => { if (index == root.overflow-index) { overflow-focus.active-anchor = self.active-anchor; } }
+                            changed keyboard-highlight => {
+                                if (self.keyboard-highlight) {
+                                    let top = parent.y;
+                                    let target = min(top, max(-overflow-scroll.content-y, top + self.height - overflow-scroll.visible-height));
+                                    overflow-scroll.content-y = -max(0px, min(target, overflow-scroll.content-height - overflow-scroll.visible-height));
+                                }
+                            }
+                            focus-requested => { root.select-overflow(index); }
+                            clicked => { root.invoke-entry(entry, self.anchor, true); }
+                        }
+                        Timer {
+                            interval: 16ms;
+                            running: root.overflow-visible && entry.item.has-flyout
+                                && entry.item.id != "" && root.pending-secondary-flyout == entry.item.id;
+                            triggered => {
+                                root.pending-secondary-flyout = "";
+                                root.open-flyout(entry.item, row.anchor, true);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

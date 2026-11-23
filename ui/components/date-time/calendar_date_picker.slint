@@ -1,0 +1,284 @@
+import { Palette } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "../basic-input/button_input.slint";
+import { ButtonSurface } from "../basic-input/button_surface.slint";
+import { CalendarDateText, CalendarView, CalendarViewBehavior, CalendarViewDisplayMode } from "calendar_view.slint";
+
+export component CalendarDatePicker inherits Rectangle {
+    in property <string> header;
+    in property <string> description;
+    in property <string> placeholder-text: @tr("Select a date");
+    in property <string> accessible-name: root.header != "" ? root.header : root.placeholder-text;
+    in property <string> date-format;
+    in property <string> language;
+    in property <string> calendar-identifier: "GregorianCalendar";
+    in-out property <int> date;
+    in-out property <bool> is-calendar-open;
+    in property <int> today;
+    in property <int> min-date;
+    in property <int> max-date;
+    in property <[int]> blackout-dates;
+    in property <CalendarViewDisplayMode> display-mode: CalendarViewDisplayMode.month;
+    in property <int> first-day-of-week: -1;
+    in property <int> year-decade-columns: 4;
+    in property <int> year-decade-rows: 4;
+    in property <bool> group-label-visible;
+    in property <bool> out-of-scope-enabled: true;
+    in property <bool> today-highlighted: true;
+    in property <bool> enabled: true;
+    in property <bool> rtl;
+    in property <Size> popup-viewport;
+    in property <color> accent: Palette.accent-background;
+    in property <color> selection-ink: Palette.accent-background;
+
+    out property <string> date-text: root.formatted.text;
+    out property <bool> has-focus: input.has-focus || popup.is-open;
+    callback date-changed(int, int);
+    callback opened();
+    callback closed();
+
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <CalendarDateText> formatted: CalendarViewBehavior.ready ? CalendarViewBehavior.date-text({
+        date: root.date, today: root.today, min-date: root.min-date, max-date: root.max-date,
+        language: root.language, calendar-identifier: root.calendar-identifier, mode: root.display-mode,
+        first-day-of-week: root.first-day-of-week, columns: 7, rows: 6,
+    }, root.date-format) : { date: root.date, text: "" };
+    private property <int> effective-date: root.formatted.date;
+    private property <string> display-text: root.effective-date == 0 ? root.placeholder-text : root.date-text;
+    private property <int> reported-date;
+    private property <int> panel-date;
+    private property <[int]> panel-selection;
+    private property <CalendarViewDisplayMode> panel-mode: root.display-mode;
+    private property <bool> popup-open: popup.is-open;
+    private property <bool> was-open;
+    private property <bool> restore-focus;
+    private property <color> caption-color: !root.enabled ? (root.dark ? #ffffff5d : #0000005d)
+        : (root.dark ? white : #000000e4);
+    private property <color> glyph-color: !root.enabled ? root.caption-color
+        : root.effective-date != 0 ? surface.foreground : (root.dark ? #ffffffc5 : #0000009e);
+    private property <length> shadow: 8px;
+    private property <length> panel-width: root.popup-viewport.width > 0px ? max(2px, min(302px, root.popup-viewport.width - 2 * root.shadow)) : 302px;
+    private property <length> panel-height: root.popup-viewport.height > 0px ? max(2px, min(354px, root.popup-viewport.height - 2 * root.shadow)) : 354px;
+    private property <length> centered-x: round((root.width - root.panel-width) / 4px) * 2px;
+    private property <length> panel-x: root.popup-viewport.width <= 0px ? root.centered-x : clamp(root.centered-x,
+        root.shadow - root.absolute-position.x,
+        root.popup-viewport.width - root.panel-width - root.shadow - root.absolute-position.x);
+    private property <length> space-above: root.absolute-position.y - root.shadow - 4px;
+    private property <length> space-below: root.popup-viewport.height - root.absolute-position.y - root.height - root.shadow - 4px;
+    private property <bool> opens-above: root.popup-viewport.height > 0px && root.space-below < root.panel-height
+        && root.space-above > root.space-below;
+    private property <length> planned-y: root.opens-above ? -root.panel-height - 4px : root.height + 4px;
+    private property <length> panel-y: root.popup-viewport.height <= 0px ? root.planned-y : clamp(root.planned-y,
+        root.shadow - root.absolute-position.y,
+        root.popup-viewport.height - root.panel-height - root.shadow - root.absolute-position.y);
+
+    min-width: 64px;
+    min-height: content.min-height;
+    preferred-width: max(112px, round((value.preferred-width + 44px) / 2px) * 2px);
+    preferred-height: round(content.preferred-height / 2px) * 2px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: input;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-description: root.description;
+    accessible-value: root.display-text;
+    accessible-read-only: true;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.open-calendar(); }
+
+    public function set-display-date(date: int) { root.panel-date = date; }
+    public function open-calendar() { if root.enabled && root.visible { root.is-calendar-open = true; } }
+    public function close-calendar() {
+        if root.popup-open { root.restore-focus = true; }
+        root.is-calendar-open = false;
+    }
+
+    init => { root.coerce-and-report(); root.sync-popup(); }
+    changed is-calendar-open => { root.sync-popup(); }
+    changed effective-date => { root.coerce-and-report(); }
+    changed date => { root.coerce-and-report(); }
+    changed display-mode => { root.panel-mode = root.display-mode; }
+    changed enabled => { if !root.enabled { root.is-calendar-open = false; } }
+    changed visible => { if !root.visible { root.is-calendar-open = false; } }
+    changed popup-open => {
+        if root.popup-open {
+            root.was-open = true;
+            root.opened();
+        } else if root.was-open {
+            root.was-open = false;
+            root.is-calendar-open = false;
+            if root.restore-focus && root.enabled { input.focus(); }
+            root.restore-focus = false;
+            root.closed();
+        }
+    }
+
+    function sync-popup() {
+        if root.is-calendar-open && (!root.enabled || !root.visible) {
+            root.is-calendar-open = false;
+        } else if root.is-calendar-open && !root.popup-open {
+            root.restore-focus = false;
+            root.sync-date();
+            input.focus();
+            popup.show();
+        } else if !root.is-calendar-open && root.popup-open {
+            popup.close();
+        }
+    }
+
+    function sync-date() {
+        let date = root.effective-date;
+        root.panel-selection = date == 0 ? [] : [date];
+        if date != 0 { root.panel-date = date; }
+    }
+
+    function coerce-and-report() {
+        if root.date != root.effective-date { root.date = root.effective-date; }
+        if root.reported-date != root.effective-date {
+            let old = root.reported-date;
+            root.reported-date = root.effective-date;
+            if root.is-calendar-open { root.sync-date(); }
+            root.date-changed(old, root.reported-date);
+        }
+    }
+
+    function choose-date(date: int) {
+        if date == root.effective-date { root.date = 0; }
+        else { root.close-calendar(); root.date = date; }
+    }
+
+    content := VerticalLayout {
+        spacing: 8px;
+        alignment: start;
+        if root.header != "": Text {
+            text: root.header;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            color: root.caption-color;
+            horizontal-alignment: root.rtl ? right : left;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+
+        field := Rectangle {
+            height: 32px;
+            surface := ButtonSurface {
+                width: parent.width;
+                height: parent.height;
+                enabled: root.enabled;
+                hovered: input.has-hover;
+                pressed: input.pressed;
+            }
+            value := Text {
+                x: root.rtl ? 32px : 12px;
+                y: 0px;
+                width: max(0px, parent.width - 44px);
+                height: parent.height - 2px;
+                text: root.display-text;
+                color: surface.foreground;
+                font-family: "Segoe UI";
+                font-size: 14px;
+                vertical-alignment: center;
+                horizontal-alignment: root.rtl ? right : left;
+                overflow: elide;
+                accessible-role: none;
+            }
+            Image {
+                x: root.rtl ? 8px : parent.width - 24px;
+                y: 8px;
+                width: 16px;
+                height: 16px;
+                source: @image-url("../../icons/calendar_16_regular.svg");
+                colorize: root.glyph-color;
+                accessible-role: none;
+            }
+            input := ButtonInput {
+                enabled: root.enabled;
+                accepts-return: false;
+                accepts-space: false;
+                clicked => { root.open-calendar(); }
+                unhandled-key-pressed(event) => {
+                    if (event.text == Key.Return || event.text == Key.Space)
+                        && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && !event.modifiers.meta {
+                        if !event.repeat { root.open-calendar(); }
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+            if root.enabled && input.keyboard-focused: ButtonFocusVisual {
+                control-width: field.width;
+                control-height: field.height;
+            }
+        }
+
+        if root.description != "": Text {
+            text: root.description;
+            font-family: "Segoe UI";
+            font-size: 14px;
+            horizontal-alignment: root.rtl ? right : left;
+            color: root.dark ? #ffffffc5 : #0000009e;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+    }
+
+    popup := PopupWindow {
+        x: root.panel-x - root.shadow;
+        y: root.panel-y - root.shadow;
+        width: root.panel-width + 2 * root.shadow;
+        height: root.panel-height + 2 * root.shadow;
+        close-policy: close-on-click-outside;
+        forward-focus: popup-keys;
+
+        popup-keys := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            focus-on-tab-navigation: false;
+            focus-on-click: false;
+            focus-gained => { calendar.focus-header(); }
+            key-pressed(event) => {
+                if event.text == Key.Escape { root.close-calendar(); return accept; }
+                return reject;
+            }
+
+            TouchArea {
+                clicked => {
+                    if self.mouse-x < calendar.x || self.mouse-y < calendar.y
+                        || self.mouse-x >= calendar.x + calendar.width || self.mouse-y >= calendar.y + calendar.height {
+                        root.is-calendar-open = false;
+                    }
+                }
+            }
+
+            calendar := CalendarView {
+                x: root.shadow; y: root.shadow;
+                width: root.panel-width;
+                height: root.panel-height;
+                border-radius: 8px;
+                drop-shadow-color: root.dark ? #00000042 : #00000024;
+                drop-shadow-blur: 16px;
+                drop-shadow-offset-y: 4px;
+                display-mode <=> root.panel-mode;
+                display-date <=> root.panel-date;
+                selected-dates <=> root.panel-selection;
+                today: root.today;
+                min-date: root.min-date;
+                max-date: root.max-date;
+                blackout-dates: root.blackout-dates;
+                language: root.language;
+                calendar-identifier: root.calendar-identifier;
+                first-day-of-week: root.first-day-of-week;
+                year-decade-columns: root.year-decade-columns;
+                year-decade-rows: root.year-decade-rows;
+                group-label-visible: root.group-label-visible;
+                out-of-scope-enabled: root.out-of-scope-enabled;
+                today-highlighted: root.today-highlighted;
+                rtl: root.rtl;
+                accent: root.accent;
+                selection-ink: root.selection-ink;
+                date-invoked(date) => { root.choose-date(date); }
+            }
+        }
+    }
+}

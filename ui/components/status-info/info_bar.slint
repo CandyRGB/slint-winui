@@ -1,0 +1,334 @@
+import { Button, Palette } from "std-widgets.slint";
+import { ContrastTheme, SystemContrastColors } from "../contrast_theme.slint";
+import { ButtonInput, ButtonFocusVisual } from "../basic-input/button_input.slint";
+import { ToolTipSurface } from "tool_tip.slint";
+
+export enum InfoSeverity {
+    informational,
+    success,
+    warning,
+    error,
+}
+
+export enum InfoBarCloseReason {
+    close-button,
+    programmatic,
+}
+
+component InfoBarText inherits Text {
+    font-family: "Segoe UI Variable Text";
+    font-size: 14px;
+    wrap: word-wrap;
+}
+
+component InfoBarAction inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    private property <SystemContrastColors> contrast: ContrastTheme.colors;
+
+    height: 32px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    preferred-width: root.contrast.active ? max(32px, contrast-button.label-width + 24px) : standard-button.preferred-width;
+
+    standard-button := Button {
+        width: parent.width;
+        height: parent.height;
+        visible: !root.contrast.active;
+        text: root.text;
+        clicked => { root.clicked(); }
+    }
+
+    contrast-button := Rectangle {
+        visible: root.contrast.active;
+        private property <length> label-width: label.preferred-width;
+        private property <bool> highlighted: hit.has-hover || hit.pressed;
+        border-radius: 4px;
+        border-width: focus.has-focus ? 2px : 1px;
+        border-color: focus.has-focus ? root.contrast.highlight
+            : hit.pressed ? root.contrast.highlight-text
+            : hit.has-hover ? root.contrast.highlight
+            : transparent;
+        background: self.highlighted ? root.contrast.highlight-text : root.contrast.button-face;
+
+        accessible-role: button;
+        accessible-label: root.text;
+        accessible-action-default => { root.clicked(); }
+
+        label := Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.text;
+            font-size: 14px;
+            color: contrast-button.highlighted ? root.contrast.highlight : root.contrast.button-text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+
+        hit := TouchArea { clicked => { root.clicked(); } }
+        focus := FocusScope {
+            width: 0px;
+            key-pressed(event) => {
+                if (event.text == Key.Space || event.text == Key.Return) {
+                    root.clicked();
+                    return accept;
+                }
+                return reject;
+            }
+        }
+    }
+}
+
+export component InfoBar inherits Rectangle {
+    slot action-button;
+
+    in-out property <bool> open: false;
+    in property <string> title;
+    in property <string> message;
+    in property <InfoSeverity> severity: InfoSeverity.informational;
+    in property <bool> is-icon-visible: true;
+    in property <bool> is-closable: true;
+    in property <image> icon-source;
+    in property <string> action-label;
+    in property <bool> action-is-hyperlink: false;
+    in property <bool> rtl: false;
+    in property <brush> foreground: root.contrast.active ? root.contrast.window-text : Palette.foreground;
+    in property <string> accessible-name: @tr("Info bar");
+    in property <string> close-button-accessible-name: @tr("Close");
+    in property <string> close-button-tooltip: @tr("Close");
+
+    callback close-button-clicked();
+    // Return true to cancel the close and leave the bar visible.
+    callback closing(InfoBarCloseReason) -> bool;
+    callback closed(InfoBarCloseReason);
+    callback action();
+
+    private property <bool> displayed;
+    private property <bool> handling-close;
+    private property <SystemContrastColors> contrast: ContrastTheme.colors;
+    private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    private property <brush> icon-color:
+        root.contrast.active ? root.contrast.highlight
+        : root.severity == InfoSeverity.success ? (root.dark ? #6ccb5f : #0f7b0f)
+        : root.severity == InfoSeverity.warning ? (root.dark ? #fce100 : #9d5d00)
+        : root.severity == InfoSeverity.error ? (root.dark ? #ff99a4 : #c42b1c)
+        : Palette.accent-background;
+    private property <image> status-icon:
+        root.severity == InfoSeverity.success ? @image-url("../../icons/checkmark_circle_16_filled.svg")
+        : root.severity == InfoSeverity.warning ? @image-url("../../icons/error_circle_16_filled.svg")
+        : root.severity == InfoSeverity.error ? @image-url("../../icons/info_bar_error_16.svg")
+        : @image-url("../../icons/info_16_filled.svg");
+    private property <bool> has-title: root.title != "";
+    private property <bool> has-message: root.message != "";
+    private property <bool> has-details: root.has-title || root.has-message;
+    private property <bool> has-custom-action: custom-action.preferred-width > 0px;
+    private property <bool> has-action: root.has-custom-action || root.action-label != "";
+    private property <int> content-count: (root.has-title ? 1 : 0)
+        + (root.has-message ? 1 : 0) + (root.has-action ? 1 : 0);
+    private property <length> inset: root.border-width;
+    private property <length> min-header-height: 48px + 2 * root.inset;
+    private property <length> text-top: 14px + root.inset;
+    private property <length> content-left: root.inset + (root.is-icon-visible ? 46px : 16px);
+    private property <length> close-column-width: root.is-closable ? 48px : 0px;
+    private property <length> content-width: max(0px, root.width - root.content-left - root.inset - root.close-column-width);
+    private property <length> panel-width: max(0px, root.content-width - 16px);
+    private property <length> title-width: root.has-title ? root.even(text-title.preferred-width) : 0px;
+    private property <length> message-width: root.has-message ? root.even(text-message.preferred-width) : 0px;
+    private property <length> message-inline-x: root.title-width + (root.has-title && root.has-message ? 12px : 0px);
+    private property <length> action-inline-x: root.message-inline-x + root.message-width + (root.has-details ? 16px : 0px);
+    private property <length> action-width: root.has-custom-action ? custom-action.preferred-width : label-action.preferred-width;
+    private property <length> action-height: root.has-custom-action ? custom-action.preferred-height : label-action.preferred-height;
+    // WinUI also moves a tall action to a separate row even if the width fits.
+    private property <bool> stacked: root.content-count == 1
+        || (root.has-action ? root.action-inline-x + root.action-width : root.message-inline-x + root.message-width) > root.panel-width
+        || (root.has-title && text-title.height + 14px > 48px)
+        || (root.has-message && text-message.height + 14px > 48px)
+        || (root.has-action && root.action-height + 8px > 48px);
+    private property <length> stacked-message-y: root.text-top + (root.has-title ? text-title.height + 4px : 0px);
+    private property <length> details-bottom: root.has-message ? text-message.y + text-message.height
+        : root.has-title ? text-title.y + text-title.height : root.text-top;
+    private property <length> header-height: root.stacked ? max(root.min-header-height, 18px + root.inset
+        + (root.has-action ? action-row.y + action-row.height : root.details-bottom)) : root.min-header-height;
+    private property <bool> has-custom-icon: root.icon-source.width > 0 && root.icon-source.height > 0;
+
+    // In a spaced layout, remove the bar from the closed callback to reclaim the gap.
+    visible: root.displayed;
+    min-width: root.displayed ? root.content-left + root.inset + 16px + root.close-column-width : 0px;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    preferred-height: !root.displayed ? 0px : root.content-count == 0
+        ? max(root.min-header-height, custom-content.preferred-height + 2 * root.inset)
+        : root.header-height + custom-content.preferred-height;
+    min-height: self.preferred-height;
+    max-height: self.preferred-height;
+    accessible-role: region;
+    accessible-label: root.accessible-name;
+    accessible-live-region: root.severity == InfoSeverity.warning || root.severity == InfoSeverity.error ? assertive : polite;
+    border-radius: 4px;
+    border-width: root.contrast.active ? 2px : 1px;
+    border-color: root.contrast.active ? root.contrast.button-text : root.dark ? #0000001a : #0000000f;
+    background:
+        root.contrast.active ? root.contrast.window
+        : root.severity == InfoSeverity.success ? (root.dark ? #393d1b : #dff6dd)
+        : root.severity == InfoSeverity.warning ? (root.dark ? #433519 : #fff4ce)
+        : root.severity == InfoSeverity.error ? (root.dark ? #442726 : #fde7e9)
+        : root.dark ? #ffffff08 : #f6f6f680;
+
+    init => { root.displayed = root.open; }
+    changed open => {
+        if (root.open) {
+            root.displayed = true;
+        } else {
+            root.request-close(InfoBarCloseReason.programmatic);
+        }
+    }
+
+    function request-close(reason: InfoBarCloseReason) {
+        if (root.displayed && !root.handling-close) {
+            root.handling-close = true;
+            if (reason == InfoBarCloseReason.close-button) {
+                root.close-button-clicked();
+            }
+            root.open = false;
+            if (root.closing(reason)) {
+                root.open = true;
+            } else {
+                root.displayed = false;
+                root.closed(reason);
+            }
+            root.displayed = root.open;
+            root.handling-close = false;
+        }
+    }
+
+    pure function even(value: length) -> length {
+        return round(value / 2px) * 2px;
+    }
+
+    pure function from-leading(offset: length, item-width: length) -> length {
+        return root.rtl ? root.width - offset - item-width : offset;
+    }
+
+    if root.is-icon-visible : Rectangle {
+        x: root.from-leading(16px + root.inset, self.width);
+        y: 16px + root.inset;
+        width: 16px;
+        height: 16px;
+        if !root.has-custom-icon : Rectangle {
+            width: 12px;
+            height: 12px;
+            border-radius: 6px;
+            background: root.contrast.active ? root.contrast.highlight-text : Palette.accent-foreground;
+        }
+        Image {
+            width: 16px;
+            height: 16px;
+            source: root.has-custom-icon ? root.icon-source : root.status-icon;
+            image-fit: contain;
+            colorize: root.has-custom-icon ? transparent : root.icon-color;
+            accessible-label: root.severity == InfoSeverity.error ? @tr("Error")
+                : root.severity == InfoSeverity.warning ? @tr("Warning")
+                : root.severity == InfoSeverity.success ? @tr("Success") : @tr("Informational");
+        }
+    }
+
+    text-title := InfoBarText {
+        visible: root.has-title;
+        x: root.from-leading(root.content-left, self.width);
+        y: root.text-top;
+        width: min(root.panel-width, root.title-width);
+        height: root.even(self.preferred-height);
+        text: root.title;
+        color: root.foreground;
+        horizontal-alignment: root.rtl ? right : left;
+        font-weight: 600;
+    }
+
+    text-message := InfoBarText {
+        visible: root.has-message;
+        x: root.from-leading(root.content-left + (root.stacked ? 0px : root.message-inline-x), self.width);
+        y: root.stacked ? root.stacked-message-y : root.text-top;
+        width: min(root.panel-width, root.message-width);
+        height: root.even(self.preferred-height);
+        text: root.message;
+        color: root.foreground;
+        horizontal-alignment: root.rtl ? right : left;
+    }
+
+    // Move the same button across layouts to preserve its state and focus.
+    action-row := Rectangle {
+        visible: root.has-action;
+        x: root.from-leading(root.content-left + (root.stacked ? 0px : root.action-inline-x)
+            - (root.action-is-hyperlink && root.has-custom-action ? 12px : 0px), self.width);
+        y: root.stacked ? root.details-bottom + (root.has-details ? 12px : 0px) : 8px + root.inset;
+        width: min(root.panel-width, root.action-width);
+        height: root.action-height;
+
+        custom-action := HorizontalLayout {
+            alignment: root.rtl ? end : start;
+            action-button { }
+        }
+
+        label-action := HorizontalLayout {
+            visible: !root.has-custom-action && root.action-label != "";
+            if root.action-label != "" : InfoBarAction {
+                text: root.action-label;
+                clicked => { root.action(); }
+            }
+        }
+    }
+
+    custom-content := VerticalLayout {
+        x: root.from-leading(root.content-left, self.width);
+        y: root.content-count == 0 ? (root.height - self.height) / 2 : root.header-height;
+        width: root.content-width;
+        height: self.preferred-height;
+        @children
+    }
+
+    if root.is-closable : Rectangle {
+        x: root.rtl ? 6px : parent.width - 44px;
+        y: 6px;
+        width: 38px;
+        height: 38px;
+        border-radius: 4px;
+        private property <bool> highlighted: close-input.has-hover || close-input.pressed;
+        background: root.contrast.active
+            ? (self.highlighted ? root.contrast.highlight : transparent)
+            : close-input.pressed ? (root.dark ? #ffffff0a : #00000006)
+            : close-input.has-hover ? (root.dark ? #ffffff0f : #00000009)
+            : transparent;
+
+        accessible-role: button;
+        accessible-label: root.close-button-accessible-name;
+        accessible-description: root.close-button-tooltip;
+        accessible-action-default => { root.request-close(InfoBarCloseReason.close-button); }
+
+        Image {
+            width: 16px;
+            height: 16px;
+            source: @image-url("../../icons/dismiss_16_regular.svg");
+            colorize: root.contrast.active
+                ? (parent.highlighted ? root.contrast.highlight-text : root.contrast.button-text)
+                : close-input.pressed ? (root.dark ? #ffffffc5 : #0000009e) : Palette.foreground;
+            accessible-role: none;
+        }
+
+        close-input := ButtonInput {
+            clicked => { root.request-close(InfoBarCloseReason.close-button); }
+        }
+
+        if close-input.keyboard-focused : ButtonFocusVisual {
+            control-width: 38px;
+            control-height: 38px;
+            horizontal-margin: 2px;
+            vertical-margin: 2px;
+        }
+
+        if root.close-button-tooltip != "" : Tooltip {
+            ToolTipSurface { text: root.close-button-tooltip; }
+        }
+    }
+}

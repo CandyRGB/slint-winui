@@ -1,0 +1,92 @@
+import { CheckBox, LineEdit, Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { MenuBar, MenuBarAccelerators, MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind } from "../../ui/components/menus-toolbars/menu_bar.slint";
+import { MenuFlyoutLevel } from "../../ui/components/menus-toolbars/menu_flyout.slint";
+export { MenuFlyoutBehavior, MenuFlyoutItem, MenuFlyoutItemKind, MenuFlyoutLevel }
+
+export component MenuBarExample inherits Window {
+    title: "WinUI MenuBar";
+    preferred-width: 620px;
+    min-width: 560px;
+    preferred-height: 420px;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+    background: #f3f3f3;
+    out property <string> open-menu: bar.open-id;
+    out property <string> last-command;
+    out property <int> activations;
+    out property <int> outside-clicks;
+
+    private property <[MenuFlyoutItem]> items: [
+        { id: "file", kind: MenuFlyoutItemKind.submenu, text: "File", shortcut: @keys(Alt + F) },
+        { id: "edit", kind: MenuFlyoutItemKind.submenu, text: "Edit", shortcut: @keys(Alt + E), disabled: disabled.checked },
+        { id: "help", kind: MenuFlyoutItemKind.submenu, text: "Help", shortcut: @keys(Alt + H) },
+        { id: "new", parent-id: "file", text: "New", shortcut: @keys(Control + N) },
+        { id: "open", parent-id: "file", text: "Open", shortcut: @keys(Control + O) },
+        { id: "save", parent-id: "file", text: "Save", shortcut: @keys(Control + S) },
+        { id: "more", parent-id: "file", kind: MenuFlyoutItemKind.submenu, text: "Recent" },
+        { id: "recent-example", parent-id: "more", text: "Display presets" },
+        { id: "file-separator", parent-id: "file", kind: MenuFlyoutItemKind.separator },
+        { id: "autosave", parent-id: "file", kind: MenuFlyoutItemKind.toggle, text: "Auto save" },
+        { id: "exit", parent-id: "file", text: "Exit" },
+        { id: "undo", parent-id: "edit", text: "Undo", shortcut: @keys(Control + Z) },
+        { id: "cut", parent-id: "edit", text: "Cut", shortcut: @keys(Control + X) },
+        { id: "copy", parent-id: "edit", text: "Copy", shortcut: @keys(Control + C) },
+        { id: "paste", parent-id: "edit", text: "Paste", shortcut: @keys(Control + V) },
+        { id: "about", parent-id: "help", text: "About" },
+    ];
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    MenuBarAccelerators {
+        items: root.items;
+        invoked(index) => { bar.invoke-accelerator(index); }
+
+        VerticalLayout {
+            x: 24px;
+            y: 88px;
+            width: parent.width - 48px;
+            alignment: start;
+            spacing: 12px;
+
+            HorizontalLayout {
+                alignment: start;
+                spacing: 12px;
+                mirror := CheckBox { text: "RTL"; }
+                disabled := CheckBox { text: "Disable Edit"; }
+            }
+            Text {
+                text: "Menu \{root.open-menu}   Command \{root.last-command}   Invoked \{root.activations}   Outside \{root.outside-clicks}";
+                color: Palette.foreground;
+                accessible-label: self.text;
+            }
+            LineEdit {
+                placeholder-text: "Editor";
+                accessible-label: "Editor";
+                width: 276px;
+                height: 32px;
+            }
+            HorizontalLayout {
+                alignment: end;
+                Button {
+                    text: "Outside action";
+                    clicked => { root.outside-clicks += 1; }
+                }
+            }
+        }
+
+        bar := MenuBar {
+            x: 24px;
+            y: 24px;
+            width: root.width - 48px;
+            accessible-name: "Sample menu bar";
+            items: root.items;
+            viewport: { x: 0px, y: 0px, width: root.width, height: root.height };
+            rtl: mirror.checked;
+            invoked(item) => {
+                root.last-command = item.id;
+                root.activations += 1;
+            }
+        }
+    }
+}

@@ -1,0 +1,102 @@
+import { Palette } from "std-widgets.slint";
+import { TextBoxField } from "text_box_field.slint";
+
+export struct RichEditGeometry {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    enabled: bool,
+    visible: bool,
+    read-only: bool,
+    fill: color,
+    placeholder: string,
+    placeholder-ink: color,
+}
+
+export struct RichEditState {
+    has-focus: bool,
+    has-text: bool,
+    has-selection: bool,
+    can-undo: bool,
+    can-redo: bool,
+    bold: bool,
+    italic: bool,
+    underlined: bool,
+}
+
+export enum RichEditCommand { focus, cut, copy, paste, select-all, undo, redo, bold, italic, underline }
+
+// The window host mounts an editor in geometry and passes back its state.
+export component RichEditBox inherits Rectangle {
+    in property <string> header;
+    in property <string> description;
+    in property <string> placeholder-text;
+    in property <bool> enabled: true;
+    in property <bool> read-only;
+    in property <bool> editor-visible: true;
+    in property <color> accent: Palette.accent-background;
+    in property <RichEditState> state;
+    out property <RichEditGeometry> geometry: {
+        x: field.absolute-position.x + 2px,
+        y: field.absolute-position.y + 2px,
+        width: max(0px, field.width - 4px),
+        height: max(0px, field.height - 4px),
+        enabled: root.enabled,
+        visible: root.visible && root.editor-visible,
+        read-only: root.read-only,
+        fill: root.state.has-focus ? white : root.enabled ? #fcfcfc : #f6f6f6,
+        placeholder: root.placeholder-text,
+        placeholder-ink: root.enabled ? #606060 : #9d9d9d,
+    };
+    callback command(RichEditCommand);
+
+    preferred-width: 400px;
+    forward-focus: proxy;
+
+    VerticalLayout {
+        spacing: 4px;
+        if root.header != "": Text {
+            text: root.header;
+            font-size: 14px;
+            wrap: word-wrap;
+        }
+
+        field := Rectangle {
+            min-height: 32px;
+            preferred-height: 120px;
+            vertical-stretch: 1;
+
+            TextBoxField {
+                width: parent.width;
+                height: parent.height;
+                enabled: root.enabled;
+                editing: root.state.has-focus;
+                hovered: outer.has-hover;
+                accent: root.accent;
+            }
+
+            proxy := FocusScope {
+                width: parent.width;
+                height: parent.height;
+                enabled: root.enabled && root.editor-visible;
+                focus-on-tab-navigation: self.enabled;
+                changed has-focus => {
+                    if self.has-focus { root.command(RichEditCommand.focus); }
+                }
+            }
+
+            outer := TouchArea {
+                enabled: root.enabled && root.editor-visible;
+                clicked => { root.command(RichEditCommand.focus); }
+            }
+        }
+
+        if root.description != "": Text {
+            text: root.description;
+            font-size: 12px;
+            color: Palette.foreground.transparentize(35%);
+            wrap: word-wrap;
+        }
+    }
+}

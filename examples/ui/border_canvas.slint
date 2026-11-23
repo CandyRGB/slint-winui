@@ -1,0 +1,178 @@
+import { CheckBox, ComboBox, Slider } from "std-widgets.slint";
+import { ButtonInput, ButtonFocusVisual } from "../../ui/components/basic-input/button_input.slint";
+import { Border, BorderBackgroundSizing } from "../../ui/components/layout/border.slint";
+import { Canvas, CanvasChild } from "../../ui/components/layout/canvas.slint";
+
+component SectionHeading inherits Text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #000000e4;
+}
+
+component CanvasTile inherits CanvasChild {
+    in property <string> name;
+    in property <color> swatch;
+    callback activated(string);
+
+    accessible-role: button;
+    accessible-label: root.name;
+    accessible-action-default => { root.activated(root.name); }
+    forward-focus: tile-input;
+    Rectangle {
+        width: 40px;
+        height: 40px;
+        background: root.swatch;
+        tile-input := ButtonInput {
+            clicked => { root.activated(root.name); }
+        }
+        if tile-input.keyboard-focused: ButtonFocusVisual {
+            control-width: parent.width;
+            control-height: parent.height;
+        }
+    }
+}
+
+export component BorderCanvasExample inherits Window {
+    title: "WinUI Border and Canvas";
+    min-width: 740px;
+    preferred-width: 740px;
+    min-height: 440px;
+    preferred-height: 440px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI";
+    default-font-size: 14px;
+
+    private property <[color]> palette: [#008000, #ffff00, #0000ff, white];
+    private property <length> border-size: round(thickness-slider.value / 2) * 2px;
+    private property <string> last-tile: "None";
+    private property <int> activation-count;
+
+    function report(name: string) {
+        root.last-tile = name;
+        root.activation-count += 1;
+    }
+
+    SectionHeading { x: 24px; y: 20px; text: "Border"; }
+    VerticalLayout {
+        x: 24px; y: 56px;
+        width: 334px; height: 108px;
+        spacing: 8px;
+        Text { text: "Border thickness"; }
+        thickness-slider := Slider { accessible-label: "Border thickness"; minimum: 0; maximum: 10; value: 2; height: 28px; }
+        HorizontalLayout {
+            spacing: 8px;
+            background-choice := ComboBox {
+                accessible-label: "Background";
+                model: ["Green", "Yellow", "Blue", "White"];
+                current-index: 3;
+            }
+            brush-choice := ComboBox {
+                accessible-label: "Border brush";
+                model: ["Gold", "Green", "Yellow", "Blue"];
+            }
+        }
+    }
+    gallery-border := Border {
+        x: 24px; y: 174px;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        accessible-role: groupbox;
+        accessible-label: "Gallery border";
+        background-brush: root.palette[background-choice.current-index];
+        border-brush: brush-choice.current-index == 0 ? #ffd700 : root.palette[brush-choice.current-index - 1];
+        thickness: { left: root.border-size, top: root.border-size, right: root.border-size, bottom: root.border-size };
+        content-padding: { left: 8px, top: 6px, right: 8px, bottom: 6px };
+        Text { text: "Text inside a border"; font-size: 18px; color: black; }
+    }
+
+    SectionHeading { x: 24px; y: 234px; text: "Uneven border"; }
+    HorizontalLayout {
+        x: 24px; y: 266px; width: 324px; height: 32px;
+        spacing: 10px; alignment: start;
+        outer-background := CheckBox { text: "Outer background"; }
+        overlap := CheckBox { text: "Overlap corners"; }
+    }
+    Border {
+        x: 24px; y: 310px;
+        width: overlap.checked ? 76px : 260px;
+        height: overlap.checked ? 44px : 92px;
+        thickness: { left: 6px, top: 12px, right: 18px, bottom: 4px };
+        content-padding: { left: 12px, top: 6px, right: 8px, bottom: 8px };
+        corner-radii: { top-left: 30px, top-right: 46px, bottom-right: 12px, bottom-left: 22px };
+        background-brush: #008000;
+        border-brush: #00000080;
+        background-sizing: outer-background.checked ? BorderBackgroundSizing.outer-border-edge : BorderBackgroundSizing.inner-border-edge;
+        rtl: rtl-choice.checked;
+        accessible-role: groupbox;
+        accessible-label: "Uneven border";
+        if !overlap.checked: Text {
+            text: "Border and padding";
+            font-size: 18px;
+            color: white;
+            vertical-alignment: center;
+        }
+    }
+
+    SectionHeading { x: 384px; y: 20px; text: "Canvas"; }
+    HorizontalLayout {
+        x: 384px; y: 56px; width: 332px; height: 102px;
+        spacing: 12px;
+        VerticalLayout {
+            spacing: 4px;
+            Text { text: "Canvas.Left"; }
+            left-slider := Slider { accessible-label: "Canvas.Left"; minimum: 0; maximum: 132; height: 24px; }
+            Text { text: "Canvas.Top"; }
+            top-slider := Slider { accessible-label: "Canvas.Top"; minimum: 0; maximum: 132; height: 24px; }
+        }
+        VerticalLayout {
+            spacing: 4px; alignment: start;
+            Text { text: "Canvas.ZIndex"; height: 22px; }
+            layer-slider := Slider { accessible-label: "Canvas.ZIndex"; minimum: -1; maximum: 4; value: 0; height: 24px; }
+        }
+    }
+    HorizontalLayout {
+        x: 384px; y: 162px; width: 332px; height: 28px;
+        spacing: 10px; alignment: start;
+        clip-choice := CheckBox { text: "Clip canvas"; }
+        rtl-choice := CheckBox { text: "Right to left"; }
+    }
+    Text { x: 384px; y: 196px; text: "Activated " + root.last-tile + " · " + root.activation-count; }
+    board := Canvas {
+        x: 384px; y: 228px;
+        width: 140px; height: 140px;
+        background: #808080;
+        clip: clip-choice.checked;
+        accessible-role: groupbox;
+        accessible-label: "Canvas tiles";
+        CanvasTile {
+            name: "Red"; swatch: #ff0000;
+            left: round(left-slider.value / 2) * 2px;
+            top: round(top-slider.value / 2) * 2px;
+            z: round(layer-slider.value);
+            rtl: rtl-choice.checked;
+            canvas-width: board.width;
+            activated(name) => { root.report(name); }
+        }
+        CanvasTile {
+            name: "Blue"; swatch: #0000ff;
+            left: 20px; top: 20px; z: 1;
+            rtl: rtl-choice.checked;
+            canvas-width: board.width;
+            activated(name) => { root.report(name); }
+        }
+        CanvasTile {
+            name: "Green"; swatch: #008000;
+            left: 40px; top: 40px; z: 2;
+            rtl: rtl-choice.checked;
+            canvas-width: board.width;
+            activated(name) => { root.report(name); }
+        }
+        CanvasTile {
+            name: "Yellow"; swatch: #ffff00;
+            left: 60px; top: 60px; z: 3;
+            rtl: rtl-choice.checked;
+            canvas-width: board.width;
+            activated(name) => { root.report(name); }
+        }
+    }
+}

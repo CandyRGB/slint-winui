@@ -1,0 +1,96 @@
+import { Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { ComboBox, ComboBoxItem, ComboBoxBehavior, ComboBoxSelectionChangedTrigger } from "../../ui/components/basic-input/combo_box.slint";
+
+export { ComboBoxItem, ComboBoxBehavior }
+
+export component ComboBoxExample inherits Window {
+    title: "ComboBox";
+    min-width: 744px;
+    preferred-height: 480px;
+    background: Palette.color-scheme == ColorScheme.dark ? #202020 : #f3f3f3;
+    in property <color> accent: Palette.accent-background;
+
+    private property <bool> rtl;
+    private property <bool> disabled;
+    private property <bool> always-select;
+    private property <int> submitted;
+    private property <string> validation;
+    private property <Size> viewport: { width: root.width, height: root.height };
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        alignment: start;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 10px;
+            Button { text: "Mirror RTL"; clicked => { root.rtl = !root.rtl; } }
+            Button { text: "Disable"; clicked => { root.disabled = !root.disabled; } }
+            Button { text: "Select Red"; clicked => { colors.selected-index = 2; } }
+            Button { text: "Live selection"; clicked => { root.always-select = !root.always-select; } }
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 28px;
+            colors := ComboBox {
+                width: 200px;
+                header: "Colors";
+                placeholder-text: "Pick a color";
+                items: [
+                    { text: "Blue" }, { text: "Green" }, { text: "Red" },
+                    { text: "Yellow" }, { text: "Unavailable", disabled: true },
+                ];
+                enabled: !root.disabled;
+                rtl: root.rtl;
+                accent: root.accent;
+                popup-viewport: root.viewport;
+                selection-changed-trigger: root.always-select ? ComboBoxSelectionChangedTrigger.always : ComboBoxSelectionChangedTrigger.committed;
+            }
+            fonts := ComboBox {
+                width: 200px;
+                header: "Font";
+                selected-index: 2;
+                items: [
+                    { text: "Arial", font-family: "Arial" }, { text: "Georgia", font-family: "Georgia" },
+                    { text: "Segoe UI", font-family: "Segoe UI" }, { text: "Times New Roman", font-family: "Times New Roman" },
+                ];
+                rtl: root.rtl;
+                accent: root.accent;
+                popup-viewport: root.viewport;
+            }
+            editable := ComboBox {
+                width: 200px;
+                header: "Font Size";
+                is-editable: true;
+                selected-index: 2;
+                items: [
+                    { text: "8" }, { text: "9" }, { text: "10" }, { text: "11" },
+                    { text: "12" }, { text: "14" }, { text: "16" }, { text: "18" },
+                    { text: "20" }, { text: "24" }, { text: "28" }, { text: "36" },
+                    { text: "48" }, { text: "72" },
+                ];
+                max-drop-down-height: 224px;
+                enabled: !root.disabled;
+                rtl: root.rtl;
+                accent: root.accent;
+                popup-viewport: root.viewport;
+                text-submitted(value) => {
+                    root.submitted += 1;
+                    if !value.is-float() || value.to-float() < 8 || value.to-float() > 100 {
+                        root.validation = "Use a number between 8 and 100";
+                        return true;
+                    }
+                    root.validation = "";
+                    return false;
+                }
+            }
+        }
+        Rectangle { height: 100px; }
+        Text {
+            text: "Color \{colors.selected-index}: \{colors.selected-value} · Font \{fonts.selected-value} · Size \{editable.selected-index}: \{editable.selected-value} · Custom submissions \{root.submitted}";
+            color: Palette.foreground;
+        }
+        Text { text: root.validation; color: #ad141c; }
+    }
+}

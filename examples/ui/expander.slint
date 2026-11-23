@@ -1,0 +1,112 @@
+import { CheckBox, LineEdit, Palette } from "std-widgets.slint";
+import { Button } from "../../ui/components/basic-input/button.slint";
+import { Expander, ExpandDirection, ExpanderContentAlignment } from "../../ui/components/layout/expander.slint";
+
+export component ExpanderExample inherits Window {
+    title: "WinUI Expander";
+    preferred-width: 684px;
+    min-width: 620px;
+    preferred-height: 474px;
+    background: #f3f3f3;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: 14px;
+
+    out property <int> opens;
+    out property <int> closes;
+    out property <int> saves;
+    out property <string> note: note-input.text;
+
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            up := CheckBox { text: "Expand upward"; }
+            disabled := CheckBox { text: "Disable editor"; }
+            mirror := CheckBox { text: "RTL"; }
+            roomy := CheckBox { text: "Stretch content"; }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+            Button {
+                text: "Toggle editor";
+                clicked => { editor.expanded = !editor.expanded; }
+            }
+            Text {
+                vertical-alignment: center;
+                text: "Expanded \{root.opens}   Collapsed \{root.closes}   Saved \{root.saves}";
+                color: Palette.foreground;
+                accessible-label: self.text;
+            }
+        }
+
+        simple-space := Rectangle {
+            height: 120px;
+            simple := Expander {
+                x: 0px;
+                y: up.checked ? parent.height - self.height : 0px;
+                width: self.preferred-width;
+                header: "This text is in the header";
+                expand-direction: up.checked ? ExpandDirection.up : ExpandDirection.down;
+                rtl: mirror.checked;
+                Text {
+                    text: "This is in the content";
+                    color: Palette.foreground;
+                    accessible-label: self.text;
+                }
+            }
+        }
+
+        Rectangle {
+            height: 144px;
+            editor := Expander {
+                x: 0px;
+                y: up.checked ? parent.height - self.height : 0px;
+                width: 500px;
+                header: "Edit note";
+                accessible-name: "Editor expander";
+                expand-direction: up.checked ? ExpandDirection.up : ExpandDirection.down;
+                rtl: mirror.checked;
+                enabled: !disabled.checked;
+                content-padding: 8px;
+                horizontal-content-alignment: roomy.checked ? ExpanderContentAlignment.stretch : ExpanderContentAlignment.start;
+                expanding => { root.opens += 1; }
+                collapsed => { root.closes += 1; }
+
+                header-content << Text {
+                    text: "Edit a note";
+                    horizontal-alignment: center;
+                    color: editor.header-foreground;
+                    accessible-role: none;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    note-input := LineEdit {
+                        enabled: editor.content-enabled;
+                        preferred-width: 176px;
+                        placeholder-text: "Note";
+                        accessible-label: "Note";
+                    }
+                    Button {
+                        text: "Save note";
+                        enabled: editor.content-enabled;
+                        clicked => { root.saves += 1; }
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            Button { text: "After editor"; }
+        }
+    }
+}

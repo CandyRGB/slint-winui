@@ -1,0 +1,82 @@
+import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../collections/items_repeater.slint";
+
+export struct RelativePanelInsets { left: length, top: length, right: length, bottom: length }
+export enum RelativePanelAlignment { stretch, start, center, end }
+export enum RelativePanelIssue { none, duplicate-id, missing-target, circular-dependency }
+
+// On the horizontal axis, "before" is LeftOf and "after" is RightOf.
+// On the vertical axis, they are Above and Below.
+export struct RelativePanelAxis {
+    before: string,
+    after: string,
+    align-start-with: string,
+    align-end-with: string,
+    align-center-with: string,
+    align-start-with-panel: bool,
+    align-end-with-panel: bool,
+    align-center-with-panel: bool,
+}
+
+export struct RelativePanelChild {
+    id: string,
+    size: ItemsRepeaterSize,
+    margin: RelativePanelInsets,
+    horizontal: RelativePanelAxis,
+    vertical: RelativePanelAxis,
+    horizontal-alignment: RelativePanelAlignment,
+    vertical-alignment: RelativePanelAlignment,
+    fixed-width: bool,
+    fixed-height: bool,
+    collapsed: bool,
+}
+
+export struct RelativePanelLayout {
+    geometry: ItemsRepeaterGeometry,
+    issue: RelativePanelIssue,
+    issue-target: string,
+}
+
+export global RelativePanelBehavior {
+    pure callback layout([RelativePanelChild], ItemsRepeaterSize, ItemsRepeaterSize) -> RelativePanelLayout;
+}
+
+export component RelativePanel inherits Rectangle {
+    in property <[RelativePanelChild]> items;
+    in property <RelativePanelInsets> content-insets;
+    in property <bool> rtl;
+    in property <length> measure-width: -1px;
+    in property <length> measure-height: -1px;
+
+    out property <[ItemsRepeaterPlacement]> placements: root.arrangement.geometry.placements;
+    out property <RelativePanelIssue> layout-issue: root.arrangement.issue;
+    out property <string> issue-target: root.arrangement.issue-target;
+
+    private property <length> left-inset: root.border-width + root.content-insets.left;
+    private property <length> top-inset: root.border-width + root.content-insets.top;
+    private property <length> horizontal-insets: root.left-inset + root.border-width + root.content-insets.right;
+    private property <length> vertical-insets: root.top-inset + root.border-width + root.content-insets.bottom;
+    private property <ItemsRepeaterSize> measure-limit: {
+        width: root.measure-width < 0px ? -1px : max(0px, root.measure-width - root.horizontal-insets),
+        height: root.measure-height < 0px ? -1px : max(0px, root.measure-height - root.vertical-insets),
+    };
+    private property <RelativePanelLayout> measurement: RelativePanelBehavior.layout(
+        root.items, root.measure-limit, { width: -1px, height: -1px });
+    private property <RelativePanelLayout> arrangement: RelativePanelBehavior.layout(root.items, root.measure-limit, {
+        width: max(0px, root.width - root.horizontal-insets),
+        height: max(0px, root.height - root.vertical-insets),
+    });
+
+    preferred-width: root.measurement.geometry.width + root.horizontal-insets;
+    preferred-height: root.measurement.geometry.height + root.vertical-insets;
+
+    public pure function child-x(slot: ItemsRepeaterPlacement) -> length {
+        return root.rtl ? root.width - root.left-inset - slot.x - slot.width : root.left-inset + slot.x;
+    }
+
+    public pure function child-y(slot: ItemsRepeaterPlacement) -> length {
+        return root.top-inset + slot.y;
+    }
+
+    accessible-role: none;
+    @children
+}
