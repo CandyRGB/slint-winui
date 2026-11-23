@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/slint-winui.svg" alt="Slint WinUI" width="88" height="88">
+</p>
+
 <h1 align="center">Slint WinUI</h1>
 
 <p align="center">
