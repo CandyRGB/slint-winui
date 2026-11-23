@@ -18,5 +18,8 @@ that applies to your distribution. Slint's royalty-free license requires
 attribution and describes where to display it.
 [Slint Royalty-free License 2.0](https://github.com/slint-ui/slint/blob/v1.18.1/LICENSES/LicenseRef-Slint-Royalty-free-2.0.md)
 
-The READMEs display the official Made with Slint badge.
-[Upstream badge](https://github.com/slint-ui/slint/blob/v1.18.1/logo/MadeWithSlint-logo-whitebg.png)
+The READMEs display the official Made with Slint badge. The repository icon pairs
+the unmodified Slint symbol with the Window Apps glyph from Fluent UI System
+Icons. The Slint artwork is © SixtyFPS GmbH and available under
+[CC BY-ND 4.0](licenses/slint-logo.txt).
+[Slint symbol](https://github.com/slint-ui/slint/blob/v1.18.1/logo/slint-logo-small-light.svg) · [Made with Slint badge](https://github.com/slint-ui/slint/blob/v1.18.1/logo/MadeWithSlint-logo-whitebg.png) · [Fluent Window Apps glyph](https://github.com/microsoft/fluentui-system-icons/blob/a3de63245b4fa49c30e20d9838593a105affe774/assets/Window%20Apps/SVG/ic_fluent_window_apps_24_filled.svg)
