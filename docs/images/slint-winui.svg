@@ -1,29 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128" viewBox="0 0 128 128">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128" viewBox="1 1 24 24">
   <title>Slint WinUI</title>
-  <desc>The Slint symbol paired with a Fluent window and component tiles.</desc>
-  <defs>
-    <linearGradient id="housing" x1="12" y1="8" x2="116" y2="120" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#224782"/>
-      <stop offset="1" stop-color="#131e44"/>
-    </linearGradient>
-    <linearGradient id="components" x1="54" y1="60" x2="116" y2="116" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#e1fff8"/>
-      <stop offset="1" stop-color="#78cdec"/>
-    </linearGradient>
-  </defs>
-
-  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#housing)"/>
-  <rect x="5" y="5" width="118" height="118" rx="27" fill="none" stroke="#b5d2f4" stroke-opacity=".24"/>
-
-  <rect x="12" y="22" width="66" height="64" rx="15" fill="#081932" opacity=".36"/>
-  <rect x="12" y="18" width="66" height="64" rx="15" fill="#fff"/>
-  <!-- Slint small light logo by SixtyFPS GmbH, CC BY-ND 4.0. Its unmodified SVG is embedded here. -->
-  <image x="13" y="18" width="64" height="64" xlink:href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIwLjY2MzIgNTUuODI4TDQ4LjczMzMgMzcuMDMwOUM0OC43MzMzIDM3LjAzMDkgNTAgMzYuMzI3OCA1MCAzNS4yMTgyQzUwIDMzLjc0MDYgNDguMzk4MSAzMy4yNTk5IDQ4LjM5ODEgMzMuMjU5OUwzMi45NTU3IDI3LjM1NUMzMi40MDQ3IDI3LjE0NjIgMzEuNjQ2NCAyNy43MzEyIDMyLjM1NjQgMjguNDcyOEwzNy40Njg5IDMzLjQxNjVDMzcuNDY4OSAzMy40MTY1IDM4Ljg4OSAzNC43NjUgMzguODg5IDM1LjY0OTRDMzguODg5IDM2LjUzMzggMzguMDE3IDM3LjMyMiAzOC4wMTcgMzcuMzIyTDE5LjQxMzUgNTQuNjkwOUMxOC43NTE3IDU1LjMwODkgMTkuNjQ2NCA1Ni40Mjk0IDIwLjY2MzIgNTUuODI4WiIgZmlsbD0iIzIzNzlGNCIvPgo8cGF0aCBkPSJNNDMuMzM2OCA4LjE3MzM5TDE1LjI2NjcgMjYuOTY3N0MxNS4yNjY3IDI2Ljk2NzcgMTQgMjcuNjcwOCAxNCAyOC43ODA0QzE0IDMwLjI1OCAxNS42MDE5IDMwLjczODcgMTUuNjAxOSAzMC43Mzg3TDMxLjA0NDMgMzYuNjQ2NEMzMS41OTUzIDM2Ljg1MjQgMzIuMzU2NSAzNi4yNjc0IDMxLjY0MzYgMzUuNTI4NkwyNi41MzExIDMwLjU2ODRDMjYuNTMxMSAzMC41Njg0IDI1LjExMSAyOS4yMjI2IDI1LjExMSAyOC4zMzU1QzI1LjExMSAyNy40NDgzIDI1Ljk4MyAyNi42NjI4IDI1Ljk4MyAyNi42NjI4TDQ0LjU3NTIgOS4zMDc2OUM0NS4yNDgzIDguNjg5NzMgNDQuMzU2NSA3LjU2OTE2IDQzLjMzNjggOC4xNzMzOVoiIGZpbGw9IiMyMzc5RjQiLz4KPC9zdmc+Cg=="/>
-
-  <rect x="54" y="65" width="62" height="52" rx="14" fill="#081932" opacity=".40"/>
-  <rect x="54" y="61" width="62" height="52" rx="14" fill="url(#components)"/>
-  <rect x="54.5" y="61.5" width="61" height="51" rx="13.5" fill="none" stroke="#fff" stroke-opacity=".64"/>
+  <desc>The Slint symbol inside a Fluent window with component tiles.</desc>
   <!-- Window Apps 24 Filled from Microsoft Fluent UI System Icons, MIT. -->
-  <path transform="translate(61 63) scale(1.85)" fill="#124e80"
+  <path fill="#2379F4"
         d="M3 6.25C3 4.45507 4.45507 3 6.25 3H17.75C19.5449 3 21 4.45507 21 6.25V9.00947C20.9175 9.0032 20.8341 9 20.75 9H19.5V8.5H4.5V17.75C4.5 18.7165 5.2835 19.5 6.25 19.5H9V20.75C9 20.8341 9.0032 20.9175 9.00947 21H6.25C4.45507 21 3 19.5449 3 17.75V6.25ZM12.25 15.5H15.5V12.25C15.5 11.0074 16.5074 10 17.75 10H20.75C21.9926 10 23 11.0074 23 12.25V19.75C23 21.5449 21.5449 23 19.75 23H12.25C11.0074 23 10 21.9926 10 20.75V17.75C10 16.5074 11.0074 15.5 12.25 15.5ZM17 12.25V15.5H21.5V12.25C21.5 11.8358 21.1642 11.5 20.75 11.5H17.75C17.3358 11.5 17 11.8358 17 12.25ZM15.5 21.5V17H12.25C11.8358 17 11.5 17.3358 11.5 17.75V20.75C11.5 21.1642 11.8358 21.5 12.25 21.5H15.5ZM17 17V21.5H19.75C20.7165 21.5 21.5 20.7165 21.5 19.75V17H17Z"/>
+  <!-- Unmodified Slint small light logo by SixtyFPS GmbH, CC BY-ND 4.0. -->
+  <image x="4.2" y="8.2" width="10.5" height="10.5" xlink:href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIwLjY2MzIgNTUuODI4TDQ4LjczMzMgMzcuMDMwOUM0OC43MzMzIDM3LjAzMDkgNTAgMzYuMzI3OCA1MCAzNS4yMTgyQzUwIDMzLjc0MDYgNDguMzk4MSAzMy4yNTk5IDQ4LjM5ODEgMzMuMjU5OUwzMi45NTU3IDI3LjM1NUMzMi40MDQ3IDI3LjE0NjIgMzEuNjQ2NCAyNy43MzEyIDMyLjM1NjQgMjguNDcyOEwzNy40Njg5IDMzLjQxNjVDMzcuNDY4OSAzMy40MTY1IDM4Ljg4OSAzNC43NjUgMzguODg5IDM1LjY0OTRDMzguODg5IDM2LjUzMzggMzguMDE3IDM3LjMyMiAzOC4wMTcgMzcuMzIyTDE5LjQxMzUgNTQuNjkwOUMxOC43NTE3IDU1LjMwODkgMTkuNjQ2NCA1Ni40Mjk0IDIwLjY2MzIgNTUuODI4WiIgZmlsbD0iIzIzNzlGNCIvPgo8cGF0aCBkPSJNNDMuMzM2OCA4LjE3MzM5TDE1LjI2NjcgMjYuOTY3N0MxNS4yNjY3IDI2Ljk2NzcgMTQgMjcuNjcwOCAxNCAyOC43ODA0QzE0IDMwLjI1OCAxNS42MDE5IDMwLjczODcgMTUuNjAxOSAzMC43Mzg3TDMxLjA0NDMgMzYuNjQ2NEMzMS41OTUzIDM2Ljg1MjQgMzIuMzU2NSAzNi4yNjc0IDMxLjY0MzYgMzUuNTI4NkwyNi41MzExIDMwLjU2ODRDMjYuNTMxMSAzMC41Njg0IDI1LjExMSAyOS4yMjI2IDI1LjExMSAyOC4zMzU1QzI1LjExMSAyNy40NDgzIDI1Ljk4MyAyNi42NjI4IDI1Ljk4MyAyNi42NjI4TDQ0LjU3NTIgOS4zMDc2OUM0NS4yNDgzIDguNjg5NzMgNDQuMzU2NSA3LjU2OTE2IDQzLjMzNjggOC4xNzMzOVoiIGZpbGw9IiMyMzc5RjQiLz4KPC9zdmc+Cg=="/>
 </svg>
