@@ -70,7 +70,7 @@ cargo run --locked --example number_box
 
 ### Rust 快速入门
 
-这个例子配置 `@winui` 别名，并注册 `NumberBox` 的 Rust 适配器。在 `slint-winui` 的上一级目录运行 `cargo new winui-demo`，让两个项目位于同一目录下。将以下依赖添加到应用的 `Cargo.toml`。
+这个例子配置 `@winui` 别名，并注册 `NumberBox` 的 Rust 适配器。运行 `cargo new winui-demo` 创建应用。将以下依赖添加到应用的 `Cargo.toml`。
 
 ```toml
 [dependencies]
@@ -78,7 +78,7 @@ slint = "=1.18.1"
 
 [build-dependencies]
 slint-build = "=1.18.1"
-slint-winui = { path = "../slint-winui", default-features = false }
+slint-winui = { version = "0.1.0", default-features = false }
 ```
 
 在应用根目录创建 `build.rs`。

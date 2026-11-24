@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 description = "Reusable WinUI-inspired components for Slint"
 license = "MIT"
-publish = false
+rust-version = "1.92"
+repository = "https://github.com/CandyRGB/slint-winui"
+readme = "README.md"
+publish = ["crates-io"]
 
 [features]
 default = ["windows-platform"]

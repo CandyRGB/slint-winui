@@ -70,7 +70,7 @@ For controls implemented entirely in Slint, such as `Button` and `Expander`, imp
 
 ### Rust quick start
 
-This example maps the `@winui` alias and registers the Rust adapter for `NumberBox`. Create an app called `winui-demo` next to the `slint-winui` checkout with `cargo new winui-demo`. Add these entries to your app's `Cargo.toml`.
+This example maps the `@winui` alias and registers the Rust adapter for `NumberBox`. Create an app with `cargo new winui-demo`. Add these entries to your app's `Cargo.toml`.
 
 ```toml
 [dependencies]
@@ -78,7 +78,7 @@ slint = "=1.18.1"
 
 [build-dependencies]
 slint-build = "=1.18.1"
-slint-winui = { path = "../slint-winui", default-features = false }
+slint-winui = { version = "0.1.0", default-features = false }
 ```
 
 Create `build.rs` in the app root.
