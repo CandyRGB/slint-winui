@@ -1,5 +1,6 @@
 import { Palette } from "std-widgets.slint";
 import { ButtonInput, ButtonFocusVisual } from "../basic-input/button_input.slint";
+import { KeyboardFocusScope } from "../basic-input/keyboard_focus_scope.slint";
 
 export enum SwipeMode { reveal, execute }
 export enum SwipeBehaviorOnInvoked { auto, close, remain-open }
@@ -29,7 +30,7 @@ component SwipeAction inherits Rectangle {
     in property <brush> default-background;
     in property <brush> default-foreground;
     in property <brush> pressed-background;
-    callback invoked();
+    callback invoked(bool);
 
     private property <brush> ink: root.item.use-foreground ? root.item.foreground : root.default-foreground;
 
@@ -76,8 +77,8 @@ component SwipeAction inherits Rectangle {
         visible: root.actionable;
         accessible-role: button;
         accessible-label: root.item.text;
-        accessible-action-default => { if root.actionable { root.invoked(); } }
-        clicked => { root.invoked(); }
+        accessible-action-default => { if root.actionable { root.invoked(true); } }
+        clicked => { root.invoked(self.keyboard-focused); }
     }
     if input.keyboard-focused: ButtonFocusVisual {
         control-width: parent.width;
@@ -307,11 +308,14 @@ export component SwipeControl inherits Rectangle {
         root.opened(root.settled-side);
     }
 
-    function invoke(item: SwipeItem, restore-focus: bool) {
+    function invoke(item: SwipeItem, restore-focus: bool, focus-visible: bool) {
         let side = root.settled-side;
         root.item-invoked(side, item);
         if item.behavior-on-invoked != SwipeBehaviorOnInvoked.remain-open && root.settled-side == side {
-            if restore-focus { keys.focus(); }
+            if restore-focus {
+                keys.focus-visible = focus-visible;
+                keys.focus();
+            }
             root.close();
         }
     }
@@ -322,19 +326,19 @@ export component SwipeControl inherits Rectangle {
         triggered => {
             self.stop();
             if root.is-open && root.executing && root.valid(root.active-actions) {
-                root.invoke(root.execute-item, false);
+                root.invoke(root.execute-item, false, false);
             }
         }
     }
 
-    keys := FocusScope {
+    keys := KeyboardFocusScope {
         width: parent.width;
         height: parent.height;
         enabled: root.available;
         focus-on-tab-navigation: root.keyboard-tab-stop;
-        focus-on-click: false;
         capture-key-pressed(event) => {
             if event.text == Key.Escape && root.is-open && !root.locked-open {
+                self.focus-visible = true;
                 self.focus();
                 root.dismiss();
                 return accept;
@@ -346,9 +350,11 @@ export component SwipeControl inherits Rectangle {
                 : (event.text == Key.DownArrow ? SwipeSide.top : event.text == Key.UpArrow ? SwipeSide.bottom : SwipeSide.none);
             if side == SwipeSide.none { return reject; }
             if root.is-open && root.settled-side != side {
+                self.focus-visible = true;
                 self.focus();
                 root.dismiss();
             } else if !root.is-open && root.valid(root.actions-for(side)) {
+                self.focus-visible = true;
                 root.interaction-started();
                 root.visual-side = side;
                 root.settle-open();
@@ -365,7 +371,10 @@ export component SwipeControl inherits Rectangle {
             horizontal: root.horizontal;
             near-enabled: root.valid(root.actions-for(root.near-side));
             far-enabled: root.valid(root.actions-for(root.far-side));
-            dragged(delta) => { root.move-swipe(delta); }
+            dragged(delta) => {
+                keys.focus-visible = false;
+                root.move-swipe(delta);
+            }
             released(delta) => { root.end-swipe(delta); }
             cancelled => { root.tracking = false; }
         }
@@ -391,7 +400,7 @@ export component SwipeControl inherits Rectangle {
                         default-foreground: Palette.foreground;
                         pressed-background: root.pressed-fill;
                         actionable: root.is-open && !root.tracking;
-                        invoked => { root.invoke(item, true); }
+                        invoked(focus-visible) => { root.invoke(item, true, focus-visible); }
                     }
                 }
                 vertical-actions := VerticalLayout {
@@ -404,7 +413,7 @@ export component SwipeControl inherits Rectangle {
                         default-foreground: Palette.foreground;
                         pressed-background: root.pressed-fill;
                         actionable: root.is-open && !root.tracking;
-                        invoked => { root.invoke(item, true); }
+                        invoked(focus-visible) => { root.invoke(item, true, focus-visible); }
                     }
                 }
 
@@ -444,15 +453,21 @@ export component SwipeControl inherits Rectangle {
                     horizontal: root.horizontal;
                     near-enabled: true;
                     far-enabled: true;
-                    dragged(delta) => { root.move-swipe(delta); }
+                    dragged(delta) => {
+                        keys.focus-visible = false;
+                        root.move-swipe(delta);
+                    }
                     released(delta) => { root.end-swipe(delta); }
                     cancelled => { root.tracking = false; }
-                    tapped => { root.dismiss(); }
+                    tapped => {
+                        keys.focus-visible = false;
+                        root.dismiss();
+                    }
                 }
             }
         }
 
-        if keys.has-focus: ButtonFocusVisual {
+        if keys.keyboard-focused: ButtonFocusVisual {
             control-width: parent.width;
             control-height: parent.height;
             control-radius: root.content-corner-radius;

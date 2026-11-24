@@ -91,7 +91,17 @@ export component TimePicker inherits Rectangle {
     }
 
     public function close-picker() {
-        if popup.is-open { popup.close(); if root.enabled { input.focus(); } }
+        root.finish-picker(true);
+    }
+
+    function finish-picker(focus-visible: bool) {
+        if popup.is-open {
+            popup.close();
+            if root.enabled {
+                input.focus();
+                input.set-focus-visible(focus-visible);
+            }
+        }
     }
 
     pure function title(part: TimePickerPart) -> string {
@@ -194,8 +204,8 @@ export component TimePicker inherits Rectangle {
         field-middle: field.y + field.height / 2;
         column-count: root.pending.columns.length;
         accent: root.accent;
-        accepted => { root.close-picker(); root.selected-time = root.pending.initial; }
-        dismissed => { root.close-picker(); }
+        accepted(focus-visible) => { root.finish-picker(focus-visible); root.selected-time = root.pending.initial; }
+        dismissed(focus-visible) => { root.finish-picker(focus-visible); }
         step(index, amount) => { root.step(index, amount); }
 
         for col[i] in root.pending.columns: PickerWheel {

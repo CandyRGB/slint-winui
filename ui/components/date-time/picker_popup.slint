@@ -12,8 +12,8 @@ export component PickerPopup inherits PopupWindow {
     out property <int> focused-column: keys.has-focus ? root.active-column : -1;
 
     callback step(int, int);
-    callback accepted();
-    callback dismissed();
+    callback accepted(bool);
+    callback dismissed(bool);
 
     private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
     private property <int> active-column;
@@ -39,9 +39,9 @@ export component PickerPopup inherits PopupWindow {
         focus-on-click: false;
         key-pressed(event) => {
             let key = event.text;
-            if key == Key.Escape { root.dismissed(); return accept; }
+            if key == Key.Escape { root.dismissed(true); return accept; }
             if key == Key.Return || (event.modifiers.alt && (key == Key.UpArrow || key == Key.DownArrow)) {
-                root.accepted(); return accept;
+                root.accepted(true); return accept;
             }
             if key == Key.LeftArrow || key == Key.RightArrow {
                 root.active-column = clamp(root.active-column + (key == Key.LeftArrow ? -1 : 1), 0, max(0, root.column-count - 1));
@@ -91,12 +91,12 @@ export component PickerPopup inherits PopupWindow {
                 spacing: 4px;
                 Button {
                     accessible-name: @tr("Accept");
-                    clicked => { root.accepted(); }
+                    clicked => { root.accepted(self.keyboard-focused); }
                     Image { source: @image-url("../../icons/checkmark_16_regular.svg"); width: 16px; height: 16px; colorize: parent.foreground; accessible-role: none; }
                 }
                 Button {
                     accessible-name: @tr("Dismiss");
-                    clicked => { root.dismissed(); }
+                    clicked => { root.dismissed(self.keyboard-focused); }
                     Image { source: @image-url("../../icons/dismiss_16_regular.svg"); width: 16px; height: 16px; colorize: parent.foreground; accessible-role: none; }
                 }
             }

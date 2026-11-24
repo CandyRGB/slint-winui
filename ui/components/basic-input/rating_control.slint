@@ -1,4 +1,5 @@
 import { Palette } from "std-widgets.slint";
+import { KeyboardFocusScope } from "keyboard_focus_scope.slint";
 
 export struct RatingItemArt { glyph: string, image: image }
 export struct RatingItemInfo {
@@ -188,9 +189,8 @@ export component RatingControl inherits Rectangle {
             }
         }
 
-        keys := FocusScope {
+        keys := KeyboardFocusScope {
             enabled: root.enabled;
-            focus-on-click: false;
             width: 0px;
             key-pressed(event) => {
                 if (!root.user-editable) { return reject; }
@@ -212,7 +212,7 @@ export component RatingControl inherits Rectangle {
             enabled: root.user-editable;
             pointer-event(event) => {
                 if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
-                    keys.focus();
+                    keys.focus-from-pointer();
                 }
                 if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
                     root.commit(root.rating-at(self.mouse-x), true);
@@ -234,7 +234,7 @@ export component RatingControl inherits Rectangle {
         overflow: elide;
     }
 
-    if keys.has-focus && root.enabled : Rectangle {
+    if keys.keyboard-focused && root.enabled : Rectangle {
         x: stars.x;
         width: stars.width;
         height: parent.height;

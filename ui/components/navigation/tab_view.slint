@@ -1,4 +1,5 @@
 import { Palette } from "std-widgets.slint";
+import { KeyboardFocusScope } from "../basic-input/keyboard_focus_scope.slint";
 
 export enum TabViewWidthMode { equal, size-to-content, compact }
 export enum TabViewCloseButtonOverlayMode { auto, on-pointer-over }
@@ -34,6 +35,7 @@ component TabCommand inherits Rectangle {
     in property <string> label;
     in property <bool> enabled: true;
     in property <bool> tab-stop: true;
+    in-out property <bool> focus-visible;
     callback invoked();
     callback horizontal-key(KeyEvent) -> EventResult;
     forward-focus: keys;
@@ -43,7 +45,7 @@ component TabCommand inherits Rectangle {
     border-radius: 4px;
     background: !root.enabled ? transparent : hit.pressed ? Palette.foreground.with-alpha(0.024)
         : hit.has-hover ? Palette.foreground.with-alpha(0.06) : transparent;
-    border-width: keys.has-focus && root.enabled ? 2px : 0px;
+    border-width: keys.keyboard-focused && root.enabled ? 2px : 0px;
     border-color: Palette.foreground;
     accessible-role: button;
     accessible-label: root.label;
@@ -60,12 +62,13 @@ component TabCommand inherits Rectangle {
     hit := TouchArea {
         enabled: root.enabled;
         clicked => {
+            root.focus-visible = false;
             if (root.tab-stop) { keys.focus(); }
             root.invoked();
         }
     }
-    keys := FocusScope {
-        focus-on-click: false;
+    keys := KeyboardFocusScope {
+        focus-visible <=> root.focus-visible;
         enabled: root.enabled;
         focus-on-tab-navigation: root.tab-stop;
         key-pressed(event) => {
@@ -82,6 +85,7 @@ component TabHeader inherits TouchArea {
     in property <TabViewRow> entry;
     in property <bool> selected;
     in property <bool> focused;
+    in-out property <bool> focus-visible;
     in property <bool> hide-separator;
     in property <bool> close-on-hover;
     in property <bool> rtl;
@@ -107,6 +111,10 @@ component TabHeader inherits TouchArea {
     accessible-action-default => { if (root.enabled) { root.invoked(); } }
 
     pointer-event(event) => {
+        if (event.kind == PointerEventKind.down
+            && (event.button == PointerEventButton.left || event.button == PointerEventButton.middle)) {
+            root.focus-visible = false;
+        }
         if (event.kind == PointerEventKind.cancel) {
             root.dragging = false;
             root.middle-pressed = false;
@@ -167,6 +175,7 @@ component TabHeader inherits TouchArea {
         accessible-role: none;
     }
     if root.show-close : TabCommand {
+        focus-visible <=> root.focus-visible;
         x: root.rtl ? 4px : parent.width - 36px;
         enabled: root.enabled;
         tab-stop: false;
@@ -269,6 +278,8 @@ export component TabView inherits Rectangle {
         root.scroll-by(-delta);
         return accept;
     }
+    private property <bool> focus-visible: true;
+
     function focus-tab(index: int) {
         if (index >= 0) {
             root.focused-index = index;
@@ -333,11 +344,13 @@ export component TabView inherits Rectangle {
         focus-on-tab-navigation: false;
         capture-key-pressed(event) => {
             if (event.modifiers.control && (event.text == Key.Tab || event.text == Key.Backtab)) {
+                root.focus-visible = true;
                 let forward = !event.modifiers.shift && event.text != Key.Backtab;
                 root.select-tab(TabViewBehavior.find-adjacent(root.items, root.selected-index, forward, true));
                 return accept;
             }
             if (event.modifiers.control && event.text == Key.F4) {
+                root.focus-visible = true;
                 if (!event.repeat) { root.close-tab(root.selected-index); }
                 return accept;
             }
@@ -372,6 +385,7 @@ export component TabView inherits Rectangle {
             footer-layout := HorizontalLayout { alignment: end; tab-strip-footer { } }
         }
         if root.overflowing : TabCommand {
+            focus-visible <=> root.focus-visible;
             x: root.rtl ? parent.width - root.header-width - 36px : root.header-width + 8px;
             y: root.strip-height - 28px;
             enabled: root.offset > 0px;
@@ -438,7 +452,8 @@ export component TabView inherits Rectangle {
                     entry: row;
                     rtl: root.rtl;
                     selected: row.index == root.selected-index;
-                    focused: strip-keys.has-focus && row.index == root.focused-index;
+                    focused: strip-keys.keyboard-focused && row.index == root.focused-index;
+                    focus-visible <=> root.focus-visible;
                     hide-separator: row.index == root.selected-index || row.index + 1 == root.selected-index || row.index + 1 == root.items.length;
                     close-on-hover: root.close-button-overlay-mode == TabViewCloseButtonOverlayMode.on-pointer-over;
                     invoked => { root.select-tab(row.index); }
@@ -464,10 +479,10 @@ export component TabView inherits Rectangle {
                     background: Palette.accent-background;
                 }
             }
-            strip-keys := FocusScope {
+            strip-keys := KeyboardFocusScope {
                 width: 0px;
                 enabled: root.selected-index >= 0;
-                focus-on-click: false;
+                focus-visible <=> root.focus-visible;
                 changed has-focus => { if (self.has-focus && root.focused-index < 0) { root.focused-index = root.selected-index; } }
                 key-pressed(event) => {
                     if (event.modifiers.control) { return reject; }
@@ -495,6 +510,7 @@ export component TabView inherits Rectangle {
             }
         }
         if root.overflowing : TabCommand {
+            focus-visible <=> root.focus-visible;
             property <length> start: root.viewport-start + root.viewport-width + 4px;
             x: root.rtl ? parent.width - self.start - self.width : self.start;
             y: root.strip-height - 28px;
@@ -506,6 +522,7 @@ export component TabView inherits Rectangle {
             invoked => { root.scroll-by(max(48px, round(root.viewport-width / 4px) * 2px)); }
         }
         add := TabCommand {
+            focus-visible <=> root.focus-visible;
             property <length> start: root.viewport-start + root.viewport-width + root.scroll-button-width + 4px;
             x: root.rtl ? parent.width - self.start - self.width : self.start;
             y: root.strip-height - 28px;

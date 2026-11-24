@@ -28,9 +28,12 @@ export component ButtonInput inherits Rectangle {
 
     forward-focus: keyboard;
 
+    public function set-focus-visible(value: bool) {
+        root.pointer-focus = !value;
+    }
+
     changed has-focus => {
         if !root.has-focus {
-            root.pointer-focus = false;
             root.pointer-armed = false;
             root.held-key = "";
         }
@@ -86,6 +89,12 @@ export component ButtonInput inherits Rectangle {
         width: 0px;
         enabled: root.enabled;
         focus-on-tab-navigation: root.tab-stop;
+
+        focus-lost(reason) => {
+            if (reason != FocusReason.popup-activation && reason != FocusReason.window-activation) {
+                root.pointer-focus = false;
+            }
+        }
 
         key-pressed(event) => {
             if root.click-mode == ButtonClickMode.hover {

@@ -1,4 +1,5 @@
 import { Palette } from "std-widgets.slint";
+import { KeyboardFocusScope } from "../basic-input/keyboard_focus_scope.slint";
 import { ToolTipSurface } from "../status-info/tool_tip.slint";
 
 export enum PipsPagerButtonVisibility { visible, visible-on-pointer-over, collapsed }
@@ -10,6 +11,7 @@ component PagerArrow inherits Rectangle {
     in property <bool> vertical;
     in property <bool> toward-end;
     in property <string> label;
+    in-out property <bool> focus-visible;
     out property <bool> has-focus: keys.has-focus;
     callback invoked();
     callback navigated(bool) -> bool;
@@ -37,13 +39,13 @@ component PagerArrow inherits Rectangle {
     hit := TouchArea {
         enabled: root.shown && root.available;
         clicked => {
-            keys.focus();
+            keys.focus-from-pointer();
             root.invoked();
         }
     }
-    keys := FocusScope {
+    keys := KeyboardFocusScope {
         enabled: root.available;
-        focus-on-click: false;
+        focus-visible <=> root.focus-visible;
         focus-on-tab-navigation: root.shown;
         private property <string> activation;
         changed has-focus => {
@@ -69,7 +71,7 @@ component PagerArrow inherits Rectangle {
             return reject;
         }
     }
-    if root.shown && keys.has-focus : Rectangle {
+    if root.shown && keys.keyboard-focused : Rectangle {
         border-width: 2px;
         border-radius: 4px;
         border-color: Palette.foreground;
@@ -183,7 +185,10 @@ export component PipsPager inherits Rectangle {
         page-keys.focus();
     }
 
-    public function focus-selected() { root.focus-page(root.current); }
+    public function focus-selected() {
+        page-keys.focus-visible = true;
+        root.focus-page(root.current);
+    }
 
     function select-page(index: int) {
         if (root.enabled) {
@@ -211,6 +216,7 @@ export component PipsPager inherits Rectangle {
 
     hover-surface := TouchArea {
         previous := PagerArrow {
+            focus-visible <=> page-keys.focus-visible;
             x: root.vertical ? round((root.width - self.width) / 4px) * 2px : root.axis-position(0px, 24px);
             y: root.vertical ? root.axis-position(0px, 24px) : round((root.height - self.height) / 4px) * 2px;
             vertical: root.vertical;
@@ -252,9 +258,12 @@ export component PipsPager inherits Rectangle {
             }
             hit := TouchArea {
                 enabled: root.enabled;
-                clicked => { root.select-page(pip.page); }
+                clicked => {
+                    page-keys.focus-visible = false;
+                    root.select-page(pip.page);
+                }
             }
-            if root.enabled && page-keys.has-focus && pip.page == root.cursor : Rectangle {
+            if root.enabled && page-keys.keyboard-focused && pip.page == root.cursor : Rectangle {
                 border-width: 2px;
                 border-radius: 4px;
                 border-color: Palette.foreground;
@@ -262,10 +271,9 @@ export component PipsPager inherits Rectangle {
             }
         }
 
-        page-keys := FocusScope {
+        page-keys := KeyboardFocusScope {
             width: 0px;
             enabled: root.enabled && root.visible-count > 0;
-            focus-on-click: false;
             private property <string> activation;
             changed has-focus => {
                 if (!self.has-focus) {
@@ -294,6 +302,7 @@ export component PipsPager inherits Rectangle {
         }
 
         next := PagerArrow {
+            focus-visible <=> page-keys.focus-visible;
             private property <length> offset: root.previous-space + 12px * root.visible-count;
             x: root.vertical ? round((root.width - self.width) / 4px) * 2px : root.axis-position(self.offset, 24px);
             y: root.vertical ? root.axis-position(self.offset, 24px) : round((root.height - self.height) / 4px) * 2px;

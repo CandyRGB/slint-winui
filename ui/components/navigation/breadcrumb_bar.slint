@@ -1,4 +1,5 @@
 import { Palette, ScrollView } from "std-widgets.slint";
+import { KeyboardFocusScope } from "../basic-input/keyboard_focus_scope.slint";
 
 export struct Crumb { label: string }
 export struct BreadcrumbMeasurement { label: string, width: length }
@@ -36,9 +37,9 @@ component CrumbRow inherits Rectangle {
     in property <bool> rtl;
     in property <bool> tab-stop;
     in property <bool> requested;
+    in-out property <bool> focus-visible;
     callback invoked();
     callback navigated(bool) -> bool;
-    out property <bool> focused: key.has-focus;
 
     accessible-role: button;
     accessible-enabled: root.interactive;
@@ -58,7 +59,7 @@ component CrumbRow inherits Rectangle {
         width: root.hit-width;
         height: parent.height;
         border-radius: 4px;
-        border-width: root.focused ? 2px : 0px;
+        border-width: key.keyboard-focused ? 2px : 0px;
         border-color: Palette.foreground;
         background: !root.dropdown ? transparent : hit.pressed ? Palette.foreground.with-alpha(0.025)
             : hit.has-hover ? Palette.foreground.with-alpha(0.04) : transparent;
@@ -88,7 +89,7 @@ component CrumbRow inherits Rectangle {
         hit := TouchArea {
             enabled: root.interactive && !root.current;
             clicked => {
-                key.focus();
+                key.focus-from-pointer();
                 root.invoked();
             }
         }
@@ -105,9 +106,9 @@ component CrumbRow inherits Rectangle {
         accessible-role: none;
     }
 
-    key := FocusScope {
+    key := KeyboardFocusScope {
         enabled: root.interactive;
-        focus-on-click: false;
+        focus-visible <=> root.focus-visible;
         focus-on-tab-navigation: root.tab-stop;
         key-pressed(event) => {
             if ((event.text == Key.Return || event.text == Key.Space) && !root.current) {
@@ -142,6 +143,7 @@ export component BreadcrumbBar inherits Rectangle {
     private property <BreadcrumbLayout> layout: BreadcrumbBarBehavior.ready ? BreadcrumbBarBehavior.layout(root.items, root.measurements, root.width) : {};
     private property <int> requested-inline: -1;
     private property <int> requested-overflow: -1;
+    private property <bool> focus-visible: true;
     private property <length> popup-height: min(364px, 4px + 40px * root.layout.overflow.length);
     private property <length> popup-width: min(max(96px, root.width), root.layout.overflow-width);
     changed items => { if (popup.is-open) { popup.close(); } }
@@ -158,6 +160,7 @@ export component BreadcrumbBar inherits Rectangle {
     }
 
     for row[position] in root.layout.inline : CrumbRow {
+        focus-visible <=> root.focus-visible;
         x: root.rtl ? root.width - row.offset - row.width : row.offset;
         width: row.width;
         height: min(26px, root.height);
@@ -195,9 +198,9 @@ export component BreadcrumbBar inherits Rectangle {
         close-policy: close-on-click-outside;
         forward-focus: overflow-key;
 
-        overflow-key := FocusScope {
+        overflow-key := KeyboardFocusScope {
             focus-on-tab-navigation: false;
-            focus-on-click: false;
+            focus-visible <=> root.focus-visible;
             focus-gained(reason) => {
                 if (root.requested-overflow < 0) { root.requested-overflow = 0; }
             }
@@ -233,6 +236,7 @@ export component BreadcrumbBar inherits Rectangle {
                     }
 
                     for row[position] in root.layout.overflow : CrumbRow {
+                        focus-visible <=> root.focus-visible;
                         x: 4px;
                         y: 4px + position * 40px;
                         width: max(0px, parent.width - 8px);

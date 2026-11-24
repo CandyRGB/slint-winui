@@ -109,11 +109,21 @@ export component DatePicker inherits Rectangle {
     }
 
     public function close-picker() {
-        if popup.is-open { popup.close(); if root.enabled { input.focus(); } }
+        root.finish-picker(true);
     }
 
-    function accept-date() {
-        root.close-picker();
+    function finish-picker(focus-visible: bool) {
+        if popup.is-open {
+            popup.close();
+            if root.enabled {
+                input.focus();
+                input.set-focus-visible(focus-visible);
+            }
+        }
+    }
+
+    function accept-date(focus-visible: bool) {
+        root.finish-picker(focus-visible);
         root.selected-date = root.pending.date;
     }
 
@@ -218,8 +228,8 @@ export component DatePicker inherits Rectangle {
         field-middle: field.y + field.height / 2;
         column-count: root.pending.columns.length;
         accent: root.accent;
-        accepted => { root.accept-date(); }
-        dismissed => { root.close-picker(); }
+        accepted(focus-visible) => { root.accept-date(focus-visible); }
+        dismissed(focus-visible) => { root.finish-picker(focus-visible); }
         step(index, amount) => { root.step(index, amount); }
 
         for col[i] in root.pending.columns: PickerWheel {

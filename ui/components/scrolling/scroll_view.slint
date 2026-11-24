@@ -1,4 +1,5 @@
 import { ButtonFocusVisual } from "../basic-input/button_input.slint";
+import { KeyboardFocusScope } from "../basic-input/keyboard_focus_scope.slint";
 import { ScrollBar } from "scroll_bar.slint";
 import { ScrollAnchorBehavior, ScrollAnchorCandidate, ScrollAnchorLayout } from "scroll_anchor.slint";
 import { ScrollControllerOperation, ScrollControllerOptions, ScrollControllerResult, ScrollControllerState }
@@ -527,10 +528,9 @@ export component ScrollView inherits Rectangle {
         }
     }
 
-    keys := FocusScope {
+    keys := KeyboardFocusScope {
         enabled: root.enabled;
         focus-on-tab-navigation: root.is-tab-stop;
-        focus-on-click: false;
 
         key-pressed(event) => {
             let key = event.text;
@@ -590,7 +590,7 @@ export component ScrollView inherits Rectangle {
                     width: viewport.width;
                     height: viewport.height;
                     clicked => {
-                        if root.enabled && root.is-tab-stop { keys.focus(); }
+                        if root.enabled && root.is-tab-stop { keys.focus-from-pointer(); }
                     }
                     pointer-event(event) => {
                         if event.kind == PointerEventKind.move || event.kind == PointerEventKind.down {
@@ -619,7 +619,7 @@ export component ScrollView inherits Rectangle {
         }
     }
 
-    if keys.has-focus && root.is-tab-stop: ButtonFocusVisual {
+    if keys.keyboard-focused && root.is-tab-stop: ButtonFocusVisual {
         control-width: root.width;
         control-height: root.height;
         horizontal-margin: 0px;

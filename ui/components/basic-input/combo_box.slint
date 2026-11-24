@@ -306,7 +306,10 @@ export component ComboBox inherits Rectangle {
                 root.text = root.selected-value;
             }
         }
-        if popup.is-open { popup.close(); }
+        if popup.is-open {
+            popup.close();
+            if (input.has-focus) { input.set-focus-visible(root.keyboard-mode); }
+        }
         root.editor-dropdown = false;
     }
 
@@ -387,6 +390,7 @@ export component ComboBox inherits Rectangle {
             return accept;
         }
         if key == Key.Escape && (opened || (root.is-editable && root.text != root.selected-value)) {
+            root.keyboard-mode = true;
             root.hide(true);
             return accept;
         }

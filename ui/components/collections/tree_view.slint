@@ -1,4 +1,5 @@
 import { Palette, ScrollView } from "std-widgets.slint";
+import { KeyboardFocusScope } from "../basic-input/keyboard_focus_scope.slint";
 
 export enum TreeViewSelectionMode { none, single, multiple }
 export enum TreeViewCheckState { unchecked, checked, partial }
@@ -33,6 +34,7 @@ component TreeRowPresenter inherits Rectangle {
     in property <bool> enabled;
     in property <bool> can-drag;
     in property <bool> focused;
+    in-out property <bool> focus-visible;
     in property <bool> rtl;
     in property <bool> drop-target;
     in property <TreeViewDropMode> drop-mode;
@@ -147,7 +149,12 @@ component TreeRowPresenter inherits Rectangle {
     hit := TouchArea {
         enabled: root.enabled;
         property <bool> dragging;
-        clicked => { if (!self.dragging) { root.invoked(); } }
+        clicked => {
+            if (!self.dragging) {
+                root.focus-visible = false;
+                root.invoked();
+            }
+        }
         pointer-event(event) => {
             if (event.kind == PointerEventKind.cancel && self.dragging) {
                 self.dragging = false;
@@ -159,6 +166,7 @@ component TreeRowPresenter inherits Rectangle {
             }
             if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left && self.dragging) {
                 self.dragging = false;
+                root.focus-visible = false;
                 root.drag-finished(self.mouse-x, self.mouse-y);
             }
         }
@@ -167,7 +175,10 @@ component TreeRowPresenter inherits Rectangle {
         enabled: root.enabled && root.entry.expandable;
         x: root.at(root.chevron-start, self.width);
         width: 32px;
-        clicked => { root.expansion(!root.entry.expanded); }
+        clicked => {
+            root.focus-visible = false;
+            root.expansion(!root.entry.expanded);
+        }
         if root.entry.expandable : Rectangle {
             accessible-role: button;
             accessible-label: root.entry.expanded ? @tr("Collapse {}", root.entry.item.label) : @tr("Expand {}", root.entry.item.label);
@@ -179,7 +190,10 @@ component TreeRowPresenter inherits Rectangle {
         enabled: root.enabled && root.multi;
         x: root.at(root.selector-start - 4px, self.width);
         width: 28px;
-        clicked => { root.checked(); }
+        clicked => {
+            root.focus-visible = false;
+            root.checked();
+        }
         if root.multi : Rectangle {
             accessible-role: checkbox;
             accessible-label: @tr("Select {}", root.entry.item.label);
@@ -347,7 +361,8 @@ export component TreeView inherits Rectangle {
             mode: root.selection-mode;
             rtl: root.rtl;
             enabled: root.enabled && !entry.item.disabled;
-            focused: root.focused-id == entry.item.id;
+            focused: key.keyboard-focused && root.active-id == entry.item.id;
+            focus-visible <=> key.focus-visible;
             can-drag: root.can-drag-items && root.can-reorder-items;
             drop-target: root.drop-valid && root.drop-id == entry.item.id;
             drop-mode: root.drop-mode;
@@ -364,10 +379,9 @@ export component TreeView inherits Rectangle {
         }
     }
 
-    key := FocusScope {
+    key := KeyboardFocusScope {
         enabled: root.enabled && root.rows.length > 0;
         width: 0px;
-        focus-on-click: false;
         changed has-focus => {
             root.pressed = "";
             if (self.has-focus && !root.focus-requested && root.active < 0) {

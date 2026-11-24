@@ -1,0 +1,23 @@
+export component KeyboardFocusScope inherits FocusScope {
+    in-out property <bool> focus-visible: true;
+    out property <bool> keyboard-focused: self.has-focus && self.focus-visible;
+
+    focus-on-click: false;
+
+    public function focus-from-pointer() {
+        self.focus-visible = false;
+        self.focus();
+    }
+
+    focus-gained(reason) => {
+        if (reason == FocusReason.tab-navigation) { self.focus-visible = true; }
+    }
+
+    capture-key-pressed(event) => {
+        if (self.has-focus && event.text != "" && event.text != Key.Shift && event.text != Key.Control
+            && event.text != Key.Alt && event.text != Key.Meta) {
+            self.focus-visible = true;
+        }
+        return reject;
+    }
+}

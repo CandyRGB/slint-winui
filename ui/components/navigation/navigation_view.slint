@@ -106,13 +106,15 @@ component NavigationViewButton inherits Rectangle {
     in property <bool> enabled: true;
     in property <bool> expandable;
     in property <bool> expanded;
+    in-out property <bool> focus-visible;
+    in property <bool> wrapping-focus;
     callback invoked();
     out property <bool> has-focus: key.has-focus;
 
     width: 40px;
     height: 36px;
     border-radius: 4px;
-    border-width: root.enabled && key.has-focus ? 2px : 0px;
+    border-width: root.enabled && key.has-focus && root.focus-visible ? 2px : 0px;
     border-color: Palette.foreground;
     background: !root.enabled ? transparent : hit.pressed ? Palette.foreground.with-alpha(0.025)
         : hit.has-hover ? Palette.foreground.with-alpha(0.06) : transparent;
@@ -135,15 +137,25 @@ component NavigationViewButton inherits Rectangle {
     }
     hit := TouchArea {
         enabled: root.enabled;
-        clicked => { key.focus(); root.invoked(); }
+        clicked => {
+            root.focus-visible = false;
+            key.focus();
+            root.invoked();
+        }
     }
     key := FocusScope {
         enabled: root.enabled && root.visible;
         focus-on-click: false;
         private property <string> pressed;
         changed has-focus => { self.pressed = ""; }
+        focus-gained(reason) => {
+            if (reason == FocusReason.tab-navigation && !root.wrapping-focus) {
+                root.focus-visible = true;
+            }
+        }
         key-pressed(event) => {
             if (event.text == Key.Return || (event.text == Key.Space && !event.modifiers.alt)) {
+                root.focus-visible = true;
                 if (!event.repeat) { self.pressed = event.text; }
                 return accept;
             }
@@ -169,7 +181,7 @@ component NavigationViewItemPresenter inherits Rectangle {
     in property <bool> popup-open;
     out property <FlyoutRect> anchor: { x: self.absolute-position.x, y: self.absolute-position.y,
         width: self.width, height: self.height };
-    callback activated(bool);
+    callback activated(bool, bool);
 
     private property <bool> more: entry.item.id == "$overflow";
     private property <bool> actionable: entry.item.kind == NavigationViewItemKind.item;
@@ -202,8 +214,8 @@ component NavigationViewItemPresenter inherits Rectangle {
         accessible-item-index: root.entry.accessible-index;
         accessible-expandable: true;
         accessible-expanded: root.popup-open;
-        accessible-action-default => { root.activated(false); }
-        accessible-action-expand => { if (!root.popup-open) { root.activated(true); } }
+        accessible-action-default => { root.activated(false, true); }
+        accessible-action-expand => { if (!root.popup-open) { root.activated(true, true); } }
     }
     if root.actionable && !root.more : Rectangle {
         accessible-role: list-item;
@@ -216,8 +228,8 @@ component NavigationViewItemPresenter inherits Rectangle {
         accessible-item-selected: root.entry.selected;
         accessible-expandable: root.entry.has-children;
         accessible-expanded: root.expanded;
-        accessible-action-default => { if (root.enabled) { root.activated(false); } }
-        accessible-action-expand => { if (root.enabled && self.accessible-expandable && !root.expanded) { root.activated(true); } }
+        accessible-action-default => { if (root.enabled) { root.activated(false, true); } }
+        accessible-action-expand => { if (root.enabled && self.accessible-expandable && !root.expanded) { root.activated(true, true); } }
     }
 
     if entry.item.kind == NavigationViewItemKind.separator : Rectangle {
@@ -266,7 +278,7 @@ component NavigationViewItemPresenter inherits Rectangle {
     }
     hit := TouchArea {
         enabled: root.enabled;
-        clicked => { root.activated(false); }
+        clicked => { root.activated(false, false); }
     }
     if root.has-chevron : Image {
         width: 8px;
@@ -282,7 +294,7 @@ component NavigationViewItemPresenter inherits Rectangle {
         x: root.rtl ? root.chevron-shift : parent.width - self.width - root.chevron-shift;
         width: 32px;
         height: parent.height;
-        clicked => { root.activated(true); }
+        clicked => { root.activated(true, false); }
     }
     if root.icon-only && !root.horizontal && root.actionable && !root.popup-open && root.entry.item.label != "" : Tooltip {
         ToolTipSurface { text: root.entry.item.label; }
@@ -301,6 +313,8 @@ component NavigationViewList inherits Rectangle {
     in property <bool> icon-only;
     in property <bool> rtl;
     in property <bool> enabled: true;
+    in-out property <bool> focus-visible;
+    in property <bool> wrapping-focus;
     in property <string> label;
     in property <length> content-height: NavigationViewBehavior.last(root.rows);
     callback activated(NavigationViewRow, bool, FlyoutRect);
@@ -360,11 +374,12 @@ component NavigationViewList inherits Rectangle {
             horizontal: root.horizontal;
             icon-only: root.icon-only || (root.horizontal && (row.item.id == "$overflow" || row.item.id == "$settings"));
             rtl: root.rtl;
-            focused: key.has-focus && row.item.id == root.active-id;
+            focused: key.has-focus && root.focus-visible && row.item.id == root.active-id;
             popup-open: root.popup-owner == row.item.id;
             entry: row;
-            activated(chevron) => {
+            activated(chevron, focus-visible) => {
                 if (root.enabled) {
+                    root.focus-visible = focus-visible;
                     root.restore-focus(row.item.id);
                     root.activated(row, chevron, self.anchor);
                 }
@@ -383,10 +398,23 @@ component NavigationViewList inherits Rectangle {
                 if (first >= 0) { root.set-focus(first); }
             }
         }
+        focus-gained(reason) => {
+            if (reason == FocusReason.tab-navigation && !root.wrapping-focus) {
+                root.focus-visible = true;
+            }
+        }
         key-pressed(event) => {
-            if (root.dismiss-on-escape && event.text == Key.Escape) { root.escape(); return accept; }
-            if (root.trap-tab && (event.text == Key.Tab || event.text == Key.Backtab)) { return accept; }
+            if (root.dismiss-on-escape && event.text == Key.Escape) {
+                root.focus-visible = true;
+                root.escape();
+                return accept;
+            }
+            if (root.trap-tab && (event.text == Key.Tab || event.text == Key.Backtab)) {
+                root.focus-visible = true;
+                return accept;
+            }
             if (event.text == Key.Return || (event.text == Key.Space && !event.modifiers.alt)) {
+                root.focus-visible = true;
                 if (!event.repeat && root.index >= 0) { root.pressed-id = root.active-id; }
                 return accept;
             }
@@ -394,6 +422,7 @@ component NavigationViewList inherits Rectangle {
             let backward = root.horizontal ? (root.rtl ? event.text == Key.RightArrow : event.text == Key.LeftArrow) : event.text == Key.UpArrow;
             let edge = event.text == Key.Home || event.text == Key.End;
             if (forward || backward || edge) {
+                root.focus-visible = true;
                 let index = NavigationViewBehavior.next(root.rows, edge ? "" : root.active-id, event.text == Key.Home || forward);
                 if (index >= 0) {
                     root.set-focus(index);
@@ -516,6 +545,8 @@ export component NavigationView inherits Rectangle {
     private property <length> top-footer-width: min(ceil(pane-footer-slot.preferred-width / 2px) * 2px, floor(top-list.width / 8px) * 2px);
     private property <length> top-custom-min-width: min(ceil(pane-custom-slot-layout.min-width / 2px) * 2px, floor(top-list.width / 12px) * 2px);
     private property <bool> wrapping-focus;
+    // Keep the same focus indication when an item opens a popup or closes the pane.
+    private property <bool> focus-visible: true;
     private property <bool> wrap-forward;
     private property <NavigationViewLeftLayout> left-layout: root.show-pane-header && NavigationViewBehavior.ready
         ? NavigationViewBehavior.left-rows(root.menu-items, root.footer-menu-items, root.settings-item,
@@ -672,6 +703,7 @@ export component NavigationView inherits Rectangle {
     if NavigationViewBehavior.ready : NavigationViewItemMeasure { item: root.settings-item; metrics: root.metrics; }
 
     NavigationViewButton {
+        focus-visible <=> root.focus-visible;
         visible: root.show-top-back && !root.overlay;
         x: root.rtl ? root.width - 44px : 4px;
         y: root.title-bar-padding + 6px;
@@ -681,6 +713,7 @@ export component NavigationView inherits Rectangle {
         invoked => { root.back-requested(); }
     }
     top-toggle := NavigationViewButton {
+        focus-visible <=> root.focus-visible;
         visible: root.show-top-toggle && !root.overlay;
         x: root.rtl ? root.width - root.top-controls-width + 4px : root.top-controls-width - 44px;
         y: root.title-bar-padding + 6px;
@@ -695,7 +728,12 @@ export component NavigationView inherits Rectangle {
         y: root.title-bar-padding;
         height: max(0px, root.height - self.y);
         background: #0003;
-        TouchArea { clicked => { root.close-pane(NavigationViewCloseReason.light-dismiss); } }
+        TouchArea {
+            clicked => {
+                root.focus-visible = false;
+                root.close-pane(NavigationViewCloseReason.light-dismiss);
+            }
+        }
     }
 
     pane := Rectangle {
@@ -735,6 +773,7 @@ export component NavigationView inherits Rectangle {
             focus-on-tab-navigation: false;
             key-pressed(event) => {
                 if (self.enabled && event.text == Key.Escape) {
+                    root.focus-visible = true;
                     root.close-pane(NavigationViewCloseReason.light-dismiss);
                     return accept;
                 }
@@ -743,9 +782,16 @@ export component NavigationView inherits Rectangle {
             pane-start := FocusScope {
                 enabled: pane-key.enabled;
                 focus-on-click: false;
-                focus-gained(reason) => { if (reason == FocusReason.tab-navigation) { root.schedule-pane-wrap(false); } }
+                focus-gained(reason) => {
+                    if (reason == FocusReason.tab-navigation && !root.wrapping-focus) {
+                        root.focus-visible = true;
+                        root.schedule-pane-wrap(false);
+                    }
+                }
             }
             left-back := NavigationViewButton {
+                focus-visible <=> root.focus-visible;
+                wrapping-focus: root.wrapping-focus;
                 visible: pane.back;
                 x: root.rtl ? parent.width - 44px : 4px;
                 y: 6px;
@@ -758,6 +804,8 @@ export component NavigationView inherits Rectangle {
                 }
             }
             left-dismiss := NavigationViewButton {
+                focus-visible <=> root.focus-visible;
+                wrapping-focus: root.wrapping-focus;
                 visible: pane.close-button;
                 x: root.rtl ? parent.width - 44px : 4px;
                 y: 6px;
@@ -780,6 +828,8 @@ export component NavigationView inherits Rectangle {
                 color: Palette.foreground;
             }
             left-toggle := NavigationViewButton {
+                focus-visible <=> root.focus-visible;
+                wrapping-focus: root.wrapping-focus;
                 visible: !root.top-mode && root.is-pane-toggle-button-visible;
                 x: root.rtl ? parent.width - pane.toggle-start - self.width : pane.toggle-start;
                 y: pane.toggle-y;
@@ -817,6 +867,7 @@ export component NavigationView inherits Rectangle {
                 pane-header-slot-layout := HorizontalLayout { pane-header { } }
             }
             top-list := NavigationViewList {
+                focus-visible <=> root.focus-visible;
                 visible: root.top-height > 0px;
                 enabled: root.popup-owner == "";
                 x: root.rtl ? 4px : root.top-controls-width + root.top-title-width + root.top-header-width + 4px;
@@ -833,6 +884,8 @@ export component NavigationView inherits Rectangle {
                 focused(row) => { root.focus-item(row); }
             }
             left-search-button := NavigationViewButton {
+                focus-visible <=> root.focus-visible;
+                wrapping-focus: root.wrapping-focus;
                 visible: root.show-pane-header && root.is-search-visible && !root.is-pane-open;
                 enabled: root.popup-owner == "";
                 x: round((parent.width - self.width) / 4px) * 2px;
@@ -891,6 +944,8 @@ export component NavigationView inherits Rectangle {
                 query-submitted(text, has-suggestion, item) => { root.search-submitted(text, has-suggestion, item); }
             }
             left-list := NavigationViewList {
+                focus-visible <=> root.focus-visible;
+                wrapping-focus: root.wrapping-focus;
                 enabled: root.show-pane-header && root.popup-owner == "";
                 y: pane.controls-height + pane.search-height + pane.custom-height;
                 width: parent.width;
@@ -928,6 +983,8 @@ export component NavigationView inherits Rectangle {
                 pane-footer-slot-layout := HorizontalLayout { pane-footer { } }
             }
             footer-list := NavigationViewList {
+                focus-visible <=> root.focus-visible;
+                wrapping-focus: root.wrapping-focus;
                 enabled: root.show-pane-header && root.popup-owner == "";
                 y: parent.height - self.height;
                 width: parent.width;
@@ -948,7 +1005,12 @@ export component NavigationView inherits Rectangle {
             pane-end := FocusScope {
                 enabled: pane-key.enabled;
                 focus-on-click: false;
-                focus-gained(reason) => { if (reason == FocusReason.tab-navigation) { root.schedule-pane-wrap(true); } }
+                focus-gained(reason) => {
+                    if (reason == FocusReason.tab-navigation && !root.wrapping-focus) {
+                        root.focus-visible = true;
+                        root.schedule-pane-wrap(true);
+                    }
+                }
             }
         }
     }
@@ -1005,7 +1067,10 @@ export component NavigationView inherits Rectangle {
         z: 3;
         enabled: root.popup-owner != "";
         visible: self.enabled;
-        clicked => { root.close-popup(true, ""); }
+        clicked => {
+            root.focus-visible = false;
+            root.close-popup(true, "");
+        }
     }
     popup := Rectangle {
         z: 4;
@@ -1023,6 +1088,7 @@ export component NavigationView inherits Rectangle {
         drop-shadow-color: #0003;
         TouchArea { }
         popup-list := NavigationViewList {
+            focus-visible <=> root.focus-visible;
             y: 4px;
             width: parent.width;
             height: max(0px, parent.height - 8px);
