@@ -78,7 +78,7 @@ slint = "=1.18.1"
 
 [build-dependencies]
 slint-build = "=1.18.1"
-slint-winui = { version = "0.1.0", default-features = false }
+slint-winui = { version = "0.1.1", default-features = false }
 ```
 
 Create `build.rs` in the app root.
