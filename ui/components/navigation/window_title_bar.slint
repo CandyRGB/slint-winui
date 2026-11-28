@@ -1,0 +1,96 @@
+import { Palette } from "std-widgets.slint";
+import { Button, ButtonStyle } from "../basic-input/button.slint";
+
+component TitleBarButton inherits Rectangle {
+    in property <image> glyph;
+    in property <string> accessible-name;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: 36px;
+    height: 32px;
+
+    button := Button {
+        width: parent.width;
+        height: parent.height;
+        appearance: ButtonStyle.subtle;
+        accessible-name: root.accessible-name;
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    Image {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 16px;
+        height: 16px;
+        source: root.glyph;
+        colorize: button.foreground;
+        accessible-role: none;
+    }
+}
+
+// Place on a transparent row to compose with the native Windows caption buttons.
+export component WindowTitleBar inherits Rectangle {
+    in property <string> title;
+    in property <image> icon;
+    in property <bool> show-back-button;
+    in property <bool> back-enabled: true;
+    in property <bool> show-pane-toggle-button;
+    in property <bool> pane-open;
+    in property <string> back-button-label: @tr("Back");
+    in property <string> open-pane-label: @tr("Open navigation");
+    in property <string> close-pane-label: @tr("Close navigation");
+    // Extra room required by the native buttons to the right of the title.
+    in property <length> right-inset: 192px;
+    out property <length> preferred-row-height: 40px;
+    out property <length> interactive-width:
+        (root.show-back-button ? 40px : 0px) + (root.show-pane-toggle-button ? 40px : 0px)
+        + (root.show-back-button || root.show-pane-toggle-button ? 4px : 0px);
+
+    callback back-requested();
+    callback pane-toggle-requested();
+
+    private property <bool> has-icon: root.icon.width > 0;
+    private property <length> icon-x: root.interactive-width + (root.interactive-width > 0px ? 4px : 12px);
+    private property <length> title-x: root.icon-x + (root.has-icon ? 30px : 0px);
+    preferred-height: root.preferred-row-height;
+
+    if root.show-back-button: TitleBarButton {
+        x: 4px;
+        y: (parent.height - self.height) / 2;
+        accessible-name: root.back-button-label;
+        enabled: root.back-enabled;
+        glyph: @image-url("../../icons/arrow_left_16_regular.svg");
+        clicked => { root.back-requested(); }
+    }
+
+    if root.show-pane-toggle-button: TitleBarButton {
+        x: root.show-back-button ? 44px : 4px;
+        y: (parent.height - self.height) / 2;
+        accessible-name: root.pane-open ? root.close-pane-label : root.open-pane-label;
+        glyph: @image-url("../../icons/navigation_16_regular.svg");
+        clicked => { root.pane-toggle-requested(); }
+    }
+
+    if root.has-icon: Image {
+        x: root.icon-x;
+        y: (parent.height - self.height) / 2;
+        width: 20px;
+        height: 20px;
+        source: root.icon;
+        accessible-role: none;
+    }
+
+    Text {
+        x: root.title-x;
+        y: 0px;
+        width: max(0px, parent.width - self.x - root.right-inset - 8px);
+        height: parent.height;
+        text: root.title;
+        font-size: 12px;
+        color: Palette.foreground;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}

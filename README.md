@@ -14,7 +14,7 @@
   <strong lang="en">English</strong> · <a href="README.zh-CN.md" lang="zh-CN">简体中文</a>
 </p>
 
-Slint WinUI provides WinUI 3–inspired controls for Slint applications. It includes responsive navigation, collection views, flyouts, layout panels, and text controls, with 58 standalone examples.
+Slint WinUI provides WinUI 3–inspired controls for Slint applications. It includes responsive navigation, collection views, flyouts, layout panels, and text controls, with 59 standalone examples.
 
 <p align="center">
   <img src="docs/images/navigation-view.png" alt="NavigationView example with a navigation sidebar, Home page, and pane display modes">
@@ -54,7 +54,7 @@ cargo run --locked --example number_box
 | [Layout](ui/components/layout/) | `Border`, `Canvas`, `Expander`, `Grid`, `RelativePanel`, `SplitView`, `StackPanel`, `VariableSizedWrapGrid`, `Viewbox`, `WrapPanel` |
 | [Media](ui/components/media/) | `PersonPicture` |
 | [Menus and toolbars](ui/components/menus-toolbars/) | `AppBarButton`, `CommandBar`, `CommandBarFlyout`, `MenuBar`, `MenuFlyout`, `SwipeControl` |
-| [Navigation](ui/components/navigation/) | `BreadcrumbBar`, `NavigationView`, `Pivot`, `SelectorBar`, `TabView` |
+| [Navigation](ui/components/navigation/) | `BreadcrumbBar`, `NavigationView`, `Pivot`, `SelectorBar`, `TabView`, `WindowTitleBar` |
 | [Scrolling and paging](ui/components/scrolling/) | `AnnotatedScrollBar`, `PagerControl`, `PipsPager`, `ScrollBar`, `ScrollView`, `SemanticZoom` |
 | [Status and information](ui/components/status-info/) | `InfoBadge`, `InfoBar`, `ProgressBar`, `ProgressRing`, `ToolTip` |
 | [Text](ui/components/text/) | `AutoSuggestBox`, `NumberBox`, `PasswordBox`, `RichEditBox`, `RichTextBlock`, `TextBox`, `TextCommandBarFlyout` |
@@ -78,7 +78,7 @@ slint = "=1.18.1"
 
 [build-dependencies]
 slint-build = "=1.18.1"
-slint-winui = { version = "0.1.1", default-features = false }
+slint-winui = { version = "0.1.2", default-features = false }
 ```
 
 Create `build.rs` in the app root.
@@ -151,6 +151,8 @@ Run `cargo run` from the app directory. The number starts at 24. Use the arrows 
 For controls implemented entirely in Slint, keep the alias setup and `slint::include_modules!()`. Omit `write_behavior_modules`, the `include!` for its generated file, and the adapter `install` call. For controls with an adapter, use the module name, type exports, and registration from the corresponding example. [Rust behavior modules](src/behavior/) · [Example launchers](examples/)
 
 Windows integrations, including the system calendar, password reveal policy, and native rich text, also need `slint-winui` in the app's runtime `[dependencies]` with its `windows-platform` feature enabled. See the examples for any additional dependencies or window-handle setup. [CalendarView](examples/calendar_view.rs) · [PasswordBox](examples/password_box.rs) · [RichEditBox](examples/rich_edit_box.rs)
+
+`WindowTitleBar` lays out the title, icon, and optional Back and navigation buttons. On Windows, call `platform::title_bar::attach` on the owning UI thread after a decorated window has a live HWND. Pass the row height and `interactive-width` in logical pixels. Keep the caption row transparent so Windows draws the system buttons. Apply `maximized_inset` to the layout when maximized, and call `set_left_client_width` if the visible controls change. Run the [title-bar example](examples/window_title_bar.rs) with `cargo run --example window_title_bar`.
 
 ## Work with the examples
 

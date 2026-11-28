@@ -14,7 +14,7 @@
   <a href="README.md" lang="en">English</a> · <strong lang="zh-CN">简体中文</strong>
 </p>
 
-Slint WinUI 是一套参考 WinUI 3 设计的 Slint 控件库，包含响应式导航、集合视图、浮出控件、布局面板和文本控件，并附带 58 个可独立运行的示例。
+Slint WinUI 是一套参考 WinUI 3 设计的 Slint 控件库，包含响应式导航、集合视图、浮出控件、布局面板和文本控件，并附带 59 个可独立运行的示例。
 
 <p align="center">
   <img src="docs/images/navigation-view.png" alt="NavigationView 示例中的侧边导航、Home 页面和窗格模式选项">
@@ -54,7 +54,7 @@ cargo run --locked --example number_box
 | [布局](ui/components/layout/) | `Border`、`Canvas`、`Expander`、`Grid`、`RelativePanel`、`SplitView`、`StackPanel`、`VariableSizedWrapGrid`、`Viewbox`、`WrapPanel` |
 | [媒体](ui/components/media/) | `PersonPicture` |
 | [菜单和工具栏](ui/components/menus-toolbars/) | `AppBarButton`、`CommandBar`、`CommandBarFlyout`、`MenuBar`、`MenuFlyout`、`SwipeControl` |
-| [导航](ui/components/navigation/) | `BreadcrumbBar`、`NavigationView`、`Pivot`、`SelectorBar`、`TabView` |
+| [导航](ui/components/navigation/) | `BreadcrumbBar`、`NavigationView`、`Pivot`、`SelectorBar`、`TabView`、`WindowTitleBar` |
 | [滚动和分页](ui/components/scrolling/) | `AnnotatedScrollBar`、`PagerControl`、`PipsPager`、`ScrollBar`、`ScrollView`、`SemanticZoom` |
 | [状态和信息](ui/components/status-info/) | `InfoBadge`、`InfoBar`、`ProgressBar`、`ProgressRing`、`ToolTip` |
 | [文本](ui/components/text/) | `AutoSuggestBox`、`NumberBox`、`PasswordBox`、`RichEditBox`、`RichTextBlock`、`TextBox`、`TextCommandBarFlyout` |
@@ -78,7 +78,7 @@ slint = "=1.18.1"
 
 [build-dependencies]
 slint-build = "=1.18.1"
-slint-winui = { version = "0.1.1", default-features = false }
+slint-winui = { version = "0.1.2", default-features = false }
 ```
 
 在应用根目录创建 `build.rs`。
@@ -151,6 +151,8 @@ fn main() -> Result<(), slint::PlatformError> {
 接入纯 Slint 控件时，保留库别名配置和 `slint::include_modules!()`，省略 `write_behavior_modules`、引入生成文件的 `include!` 和适配器的 `install` 调用。接入其他带适配器的控件时，可以从对应示例查看模块名、需要导出的类型和注册方式。[Rust 行为模块](src/behavior/) · [示例入口](examples/)
 
 系统日历、密码显示策略和原生富文本等功能依赖 Windows。使用这些功能时，也要在应用的运行时 `[dependencies]` 中加入 `slint-winui` 并启用 `windows-platform`。具体依赖和窗口句柄的接入方式可参照示例。[CalendarView](examples/calendar_view.rs) · [PasswordBox](examples/password_box.rs) · [RichEditBox](examples/rich_edit_box.rs)
+
+`WindowTitleBar` 排列标题、应用图标以及可选的返回和导航按钮。使用 Windows 原生窗口按钮时，先创建带系统边框的窗口，再在窗口所属的 UI 线程用 HWND 调用 `platform::title_bar::attach`。标题栏高度和 `interactive-width` 均以逻辑像素传入。标题区保持透明，以显示系统按钮。最大化时用 `maximized_inset` 补偿布局，按钮显示状态变化后用 `set_left_client_width` 更新点击区域。运行 `cargo run --example window_title_bar` 可体验示例。[标题栏示例](examples/window_title_bar.rs)
 
 ## 测试和示例资源
 

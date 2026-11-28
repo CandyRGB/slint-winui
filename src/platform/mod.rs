@@ -5,4 +5,5 @@ pub mod password_reveal;
 pub mod rich_edit;
 pub mod rich_text;
 pub mod time_format;
+pub mod title_bar;
 pub mod tool_tip;
