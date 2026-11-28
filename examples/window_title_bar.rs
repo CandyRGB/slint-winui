@@ -1,6 +1,10 @@
+#[cfg(all(windows, feature = "windows-platform"))]
+#[path = "../src/behavior/window_title_bar.rs"]
+mod window_title_bar;
+
 slint::slint! {
-    import { WindowTitleBarExample } from "ui/window_title_bar.slint";
-    export { WindowTitleBarExample }
+    import { WindowTitleBarBehavior, WindowTitleBarExample } from "ui/window_title_bar.slint";
+    export { WindowTitleBarBehavior, WindowTitleBarExample }
 }
 
 #[cfg(all(windows, feature = "windows-platform"))]
@@ -8,7 +12,7 @@ fn install_title_bar(window: &WindowTitleBarExample) -> Result<(), slint::EventL
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use slint::winit_030::{EventResult, winit::event::WindowEvent};
     use slint::{ComponentHandle, winit_030::WinitWindowAccessor};
-    use slint_winui::platform::title_bar::{self, Layout};
+    use slint_winui::platform::title_bar;
 
     let weak = window.as_weak();
     slint::spawn_local(async move {
@@ -24,11 +28,11 @@ fn install_title_bar(window: &WindowTitleBarExample) -> Result<(), slint::EventL
             return;
         };
         let hwnd = handle.hwnd;
-        let layout = Layout {
-            height: window.get_caption_height() as u16,
-            left_client_width: window.get_caption_controls_width() as u16,
-        };
-        if let Err(error) = title_bar::attach(hwnd, layout) {
+        if let Err(error) = window_title_bar::attach(
+            window.global::<WindowTitleBarBehavior>(),
+            hwnd,
+            window.get_caption_height() as u16,
+        ) {
             eprintln!("Unable to extend the Windows title bar: {error}");
             return;
         }
@@ -50,16 +54,6 @@ fn install_title_bar(window: &WindowTitleBarExample) -> Result<(), slint::EventL
             }
         });
         window.set_caption_extended(true);
-
-        let weak = window.as_weak();
-        window.on_caption_controls_changed(move || {
-            if let Some(window) = weak.upgrade() {
-                let _ = title_bar::set_left_client_width(
-                    hwnd,
-                    window.get_caption_controls_width() as u16,
-                );
-            }
-        });
 
         let weak = window.as_weak();
         window.window().on_winit_window_event(move |_, event| {

@@ -1,7 +1,7 @@
-import { ItemsRepeaterGeometry, ItemsRepeaterSize } from "../collections/items_repeater.slint";
+import { LayoutGeometry, LayoutSize } from "layout_geometry.slint";
 
 export struct WrapLayoutChild {
-    size: ItemsRepeaterSize,
+    size: LayoutSize,
     row-span: int,
     column-span: int,
     collapsed: bool,
@@ -12,7 +12,7 @@ export enum WrapPanelItemsStretch { none, last }
 export enum WrapGridAlignment { start, center, end, stretch }
 
 export struct WrapPanelOptions {
-    available: ItemsRepeaterSize,
+    available: LayoutSize,
     orientation: Orientation,
     padding: WrapPanelPadding,
     item-spacing: length,
@@ -22,9 +22,9 @@ export struct WrapPanelOptions {
 }
 
 export struct VariableSizedWrapGridOptions {
-    available: ItemsRepeaterSize,
+    available: LayoutSize,
     orientation: Orientation,
-    cell: ItemsRepeaterSize,
+    cell: LayoutSize,
     maximum-rows-or-columns: int,
     horizontal-alignment: WrapGridAlignment,
     vertical-alignment: WrapGridAlignment,
@@ -32,6 +32,6 @@ export struct VariableSizedWrapGridOptions {
 }
 
 export global WrapLayoutBehavior {
-    pure callback wrap-panel([WrapLayoutChild], WrapPanelOptions) -> ItemsRepeaterGeometry;
-    pure callback variable-grid([WrapLayoutChild], VariableSizedWrapGridOptions) -> ItemsRepeaterGeometry;
+    pure callback wrap-panel([WrapLayoutChild], WrapPanelOptions) -> LayoutGeometry;
+    pure callback variable-grid([WrapLayoutChild], VariableSizedWrapGridOptions) -> LayoutGeometry;
 }

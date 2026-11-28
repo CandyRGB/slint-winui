@@ -1,11 +1,11 @@
 import { CheckBox, LineEdit, Palette } from "std-widgets.slint";
-import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../../ui/components/collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "../../ui/components/layout/layout_geometry.slint";
 import { VariableSizedWrapGrid } from "../../ui/components/layout/variable_sized_wrap_grid.slint";
 import { VariableSizedWrapGridOptions, WrapGridAlignment, WrapLayoutBehavior, WrapLayoutChild, WrapPanelItemsStretch, WrapPanelOptions, WrapPanelPadding } from "../../ui/components/layout/wrap_layout.slint";
 import { WrapPanel } from "../../ui/components/layout/wrap_panel.slint";
 
 export {
-    ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize,
+    LayoutGeometry, LayoutPlacement, LayoutSize,
     VariableSizedWrapGridOptions, WrapGridAlignment, WrapLayoutBehavior, WrapLayoutChild,
     WrapPanelItemsStretch, WrapPanelOptions, WrapPanelPadding
 }
@@ -141,7 +141,7 @@ export component WrapLayoutExample inherits Window {
             rtl: root.rtl;
 
             for label[index] in root.wrap-labels: WrapTile {
-                property <ItemsRepeaterPlacement> slot: panel.placements[index];
+                property <LayoutPlacement> slot: panel.placements[index];
                 x: slot.x; y: slot.y;
                 width: slot.width; height: slot.height;
                 label: label;
@@ -176,7 +176,7 @@ export component WrapLayoutExample inherits Window {
             rtl: root.rtl;
 
             for label[index] in root.stretch-labels: WrapTile {
-                property <ItemsRepeaterPlacement> slot: stretch-panel.placements[index];
+                property <LayoutPlacement> slot: stretch-panel.placements[index];
                 x: slot.x; y: slot.y;
                 width: slot.width; height: slot.height;
                 label: label;
@@ -215,7 +215,7 @@ export component WrapLayoutExample inherits Window {
             rtl: root.rtl;
 
             for shade[index] in root.grid-colors: Rectangle {
-                property <ItemsRepeaterPlacement> slot: grid.placements[index];
+                property <LayoutPlacement> slot: grid.placements[index];
                 width: min(slot.width, root.grid-items[index].size.width);
                 height: min(slot.height, root.grid-items[index].size.height);
                 x: slot.x + (slot.width - self.width) / 2;

@@ -4,8 +4,7 @@ use slint::{Model, ModelRc, VecModel};
 
 use crate::{
     GridBehavior, GridChild, GridDefinition, GridLayoutResult, GridLengthKind, GridMeasureRequest,
-    GridOptions, GridTrackPlacement, ItemsRepeaterGeometry, ItemsRepeaterPlacement,
-    ItemsRepeaterSize,
+    GridOptions, GridTrackPlacement, LayoutGeometry, LayoutPlacement, LayoutSize,
 };
 
 const EPSILON: f32 = 0.00001;
@@ -15,7 +14,7 @@ const MAX_STAR_WEIGHT: f32 = f32::MAX / u32::MAX as f32;
 /// A negative available dimension is unconstrained, and a child may be measured twice.
 pub fn install(
     behavior: GridBehavior<'_>,
-    measure: impl Fn(GridMeasureRequest) -> ItemsRepeaterSize + 'static,
+    measure: impl Fn(GridMeasureRequest) -> LayoutSize + 'static,
 ) {
     behavior.on_layout(move |columns, rows, children, options| {
         layout(columns, rows, children, options, &measure)
@@ -405,10 +404,10 @@ fn measure_child(
     child: &GridChild,
     width: f32,
     height: f32,
-    measure: &impl Fn(GridMeasureRequest) -> ItemsRepeaterSize,
-) -> ItemsRepeaterSize {
+    measure: &impl Fn(GridMeasureRequest) -> LayoutSize,
+) -> LayoutSize {
     if child.collapsed {
-        return ItemsRepeaterSize::default();
+        return LayoutSize::default();
     }
     let proposed = |limit: f32| {
         if limit.is_infinite() {
@@ -420,12 +419,12 @@ fn measure_child(
     let content = measure(GridMeasureRequest {
         key: child.key.clone(),
         preferred: child.size.clone(),
-        available: ItemsRepeaterSize {
+        available: LayoutSize {
             width: proposed(width),
             height: proposed(height),
         },
     });
-    ItemsRepeaterSize {
+    LayoutSize {
         width: fit(content.width, width),
         height: fit(content.height, height),
     }
@@ -444,7 +443,7 @@ impl GridSizing {
         children: &[GridChild],
         force_unbounded_rows: bool,
         ignore_width: bool,
-        measure: &impl Fn(GridMeasureRequest) -> ItemsRepeaterSize,
+        measure: &impl Fn(GridMeasureRequest) -> LayoutSize,
     ) {
         let mut column_spans = Vec::new();
         let mut row_spans = Vec::new();
@@ -485,7 +484,7 @@ impl GridSizing {
     fn measure(
         &mut self,
         children: &[GridChild],
-        measure: &impl Fn(GridMeasureRequest) -> ItemsRepeaterSize,
+        measure: &impl Fn(GridMeasureRequest) -> LayoutSize,
     ) -> Vec<Cell> {
         let cells: Vec<_> = children
             .iter()
@@ -534,7 +533,7 @@ fn slot(tracks: &[GridTrackPlacement], range: Range<usize>) -> (f32, f32) {
 
 fn finalize(
     children: &[GridChild],
-    desired: ItemsRepeaterSize,
+    desired: LayoutSize,
     columns: Vec<GridTrackPlacement>,
     rows: Vec<GridTrackPlacement>,
     mirror: Option<f32>,
@@ -545,7 +544,7 @@ fn finalize(
         .enumerate()
         .map(|(index, child)| {
             let (x, y, width, height) = bounds(index);
-            let mut item = ItemsRepeaterPlacement {
+            let mut item = LayoutPlacement {
                 index: index as i32,
                 key: child.key.clone(),
                 ..Default::default()
@@ -560,7 +559,7 @@ fn finalize(
         })
         .collect();
     GridLayoutResult {
-        geometry: ItemsRepeaterGeometry {
+        geometry: LayoutGeometry {
             placements: ModelRc::new(VecModel::from(placements)),
             width: even(desired.width),
             height: even(desired.height),
@@ -573,9 +572,9 @@ fn finalize(
 fn arrange_overlay(
     children: &[GridChild],
     options: GridOptions,
-    measure: &impl Fn(GridMeasureRequest) -> ItemsRepeaterSize,
+    measure: &impl Fn(GridMeasureRequest) -> LayoutSize,
 ) -> GridLayoutResult {
-    let mut desired = ItemsRepeaterSize::default();
+    let mut desired = LayoutSize::default();
     let measurements: Vec<_> = children
         .iter()
         .map(|child| {
@@ -620,7 +619,7 @@ fn layout(
     rows: ModelRc<GridDefinition>,
     children: ModelRc<GridChild>,
     options: GridOptions,
-    measure: &impl Fn(GridMeasureRequest) -> ItemsRepeaterSize,
+    measure: &impl Fn(GridMeasureRequest) -> LayoutSize,
 ) -> GridLayoutResult {
     let columns = read_model(&columns);
     let rows = read_model(&rows);
@@ -634,7 +633,7 @@ fn layout(
         rows: Axis::new(rows, options.row_spacing, options.measure.height),
     };
     let cells = grid.measure(&children, measure);
-    let desired = ItemsRepeaterSize {
+    let desired = LayoutSize {
         width: grid.columns.desired(),
         height: grid.rows.desired(),
     };
@@ -693,8 +692,8 @@ mod tests {
         }
     }
 
-    fn size(width: f32, height: f32) -> ItemsRepeaterSize {
-        ItemsRepeaterSize { width, height }
+    fn size(width: f32, height: f32) -> LayoutSize {
+        LayoutSize { width, height }
     }
 
     fn child(key: &str, row: i32, column: i32, width: f32, height: f32) -> GridChild {

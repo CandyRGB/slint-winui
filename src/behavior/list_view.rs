@@ -1,11 +1,22 @@
 use std::collections::HashSet;
 
-use slint::{Model, ModelExt, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global, Model, ModelExt, ModelRc, SharedString, VecModel};
 
 use crate::{
-    ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsViewItem, ListViewBehavior, ListViewEntry,
-    ListViewHeaderPosition,
+    ItemsRepeaterBehavior, ItemsViewBehavior, ItemsViewItem, LayoutPlacement, LayoutSize,
+    ListViewBehavior, ListViewEntry, ListViewHeaderPosition,
 };
+
+/// Installs the default ListView behavior and its collection dependencies.
+pub fn install_for<T: ComponentHandle>(component: &T)
+where
+    for<'a> ItemsRepeaterBehavior<'a>: Global<'a, T>,
+    for<'a> ItemsViewBehavior<'a>: Global<'a, T>,
+    for<'a> ListViewBehavior<'a>: Global<'a, T>,
+{
+    crate::items_view::install_for(component);
+    install(component.global::<ListViewBehavior>());
+}
 
 pub fn install(behavior: ListViewBehavior<'_>) {
     behavior.on_source(|entries| {
@@ -53,7 +64,7 @@ fn sizes(
     width: f32,
     row_height: f32,
     header_height: f32,
-) -> ModelRc<ItemsRepeaterSize> {
+) -> ModelRc<LayoutSize> {
     let mut previous = SharedString::default();
     let sizes = read_rows(&entries)
         .map(|row| {
@@ -68,7 +79,7 @@ fn sizes(
             } else {
                 row_height
             };
-            ItemsRepeaterSize {
+            LayoutSize {
                 width,
                 height: height + header,
             }
@@ -78,7 +89,7 @@ fn sizes(
 }
 
 fn sticky_header(
-    placements: ModelRc<ItemsRepeaterPlacement>,
+    placements: ModelRc<LayoutPlacement>,
     groups: ModelRc<i32>,
     offset: f32,
     height: f32,
@@ -101,7 +112,7 @@ fn sticky_header(
     }
 }
 
-fn insertion(placements: ModelRc<ItemsRepeaterPlacement>, y: f32) -> i32 {
+fn insertion(placements: ModelRc<LayoutPlacement>, y: f32) -> i32 {
     partition(placements.row_count(), |i| {
         placements
             .row_data(i)
@@ -190,7 +201,7 @@ mod tests {
             [0.0, 90.0]
                 .into_iter()
                 .enumerate()
-                .map(|(index, y)| ItemsRepeaterPlacement {
+                .map(|(index, y)| LayoutPlacement {
                     index: index as i32,
                     y,
                     ..Default::default()

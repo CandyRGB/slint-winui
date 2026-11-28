@@ -78,7 +78,7 @@ slint = "=1.18.1"
 
 [build-dependencies]
 slint-build = "=1.18.1"
-slint-winui = { version = "0.1.2", default-features = false }
+slint-winui = { version = "0.2.0", default-features = false }
 ```
 
 Create `build.rs` in the app root.
@@ -150,9 +150,15 @@ Run `cargo run` from the app directory. The number starts at 24. Use the arrows 
 
 For controls implemented entirely in Slint, keep the alias setup and `slint::include_modules!()`. Omit `write_behavior_modules`, the `include!` for its generated file, and the adapter `install` call. For controls with an adapter, use the module name, type exports, and registration from the corresponding example. [Rust behavior modules](src/behavior/) · [Example launchers](examples/)
 
+For `ItemsView`, `ListView`, or `PagerControl`, give `write_behavior_modules` the selected control's module name and call that module's `install_for(&ui)` once for the root. This also installs the control's default behavior dependencies. Keep the Slint type exports shown in the examples.
+
+Version 0.2 uses `LayoutSize`, `LayoutPlacement`, and `LayoutGeometry` in collection and layout APIs. Use `BadgeTone` and `BadgeContent` for badges and `SearchSuggestion` and `SearchTextChangeReason` for search. Import these types from `@winui` and update Rust type exports to use the same names.
+
+Use `ContentDialogPopup` with `foreground << ...` to place an element above the modal card. Bind its width and height to the host window, open it with `show()`, and use `button-requested` for custom validation and dismissal. The caller controls the foreground's position and visibility. Ordinary children determine the card size.
+
 Windows integrations, including the system calendar, password reveal policy, and native rich text, also need `slint-winui` in the app's runtime `[dependencies]` with its `windows-platform` feature enabled. See the examples for any additional dependencies or window-handle setup. [CalendarView](examples/calendar_view.rs) · [PasswordBox](examples/password_box.rs) · [RichEditBox](examples/rich_edit_box.rs)
 
-`WindowTitleBar` lays out the title, icon, and optional Back and navigation buttons. On Windows, call `platform::title_bar::attach` on the owning UI thread after a decorated window has a live HWND. Pass the row height and `interactive-width` in logical pixels. Keep the caption row transparent so Windows draws the system buttons. Apply `maximized_inset` to the layout when maximized, and call `set_left_client_width` if the visible controls change. Run the [title-bar example](examples/window_title_bar.rs) with `cargo run --example window_title_bar`.
+`WindowTitleBar` lays out the title, icon, and optional Back and navigation buttons. For a native Windows caption, include the `window_title_bar` behavior module, export `WindowTitleBarBehavior`, and enable `sync-native-hit-test` on the window's title bar. Call `window_title_bar::attach` on the owning UI thread with the behavior, the decorated window's HWND, and the row height in logical pixels. The adapter keeps the client area aligned with the visible buttons. Keep the row transparent for the system buttons and apply `maximized_inset` when maximized. Run the [title-bar example](examples/window_title_bar.rs) with `cargo run --example window_title_bar`.
 
 ## Work with the examples
 

@@ -2,14 +2,19 @@ import { Button, CheckBox, ComboBox, Palette } from "std-widgets.slint";
 import { ListView, ListViewBehavior, ListViewEntry, ListViewHeaderPosition } from "../../ui/components/collections/list_view.slint";
 import { ListViewItem } from "../../ui/components/collections/list_view_item.slint";
 import { ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode } from "../../ui/components/collections/items_view.slint";
-import { ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout,
-    ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch,
-    ItemsRepeaterWindow } from "../../ui/components/collections/items_repeater.slint";
+import {
+    ItemsRepeaterBehavior, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions,
+    ItemsRepeaterStretch, ItemsRepeaterWindow
+} from "../../ui/components/collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "../../ui/components/layout/layout_geometry.slint";
 
-export { ListViewBehavior, ListViewEntry, ListViewHeaderPosition, ItemsViewBehavior, ItemsViewItem,
-    ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior,
-    ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions,
-    ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
+export {
+    ListViewBehavior, ListViewEntry, ListViewHeaderPosition,
+    ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode,
+    ItemsRepeaterBehavior, ItemsRepeaterJustification, ItemsRepeaterLayout,
+    ItemsRepeaterLayoutOptions, ItemsRepeaterStretch, ItemsRepeaterWindow,
+    LayoutGeometry, LayoutPlacement, LayoutSize
+}
 
 export component ListViewExample inherits Window {
     title: "ListView";

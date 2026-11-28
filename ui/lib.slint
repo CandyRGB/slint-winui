@@ -25,9 +25,9 @@ export {
 } from "components/collections/grid_view.slint";
 export { ItemContainer } from "components/collections/item_container.slint";
 export {
-    ItemsRepeaterSize, ItemsRepeaterPlacement, ItemsRepeaterLayout,
+    ItemsRepeaterLayout,
     ItemsRepeaterJustification, ItemsRepeaterStretch, ItemsRepeaterLayoutOptions,
-    ItemsRepeaterWindow, ItemsRepeaterGeometry, ItemsRepeaterBehavior,
+    ItemsRepeaterWindow, ItemsRepeaterBehavior,
     ItemsRepeater
 } from "components/collections/items_repeater.slint";
 export {
@@ -69,6 +69,7 @@ export {
     ContentDialogButton, ContentDialogResult, ContentDialogDecision,
     ContentDialog
 } from "components/dialogs-flyouts/content_dialog.slint";
+export { ContentDialogPopup } from "components/dialogs-flyouts/content_dialog_popup.slint";
 export { ContextFlyoutArea } from "components/dialogs-flyouts/context_flyout_area.slint";
 export { FlyoutCloseReason, FlyoutOverlay, FlyoutPresenter, Flyout } from "components/dialogs-flyouts/flyout.slint";
 export { FlyoutRect, FlyoutPlacement, FlyoutLayout } from "components/dialogs-flyouts/flyout_layout.slint";
@@ -80,6 +81,7 @@ export {
 } from "components/dialogs-flyouts/teaching_tip.slint";
 
 // Layout
+export { LayoutSize, LayoutPlacement, LayoutGeometry } from "components/layout/layout_geometry.slint";
 export { BorderInsets, BorderRadii, BorderBackgroundSizing, Border } from "components/layout/border.slint";
 export { Canvas, CanvasChild } from "components/layout/canvas.slint";
 export { ExpandDirection, ExpanderContentAlignment, Expander } from "components/layout/expander.slint";
@@ -136,7 +138,7 @@ export {
 } from "components/menus-toolbars/swipe_control.slint";
 
 // Navigation
-export { WindowTitleBar } from "components/navigation/window_title_bar.slint";
+export { WindowTitleBar, WindowTitleBarBehavior } from "components/navigation/window_title_bar.slint";
 export {
     Crumb, BreadcrumbMeasurement, BreadcrumbRow,
     BreadcrumbLayout, BreadcrumbBarBehavior, BreadcrumbBar
@@ -194,14 +196,16 @@ export {
 } from "components/scrolling/semantic_zoom.slint";
 
 // Status info
-export { InfoBadgeTone, InfoBadgeContent, InfoBadge } from "components/status-info/info_badge.slint";
+export { BadgeTone, BadgeContent } from "components/status-info/badge_content.slint";
+export { InfoBadge } from "components/status-info/info_badge.slint";
 export { InfoSeverity, InfoBarCloseReason, InfoBar } from "components/status-info/info_bar.slint";
 export { ProgressBar } from "components/status-info/progress_bar.slint";
 export { ProgressRing } from "components/status-info/progress_ring.slint";
 export { ToolTipPlacement, ToolTipSurface, ToolTip } from "components/status-info/tool_tip.slint";
 
 // Text
-export { AutoSuggestion, AutoSuggestTextChangeReason, AutoSuggestBox } from "components/text/auto_suggest_box.slint";
+export { SearchSuggestion, SearchTextChangeReason } from "components/text/search_suggestion.slint";
+export { AutoSuggestBox } from "components/text/auto_suggest_box.slint";
 export {
     NumberBoxSpinPlacement, NumberBoxValidationMode, NumberBoxValue,
     NumberBoxParseResult, NumberBoxMath, NumberBox

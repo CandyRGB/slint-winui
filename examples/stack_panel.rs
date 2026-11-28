@@ -8,7 +8,7 @@ mod stack_panel;
 slint::slint! {
     import {
         StackPanelExample, StackPanelBehavior, StackPanelChild, StackPanelOptions, StackPanelSnapAlignment,
-        StackPanelSnapPoints, BorderInsets, ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize
+        StackPanelSnapPoints, BorderInsets, LayoutGeometry, LayoutPlacement, LayoutSize
     } from "ui/stack_panel.slint";
     import {
         ScrollSnapAlignment, ScrollSnapBehavior, ScrollSnapIntent, ScrollSnapPoint, ScrollSnapPoints,
@@ -16,7 +16,7 @@ slint::slint! {
     } from "ui/components/scrolling/scroll_snap.slint";
     export {
         StackPanelExample, StackPanelBehavior, StackPanelChild, StackPanelOptions, StackPanelSnapAlignment,
-        StackPanelSnapPoints, BorderInsets, ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize
+        StackPanelSnapPoints, BorderInsets, LayoutGeometry, LayoutPlacement, LayoutSize
     }
     export { ScrollSnapAlignment, ScrollSnapBehavior, ScrollSnapIntent, ScrollSnapPoint, ScrollSnapPoints, ScrollSnapRange, ScrollSnapRequest }
 }

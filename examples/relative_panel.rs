@@ -5,12 +5,12 @@ mod relative_panel;
 
 slint::slint! {
     import {
-        ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize,
+        LayoutGeometry, LayoutPlacement, LayoutSize,
         RelativePanelAlignment, RelativePanelAxis, RelativePanelBehavior, RelativePanelChild,
         RelativePanelExample, RelativePanelInsets, RelativePanelIssue, RelativePanelLayout
     } from "ui/relative_panel.slint";
     export {
-        ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize,
+        LayoutGeometry, LayoutPlacement, LayoutSize,
         RelativePanelAlignment, RelativePanelAxis, RelativePanelBehavior, RelativePanelChild,
         RelativePanelExample, RelativePanelInsets, RelativePanelIssue, RelativePanelLayout
     }

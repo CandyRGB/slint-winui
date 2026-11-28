@@ -6,8 +6,8 @@ use std::{cell::Cell, rc::Rc};
 use slint::{ComponentHandle, Model, ModelExt, ModelRc, VecModel};
 
 slint::slint! {
-    import { ItemsRepeaterBehavior, ItemsRepeaterExample, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow, SampleItem } from "ui/items_repeater.slint";
-    export { ItemsRepeaterBehavior, ItemsRepeaterExample, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow, SampleItem }
+    import { ItemsRepeaterBehavior, ItemsRepeaterExample, LayoutGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, LayoutPlacement, LayoutSize, ItemsRepeaterStretch, ItemsRepeaterWindow, SampleItem } from "ui/items_repeater.slint";
+    export { ItemsRepeaterBehavior, ItemsRepeaterExample, LayoutGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, LayoutPlacement, LayoutSize, ItemsRepeaterStretch, ItemsRepeaterWindow, SampleItem }
 }
 
 fn set_layout_data(ui: &ItemsRepeaterExample, count: usize) {
@@ -16,8 +16,8 @@ fn set_layout_data(ui: &ItemsRepeaterExample, count: usize) {
     for index in 0..count {
         let width = 96.0 + (index % 3) as f32 * 16.0;
         let height = 64.0 + (index % 2) as f32 * 8.0;
-        sizes.push(ItemsRepeaterSize { width, height });
-        placements.push(ItemsRepeaterPlacement {
+        sizes.push(LayoutSize { width, height });
+        placements.push(LayoutPlacement {
             index: index as i32,
             x: (index % 3) as f32 * 136.0,
             y: (index / 3) as f32 * 96.0 + (index % 3) as f32 * 8.0,

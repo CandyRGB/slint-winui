@@ -1,7 +1,7 @@
 import { CheckBox, ComboBox, LineEdit, Slider } from "std-widgets.slint";
 import { Button } from "../../ui/components/basic-input/button.slint";
 import { BorderInsets } from "../../ui/components/layout/border.slint";
-import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../../ui/components/collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "../../ui/components/layout/layout_geometry.slint";
 import {
     StackPanel, StackPanelBehavior, StackPanelChild, StackPanelOptions, StackPanelSnapAlignment, StackPanelSnapPoints
 } from "../../ui/components/layout/stack_panel.slint";
@@ -10,7 +10,7 @@ import { ScrollSnapAlignment } from "../../ui/components/scrolling/scroll_snap.s
 
 export {
     StackPanelBehavior, StackPanelChild, StackPanelOptions, StackPanelSnapAlignment, StackPanelSnapPoints,
-    BorderInsets, ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize
+    BorderInsets, LayoutGeometry, LayoutPlacement, LayoutSize
 }
 
 component ExampleHeading inherits Text {
@@ -98,7 +98,7 @@ export component StackPanelExample inherits Window {
         accessible-role: groupbox;
         accessible-label: "Gallery stack";
         for shade[index] in root.colors: Rectangle {
-            property <ItemsRepeaterPlacement> slot: gallery.placements[index];
+            property <LayoutPlacement> slot: gallery.placements[index];
             x: slot.x; y: slot.y;
             width: slot.width; height: slot.height;
             visible: !root.items[index].collapsed;
@@ -158,7 +158,7 @@ export component StackPanelExample inherits Window {
                 if axis == Orientation.vertical { root.notifications += 1; }
             }
             for label[index] in root.row-labels: Rectangle {
-                property <ItemsRepeaterPlacement> slot: scroll-stack.placements[index];
+                property <LayoutPlacement> slot: scroll-stack.placements[index];
                 x: slot.x; y: slot.y;
                 width: slot.width; height: slot.height;
                 visible: !root.rows[index].collapsed;

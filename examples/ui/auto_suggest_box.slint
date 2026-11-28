@@ -1,7 +1,8 @@
 import { Button, CheckBox, Palette } from "std-widgets.slint";
-import { AutoSuggestBox, AutoSuggestion, AutoSuggestTextChangeReason } from "../../ui/components/text/auto_suggest_box.slint";
+import { AutoSuggestBox } from "../../ui/components/text/auto_suggest_box.slint";
+import { SearchSuggestion, SearchTextChangeReason } from "../../ui/components/text/search_suggestion.slint";
 
-export { AutoSuggestion }
+export { SearchSuggestion }
 
 export component AutoSuggestBoxExample inherits Window {
     title: "AutoSuggestBox";
@@ -9,7 +10,7 @@ export component AutoSuggestBoxExample inherits Window {
     height: 336px;
     in property <bool> dark;
     in property <bool> above;
-    in-out property <[AutoSuggestion]> cities;
+    in-out property <[SearchSuggestion]> cities;
     callback suggestions-requested(string, int);
     private property <string> activity: "No query submitted";
 
@@ -32,7 +33,7 @@ export component AutoSuggestBoxExample inherits Window {
         update-text-on-select: preview.checked;
         enabled: !disable.checked;
         text-changed(value, reason, revision) => {
-            if (reason == AutoSuggestTextChangeReason.user-input) {
+            if (reason == SearchTextChangeReason.user-input) {
                 root.suggestions-requested(value, revision);
             }
         }

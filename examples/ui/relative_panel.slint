@@ -1,12 +1,12 @@
 import { CheckBox, LineEdit } from "std-widgets.slint";
-import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../../ui/components/collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "../../ui/components/layout/layout_geometry.slint";
 import {
     RelativePanel, RelativePanelAlignment, RelativePanelAxis, RelativePanelBehavior,
     RelativePanelChild, RelativePanelInsets, RelativePanelIssue, RelativePanelLayout
 } from "../../ui/components/layout/relative_panel.slint";
 
 export {
-    ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize,
+    LayoutGeometry, LayoutPlacement, LayoutSize,
     RelativePanelAlignment, RelativePanelAxis, RelativePanelBehavior, RelativePanelChild,
     RelativePanelInsets, RelativePanelIssue, RelativePanelLayout
 }
@@ -80,7 +80,7 @@ export component RelativePanelExample inherits Window {
             rtl: root.rtl;
             items: root.gallery-items;
             for shade[index] in root.gallery-colors: Rectangle {
-                property <ItemsRepeaterPlacement> slot: gallery.placements[index];
+                property <LayoutPlacement> slot: gallery.placements[index];
                 x: gallery.child-x(slot);
                 y: gallery.child-y(slot);
                 width: slot.width;
@@ -117,7 +117,7 @@ export component RelativePanelExample inherits Window {
             items: root.form-items;
 
             editor := LineEdit {
-                property <ItemsRepeaterPlacement> slot: form.placements[0];
+                property <LayoutPlacement> slot: form.placements[0];
                 x: form.child-x(slot); y: form.child-y(slot);
                 width: slot.width; height: slot.height;
                 visible: form.layout-issue == RelativePanelIssue.none;
@@ -126,7 +126,7 @@ export component RelativePanelExample inherits Window {
                 placeholder-text: "Type here";
             }
             for label[index] in ["Leading", "Trailing", "Below"]: Rectangle {
-                property <ItemsRepeaterPlacement> slot: form.placements[index + 1];
+                property <LayoutPlacement> slot: form.placements[index + 1];
                 x: form.child-x(slot); y: form.child-y(slot);
                 width: slot.width; height: slot.height;
                 visible: form.layout-issue == RelativePanelIssue.none;

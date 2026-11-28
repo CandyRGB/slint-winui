@@ -14,7 +14,7 @@ pub fn library_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/lib.slint")
 }
 
-/// Write registrations selected by the host into its build output directory.
+/// Write the selected behavior modules and their dependencies into the build output directory.
 ///
 /// Include the resulting file at the Rust crate root, alongside
 /// `slint::include_modules!()`. Re-export each behavior's Slint types from the
@@ -22,7 +22,19 @@ pub fn library_path() -> PathBuf {
 pub fn write_behavior_modules(out_dir: impl AsRef<Path>, modules: &[&str]) -> io::Result<PathBuf> {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/behavior");
     let mut declarations = String::new();
-    for module in modules.iter().copied().collect::<BTreeSet<_>>() {
+    let mut pending = modules.to_vec();
+    let mut required = BTreeSet::new();
+    while let Some(module) = pending.pop() {
+        if required.insert(module) {
+            pending.extend_from_slice(match module {
+                "items_view" => &["items_repeater"],
+                "list_view" => &["items_view"],
+                "pager_control" => &["combo_box", "number_box"],
+                _ => &[],
+            });
+        }
+    }
+    for module in required {
         if module.is_empty()
             || !module
                 .bytes()
@@ -47,4 +59,35 @@ pub fn write_behavior_modules(out_dir: impl AsRef<Path>, modules: &[&str]) -> io
     let output = out_dir.as_ref().join("slint_winui_behaviors.rs");
     fs::write(&output, declarations)?;
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_behavior_modules;
+
+    #[test]
+    fn composite_behavior_dependencies_are_included_once() {
+        let output = tempfile::tempdir().unwrap();
+        let file = write_behavior_modules(
+            output.path(),
+            &["list_view", "pager_control", "items_repeater", "combo_box"],
+        )
+        .unwrap();
+        let declarations = std::fs::read_to_string(file).unwrap();
+        let modules: Vec<_> = declarations
+            .lines()
+            .filter_map(|line| line.strip_prefix("pub mod "))
+            .collect();
+        assert_eq!(
+            modules,
+            [
+                "combo_box;",
+                "items_repeater;",
+                "items_view;",
+                "list_view;",
+                "number_box;",
+                "pager_control;",
+            ]
+        );
+    }
 }

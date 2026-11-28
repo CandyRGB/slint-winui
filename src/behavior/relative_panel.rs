@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use slint::{Model, ModelRc, SharedString, VecModel};
 
 use crate::{
-    ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize, RelativePanelAlignment,
+    LayoutGeometry, LayoutPlacement, LayoutSize, RelativePanelAlignment,
     RelativePanelAxis, RelativePanelBehavior, RelativePanelChild, RelativePanelIssue,
     RelativePanelLayout,
 };
@@ -347,8 +347,8 @@ fn child_span(
 
 fn layout(
     model: ModelRc<RelativePanelChild>,
-    measure: ItemsRepeaterSize,
-    arrange: ItemsRepeaterSize,
+    measure: LayoutSize,
+    arrange: LayoutSize,
 ) -> RelativePanelLayout {
     model.model_tracker().track_row_count_changes();
     let items: Vec<_> = model
@@ -395,7 +395,7 @@ fn layout(
         .iter()
         .enumerate()
         .map(|(index, item)| {
-            let mut placement = ItemsRepeaterPlacement {
+            let mut placement = LayoutPlacement {
                 index: index as i32,
                 key: item.id.clone(),
                 ..Default::default()
@@ -426,7 +426,7 @@ fn layout(
         })
         .collect();
     RelativePanelLayout {
-        geometry: ItemsRepeaterGeometry {
+        geometry: LayoutGeometry {
             width: even(width),
             height: even(height),
             placements: ModelRc::new(VecModel::from(placements)),
@@ -442,7 +442,7 @@ mod tests {
     fn item(id: &str, width: f32, height: f32) -> RelativePanelChild {
         RelativePanelChild {
             id: id.into(),
-            size: ItemsRepeaterSize { width, height },
+            size: LayoutSize { width, height },
             ..Default::default()
         }
     }
@@ -450,11 +450,11 @@ mod tests {
     fn arrange(items: &[RelativePanelChild], width: f32, height: f32) -> RelativePanelLayout {
         layout(
             ModelRc::new(VecModel::from(items.to_vec())),
-            ItemsRepeaterSize {
+            LayoutSize {
                 width: 2000.0,
                 height: 2000.0,
             },
-            ItemsRepeaterSize { width, height },
+            LayoutSize { width, height },
         )
     }
 

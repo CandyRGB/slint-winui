@@ -1,0 +1,16 @@
+export struct LayoutSize { width: length, height: length }
+
+export struct LayoutPlacement {
+    index: int,
+    key: string,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+}
+
+export struct LayoutGeometry {
+    placements: [LayoutPlacement],
+    width: length,
+    height: length,
+}

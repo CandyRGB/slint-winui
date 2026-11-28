@@ -2,13 +2,18 @@ import { Button, CheckBox, ComboBox, Palette } from "std-widgets.slint";
 import { ItemsView, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction,
     ItemsViewSelectionMode } from "../../ui/components/collections/items_view.slint";
 import { ItemContainer } from "../../ui/components/collections/item_container.slint";
-import { ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout,
-    ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch,
-    ItemsRepeaterWindow } from "../../ui/components/collections/items_repeater.slint";
+import {
+    ItemsRepeaterBehavior, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions,
+    ItemsRepeaterStretch, ItemsRepeaterWindow
+} from "../../ui/components/collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "../../ui/components/layout/layout_geometry.slint";
 
-export { ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode,
-    ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout,
-    ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
+export {
+    ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode,
+    ItemsRepeaterBehavior, ItemsRepeaterJustification, ItemsRepeaterLayout,
+    ItemsRepeaterLayoutOptions, ItemsRepeaterStretch, ItemsRepeaterWindow,
+    LayoutGeometry, LayoutPlacement, LayoutSize
+}
 
 export struct GalleryPhoto { title: string, likes: int, image: image }
 
@@ -23,7 +28,7 @@ export component ItemsViewExample inherits Window {
     default-font-size: 14px;
     in property <[ItemsViewItem]> items;
     in property <[GalleryPhoto]> photos;
-    in property <[ItemsRepeaterSize]> photo-sizes;
+    in property <[LayoutSize]> photo-sizes;
     in property <color> accent: Palette.accent-background;
     callback load-items(bool);
 

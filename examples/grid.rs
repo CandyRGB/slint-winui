@@ -6,13 +6,13 @@ mod grid;
 slint::slint! {
     import {
         GridExample, GridBehavior, GridChild, GridDefinition, GridLayoutResult, GridLengthKind,
-        GridMeasureRequest, GridOptions, GridTrackPlacement, ItemsRepeaterGeometry, ItemsRepeaterPlacement,
-        ItemsRepeaterSize
+        GridMeasureRequest, GridOptions, GridTrackPlacement, LayoutGeometry, LayoutPlacement,
+        LayoutSize
     } from "ui/grid.slint";
     export {
         GridExample, GridBehavior, GridChild, GridDefinition, GridLayoutResult, GridLengthKind,
-        GridMeasureRequest, GridOptions, GridTrackPlacement, ItemsRepeaterGeometry, ItemsRepeaterPlacement,
-        ItemsRepeaterSize
+        GridMeasureRequest, GridOptions, GridTrackPlacement, LayoutGeometry, LayoutPlacement,
+        LayoutSize
     }
 }
 

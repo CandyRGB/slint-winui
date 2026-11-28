@@ -5,12 +5,12 @@ mod wrap_layout;
 
 slint::slint! {
     import {
-        ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize,
+        LayoutGeometry, LayoutPlacement, LayoutSize,
         VariableSizedWrapGridOptions, WrapGridAlignment, WrapLayoutBehavior, WrapLayoutChild,
         WrapLayoutExample, WrapPanelItemsStretch, WrapPanelOptions, WrapPanelPadding
     } from "ui/wrap_layout.slint";
     export {
-        ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize,
+        LayoutGeometry, LayoutPlacement, LayoutSize,
         VariableSizedWrapGridOptions, WrapGridAlignment, WrapLayoutBehavior, WrapLayoutChild,
         WrapLayoutExample, WrapPanelItemsStretch, WrapPanelOptions, WrapPanelPadding
     }

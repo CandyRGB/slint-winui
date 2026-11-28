@@ -1,0 +1,12 @@
+export enum BadgeTone { accent, attention, informational, success, caution, critical }
+
+export struct BadgeContent {
+    visible: bool,
+    value: int,
+    icon-source: image,
+    preserve-icon-colors: bool,
+    show-tone-icon: bool,
+    glyph: string,
+    tone: BadgeTone,
+    accessible-name: string,
+}

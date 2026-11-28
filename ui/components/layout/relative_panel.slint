@@ -1,4 +1,4 @@
-import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "layout_geometry.slint";
 
 export struct RelativePanelInsets { left: length, top: length, right: length, bottom: length }
 export enum RelativePanelAlignment { stretch, start, center, end }
@@ -19,7 +19,7 @@ export struct RelativePanelAxis {
 
 export struct RelativePanelChild {
     id: string,
-    size: ItemsRepeaterSize,
+    size: LayoutSize,
     margin: RelativePanelInsets,
     horizontal: RelativePanelAxis,
     vertical: RelativePanelAxis,
@@ -31,13 +31,13 @@ export struct RelativePanelChild {
 }
 
 export struct RelativePanelLayout {
-    geometry: ItemsRepeaterGeometry,
+    geometry: LayoutGeometry,
     issue: RelativePanelIssue,
     issue-target: string,
 }
 
 export global RelativePanelBehavior {
-    pure callback layout([RelativePanelChild], ItemsRepeaterSize, ItemsRepeaterSize) -> RelativePanelLayout;
+    pure callback layout([RelativePanelChild], LayoutSize, LayoutSize) -> RelativePanelLayout;
 }
 
 export component RelativePanel inherits Rectangle {
@@ -47,7 +47,7 @@ export component RelativePanel inherits Rectangle {
     in property <length> measure-width: -1px;
     in property <length> measure-height: -1px;
 
-    out property <[ItemsRepeaterPlacement]> placements: root.arrangement.geometry.placements;
+    out property <[LayoutPlacement]> placements: root.arrangement.geometry.placements;
     out property <RelativePanelIssue> layout-issue: root.arrangement.issue;
     out property <string> issue-target: root.arrangement.issue-target;
 
@@ -55,7 +55,7 @@ export component RelativePanel inherits Rectangle {
     private property <length> top-inset: root.border-width + root.content-insets.top;
     private property <length> horizontal-insets: root.left-inset + root.border-width + root.content-insets.right;
     private property <length> vertical-insets: root.top-inset + root.border-width + root.content-insets.bottom;
-    private property <ItemsRepeaterSize> measure-limit: {
+    private property <LayoutSize> measure-limit: {
         width: root.measure-width < 0px ? -1px : max(0px, root.measure-width - root.horizontal-insets),
         height: root.measure-height < 0px ? -1px : max(0px, root.measure-height - root.vertical-insets),
     };
@@ -69,11 +69,11 @@ export component RelativePanel inherits Rectangle {
     preferred-width: root.measurement.geometry.width + root.horizontal-insets;
     preferred-height: root.measurement.geometry.height + root.vertical-insets;
 
-    public pure function child-x(slot: ItemsRepeaterPlacement) -> length {
+    public pure function child-x(slot: LayoutPlacement) -> length {
         return root.rtl ? root.width - root.left-inset - slot.x - slot.width : root.left-inset + slot.x;
     }
 
-    public pure function child-y(slot: ItemsRepeaterPlacement) -> length {
+    public pure function child-y(slot: LayoutPlacement) -> length {
         return root.top-inset + slot.y;
     }
 

@@ -1,17 +1,5 @@
 import { Palette } from "std-widgets.slint";
-
-export enum InfoBadgeTone { accent, attention, informational, success, caution, critical }
-
-export struct InfoBadgeContent {
-    visible: bool,
-    value: int,
-    icon-source: image,
-    preserve-icon-colors: bool,
-    show-tone-icon: bool,
-    glyph: string,
-    tone: InfoBadgeTone,
-    accessible-name: string,
-}
+import { BadgeTone } from "badge_content.slint";
 
 export component InfoBadge inherits Rectangle {
     in property <int> value: -1;
@@ -20,7 +8,7 @@ export component InfoBadge inherits Rectangle {
     in property <bool> show-tone-icon;
     in property <string> glyph;
     in property <string> glyph-font-family: "Segoe Fluent Icons";
-    in property <InfoBadgeTone> tone;
+    in property <BadgeTone> tone;
     in property <length> corner-radius: self.height / 2;
     in property <brush> foreground: Palette.accent-foreground;
     in property <string> accessible-name;
@@ -29,11 +17,11 @@ export component InfoBadge inherits Rectangle {
         : root.has-value ? number.text : "";
 
     private property <bool> has-value: root.value >= 0;
-    private property <string> tone-glyph: root.tone == InfoBadgeTone.attention ? "\u{EA38}"
-        : root.tone == InfoBadgeTone.informational ? "\u{F13F}"
-        : root.tone == InfoBadgeTone.success ? "\u{E8FB}"
-        : root.tone == InfoBadgeTone.caution ? "\u{E8C9}"
-        : root.tone == InfoBadgeTone.critical ? "\u{E711}" : "";
+    private property <string> tone-glyph: root.tone == BadgeTone.attention ? "\u{EA38}"
+        : root.tone == BadgeTone.informational ? "\u{F13F}"
+        : root.tone == BadgeTone.success ? "\u{E8FB}"
+        : root.tone == BadgeTone.caution ? "\u{E8C9}"
+        : root.tone == BadgeTone.critical ? "\u{E711}" : "";
     private property <bool> has-image: !root.has-value && root.glyph == "" && root.icon-source.width > 0;
     private property <bool> has-glyph: !root.has-value && !root.has-image && symbol.text != "";
     private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
@@ -51,11 +39,11 @@ export component InfoBadge inherits Rectangle {
     horizontal-stretch: 0;
     vertical-stretch: 0;
     border-radius: root.corner-radius;
-    background: root.tone == InfoBadgeTone.attention ? (root.dark ? #4cc2ff : #0067c0)
-        : root.tone == InfoBadgeTone.informational ? (root.dark ? #9d9d9d : #8a8a8a)
-        : root.tone == InfoBadgeTone.success ? (root.dark ? #6ccb5f : #0f7b0f)
-        : root.tone == InfoBadgeTone.caution ? (root.dark ? #fce100 : #9d5d00)
-        : root.tone == InfoBadgeTone.critical ? (root.dark ? #ff99a4 : #c42b1c)
+    background: root.tone == BadgeTone.attention ? (root.dark ? #4cc2ff : #0067c0)
+        : root.tone == BadgeTone.informational ? (root.dark ? #9d9d9d : #8a8a8a)
+        : root.tone == BadgeTone.success ? (root.dark ? #6ccb5f : #0f7b0f)
+        : root.tone == BadgeTone.caution ? (root.dark ? #fce100 : #9d5d00)
+        : root.tone == BadgeTone.critical ? (root.dark ? #ff99a4 : #c42b1c)
         : Palette.accent-background;
 
     if !root.decorative && root.status-text != "" : Rectangle {

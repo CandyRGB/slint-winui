@@ -1,5 +1,5 @@
 import { Border } from "border.slint";
-import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "layout_geometry.slint";
 
 export enum GridLengthKind { pixel, auto, star }
 export struct GridDefinition {
@@ -12,7 +12,7 @@ export struct GridDefinition {
 }
 export struct GridChild {
     key: string,
-    size: ItemsRepeaterSize,
+    size: LayoutSize,
     row: int,
     column: int,
     row-span: int,
@@ -21,18 +21,18 @@ export struct GridChild {
 }
 export struct GridMeasureRequest {
     key: string,
-    preferred: ItemsRepeaterSize,
-    available: ItemsRepeaterSize,
+    preferred: LayoutSize,
+    available: LayoutSize,
 }
 export struct GridTrackPlacement { offset: length, size: length }
 export struct GridLayoutResult {
-    geometry: ItemsRepeaterGeometry,
+    geometry: LayoutGeometry,
     columns: [GridTrackPlacement],
     rows: [GridTrackPlacement],
 }
 export struct GridOptions {
-    measure: ItemsRepeaterSize,
-    arrange: ItemsRepeaterSize,
+    measure: LayoutSize,
+    arrange: LayoutSize,
     row-spacing: length,
     column-spacing: length,
     rtl: bool,
@@ -51,12 +51,12 @@ export component Grid inherits Border {
     in property <length> measure-width: -1px;
     in property <length> measure-height: -1px;
 
-    out property <[ItemsRepeaterPlacement]> placements: root.arranged.geometry.placements;
+    out property <[LayoutPlacement]> placements: root.arranged.geometry.placements;
     out property <[GridTrackPlacement]> column-tracks: root.arranged.columns;
     out property <[GridTrackPlacement]> row-tracks: root.arranged.rows;
     clip: root.measured.geometry.width > root.content-width || root.measured.geometry.height > root.content-height;
 
-    private property <ItemsRepeaterSize> measure-limit: {
+    private property <LayoutSize> measure-limit: {
         width: root.measure-width < 0px ? -1px : max(0px, root.measure-width - max(0px, root.thickness.left)
             - max(0px, root.thickness.right) - root.content-padding.left - root.content-padding.right),
         height: root.measure-height < 0px ? -1px : max(0px, root.measure-height - max(0px, root.thickness.top)

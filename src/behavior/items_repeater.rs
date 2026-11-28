@@ -3,9 +3,8 @@ use std::{collections::HashSet, ops::Range};
 use slint::{Model, ModelRc, ModelTracker, SharedString, VecModel, language::Orientation};
 
 use crate::{
-    ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout,
-    ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch,
-    ItemsRepeaterWindow,
+    ItemsRepeaterBehavior, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions,
+    ItemsRepeaterStretch, ItemsRepeaterWindow, LayoutGeometry, LayoutPlacement, LayoutSize,
 };
 
 pub fn install(behavior: ItemsRepeaterBehavior<'_>) {
@@ -32,10 +31,10 @@ impl Axes {
         cross: f32,
         length: f32,
         breadth: f32,
-    ) -> ItemsRepeaterPlacement {
+    ) -> LayoutPlacement {
         let (x, y) = self.split(main, cross);
         let (width, height) = self.split(length, breadth);
-        ItemsRepeaterPlacement {
+        LayoutPlacement {
             index: index as i32,
             key: SharedString::default(),
             x,
@@ -53,14 +52,14 @@ struct Line {
 }
 
 struct GeometryModel {
-    placements: Vec<ItemsRepeaterPlacement>,
+    placements: Vec<LayoutPlacement>,
     lines: Vec<Line>,
     axes: Axes,
     rtl: bool,
 }
 
 impl Model for GeometryModel {
-    type Data = ItemsRepeaterPlacement;
+    type Data = LayoutPlacement;
 
     fn row_count(&self) -> usize {
         self.placements.len()
@@ -88,9 +87,9 @@ fn even(n: f32) -> f32 {
 }
 
 fn item_size(
-    sizes: &dyn Model<Data = ItemsRepeaterSize>,
+    sizes: &dyn Model<Data = LayoutSize>,
     row: usize,
-    fallback: &ItemsRepeaterSize,
+    fallback: &LayoutSize,
     axes: Axes,
 ) -> (f32, f32) {
     sizes.model_tracker().track_row_data_changes(row);
@@ -114,10 +113,10 @@ fn item_size(
 fn arrange(
     count: i32,
     keys: ModelRc<SharedString>,
-    sizes: ModelRc<ItemsRepeaterSize>,
-    custom: ModelRc<ItemsRepeaterPlacement>,
+    sizes: ModelRc<LayoutSize>,
+    custom: ModelRc<LayoutPlacement>,
     options: ItemsRepeaterLayoutOptions,
-) -> ItemsRepeaterGeometry {
+) -> LayoutGeometry {
     let count = count.max(0) as usize;
     let stack = options.kind == ItemsRepeaterLayout::Stack;
     let uniform = options.kind == ItemsRepeaterLayout::UniformGrid;
@@ -250,7 +249,7 @@ fn arrange(
             rect.x = width - rect.x - rect.width;
         }
     }
-    ItemsRepeaterGeometry {
+    LayoutGeometry {
         placements: ModelRc::new(model),
         width,
         height,
@@ -258,7 +257,7 @@ fn arrange(
 }
 
 fn justify(
-    items: &mut [ItemsRepeaterPlacement],
+    items: &mut [LayoutPlacement],
     axes: Axes,
     spare: f32,
     alignment: ItemsRepeaterJustification,
@@ -284,7 +283,7 @@ fn justify(
 
 fn arrange_lined(
     model: &mut GeometryModel,
-    sizes: &ModelRc<ItemsRepeaterSize>,
+    sizes: &ModelRc<LayoutSize>,
     options: &ItemsRepeaterLayoutOptions,
     count: usize,
     viewport: f32,
@@ -379,9 +378,9 @@ fn arrange_lined(
 }
 
 fn visible(
-    geometry: ItemsRepeaterGeometry,
+    geometry: LayoutGeometry,
     window: ItemsRepeaterWindow,
-) -> ModelRc<ItemsRepeaterPlacement> {
+) -> ModelRc<LayoutPlacement> {
     let Some(model) = geometry.placements.as_any().downcast_ref::<GeometryModel>() else {
         return ModelRc::default();
     };
@@ -426,7 +425,7 @@ fn visible(
     ModelRc::new(VecModel::from(visible))
 }
 
-fn identity(rect: &ItemsRepeaterPlacement) -> (i32, &str) {
+fn identity(rect: &LayoutPlacement) -> (i32, &str) {
     if rect.key.is_empty() {
         (rect.index, "")
     } else {
@@ -435,12 +434,12 @@ fn identity(rect: &ItemsRepeaterPlacement) -> (i32, &str) {
 }
 
 fn update(
-    current: ModelRc<ItemsRepeaterPlacement>,
-    next: ModelRc<ItemsRepeaterPlacement>,
-) -> ModelRc<ItemsRepeaterPlacement> {
+    current: ModelRc<LayoutPlacement>,
+    next: ModelRc<LayoutPlacement>,
+) -> ModelRc<LayoutPlacement> {
     let Some(rows) = current
         .as_any()
-        .downcast_ref::<VecModel<ItemsRepeaterPlacement>>()
+        .downcast_ref::<VecModel<LayoutPlacement>>()
     else {
         return ModelRc::new(VecModel::from(next.iter().collect::<Vec<_>>()));
     };

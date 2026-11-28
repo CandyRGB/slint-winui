@@ -1,5 +1,5 @@
 import { CheckBox, LineEdit, Slider } from "std-widgets.slint";
-import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../../ui/components/collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "../../ui/components/layout/layout_geometry.slint";
 import {
     Grid, GridBehavior, GridChild, GridDefinition, GridLayoutResult, GridLengthKind,
     GridMeasureRequest, GridOptions, GridTrackPlacement
@@ -7,7 +7,7 @@ import {
 
 export {
     GridBehavior, GridChild, GridDefinition, GridLayoutResult, GridLengthKind, GridMeasureRequest, GridOptions,
-    GridTrackPlacement, ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize
+    GridTrackPlacement, LayoutGeometry, LayoutPlacement, LayoutSize
 }
 
 component Heading inherits Text {
@@ -91,7 +91,7 @@ export component GridExample inherits Window {
         accessible-role: groupbox;
         accessible-label: "Gallery grid";
         for shade[index] in root.colors: Rectangle {
-            property <ItemsRepeaterPlacement> slot: gallery.placements[index];
+            property <LayoutPlacement> slot: gallery.placements[index];
             x: slot.x; y: slot.y; width: slot.width; height: slot.height;
             background: shade;
             accessible-role: groupbox;
@@ -140,7 +140,7 @@ export component GridExample inherits Window {
         ];
         items: root.mixed-cells;
         for label[index] in root.mixed-labels: Rectangle {
-            property <ItemsRepeaterPlacement> slot: mixed.placements[index];
+            property <LayoutPlacement> slot: mixed.placements[index];
             x: slot.x; y: slot.y; width: slot.width; height: slot.height;
             visible: !root.mixed-cells[index].collapsed;
             background: index == 5 ? #e8f1fa : #eeeeee;

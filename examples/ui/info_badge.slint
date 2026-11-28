@@ -1,11 +1,12 @@
 import { Button, CheckBox, Palette } from "std-widgets.slint";
-import { InfoBadge, InfoBadgeTone } from "../../ui/components/status-info/info_badge.slint";
+import { BadgeTone } from "../../ui/components/status-info/badge_content.slint";
+import { InfoBadge } from "../../ui/components/status-info/info_badge.slint";
 import { NavigationView, NavigationViewPaneDisplayMode } from "../../ui/components/navigation/navigation_view.slint";
 export { NavigationViewBehavior, NavigationViewDisplayMode, NavigationViewPaneDisplayMode, NavigationViewRow, NavigationViewItem, NavigationViewItemKind, NavigationViewLeftLayout, NavigationViewTopLayout, NavigationViewMeasurement, NavigationViewTopContentWidths } from "../../ui/components/navigation/navigation_view.slint";
 
 component BadgeSampleRow inherits HorizontalLayout {
     in property <string> label;
-    in property <InfoBadgeTone> tone;
+    in property <BadgeTone> tone;
     in property <string> glyph;
     height: 32px;
     alignment: start;
@@ -32,12 +33,12 @@ export component InfoBadgeExample inherits Window {
 
         VerticalLayout {
             alignment: start;
-            BadgeSampleRow { label: "Accent"; tone: InfoBadgeTone.accent; glyph: "\u{E8BD}"; }
-            BadgeSampleRow { label: "Attention"; tone: InfoBadgeTone.attention; }
-            BadgeSampleRow { label: "Informational"; tone: InfoBadgeTone.informational; }
-            BadgeSampleRow { label: "Success"; tone: InfoBadgeTone.success; }
-            BadgeSampleRow { label: "Caution"; tone: InfoBadgeTone.caution; }
-            BadgeSampleRow { label: "Critical"; tone: InfoBadgeTone.critical; }
+            BadgeSampleRow { label: "Accent"; tone: BadgeTone.accent; glyph: "\u{E8BD}"; }
+            BadgeSampleRow { label: "Attention"; tone: BadgeTone.attention; }
+            BadgeSampleRow { label: "Informational"; tone: BadgeTone.informational; }
+            BadgeSampleRow { label: "Success"; tone: BadgeTone.success; }
+            BadgeSampleRow { label: "Caution"; tone: BadgeTone.caution; }
+            BadgeSampleRow { label: "Critical"; tone: BadgeTone.critical; }
         }
         HorizontalLayout {
             alignment: start;
@@ -77,9 +78,9 @@ export component InfoBadgeExample inherits Window {
             menu-items: [
                 { id: "home", label: "Home", icon: @image-url("../../ui/icons/home_16_regular.svg") },
                 { id: "activity", label: "Activity", icon: @image-url("../../ui/icons/alert_16_regular.svg"),
-                  badge: { visible: show-nav-badge.checked, value: 5, tone: InfoBadgeTone.informational, accessible-name: "5 new items" } },
+                  badge: { visible: show-nav-badge.checked, value: 5, tone: BadgeTone.informational, accessible-name: "5 new items" } },
                 { id: "account", label: "Account", icon: @image-url("../../ui/icons/person_16_regular.svg"),
-                  badge: { visible: show-nav-badge.checked, value: -1, tone: InfoBadgeTone.critical, accessible-name: "Action required" } },
+                  badge: { visible: show-nav-badge.checked, value: -1, tone: BadgeTone.critical, accessible-name: "Action required" } },
             ];
             Text { text: "NavigationView"; font-size: 16px; color: Palette.foreground; }
         }

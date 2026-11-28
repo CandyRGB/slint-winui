@@ -1,6 +1,6 @@
 import { ScrollView } from "../scrolling/scroll_view.slint";
-import { ItemsRepeater, ItemsRepeaterLayout, ItemsRepeaterSize, ItemsRepeaterPlacement,
-    ItemsRepeaterJustification, ItemsRepeaterStretch } from "items_repeater.slint";
+import { LayoutPlacement, LayoutSize } from "../layout/layout_geometry.slint";
+import { ItemsRepeater, ItemsRepeaterLayout, ItemsRepeaterJustification, ItemsRepeaterStretch } from "items_repeater.slint";
 
 export struct ItemsViewItem { key: string, enabled: bool }
 export enum ItemsViewSelectionMode { none, single, multiple, extended }
@@ -12,7 +12,7 @@ export global ItemsViewBehavior {
     pure callback index-of([string], string) -> int;
     pure callback same-selection([string], [string]) -> bool;
     pure callback selection([ItemsViewItem], [string], ItemsViewSelectionMode, ItemsViewSelectionAction, int, int, bool, bool) -> [string];
-    pure callback target([ItemsViewItem], [ItemsRepeaterPlacement], int, ItemsViewNavigation, length, length) -> int;
+    pure callback target([ItemsViewItem], [LayoutPlacement], int, ItemsViewNavigation, length, length) -> int;
 }
 
 export component ItemsView inherits Rectangle {
@@ -29,16 +29,16 @@ export component ItemsView inherits Rectangle {
         ? Orientation.vertical : Orientation.horizontal;
     in property <length> item-width: 96px;
     in property <length> item-height: 64px;
-    in property <[ItemsRepeaterSize]> item-sizes;
-    in property <[ItemsRepeaterPlacement]> custom-placements;
+    in property <[LayoutSize]> item-sizes;
+    in property <[LayoutPlacement]> custom-placements;
     in property <int> max-items-per-line: -1;
     in property <ItemsRepeaterJustification> justification: ItemsRepeaterJustification.start;
     in property <ItemsRepeaterStretch> stretch: ItemsRepeaterStretch.none;
     in property <length> column-spacing;
     in property <length> row-spacing;
 
-    out property <[ItemsRepeaterPlacement]> realized: repeater.realized;
-    out property <[ItemsRepeaterPlacement]> placements: repeater.placements;
+    out property <[LayoutPlacement]> realized: repeater.realized;
+    out property <[LayoutPlacement]> placements: repeater.placements;
     out property <[string]> selected-keys;
     out property <int> current-item-index: ItemsViewBehavior.index-of(root.keys, root.current-key);
     out property <int> selected-item-index: root.selected-keys.length > 0

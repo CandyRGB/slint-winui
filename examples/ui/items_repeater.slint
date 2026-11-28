@@ -1,9 +1,17 @@
 import { Palette, ScrollView } from "std-widgets.slint";
 import { Button } from "../../ui/components/basic-input/button.slint";
 import { ToggleButton } from "../../ui/components/basic-input/toggle_button.slint";
-import { ItemsRepeater, ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow } from "../../ui/components/collections/items_repeater.slint";
+import {
+    ItemsRepeater, ItemsRepeaterBehavior, ItemsRepeaterJustification, ItemsRepeaterLayout,
+    ItemsRepeaterLayoutOptions, ItemsRepeaterStretch, ItemsRepeaterWindow
+} from "../../ui/components/collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "../../ui/components/layout/layout_geometry.slint";
 
-export { ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
+export {
+    ItemsRepeaterBehavior, ItemsRepeaterJustification, ItemsRepeaterLayout,
+    ItemsRepeaterLayoutOptions, ItemsRepeaterStretch, ItemsRepeaterWindow,
+    LayoutGeometry, LayoutPlacement, LayoutSize
+}
 
 export struct SampleItem { label: string, length: length }
 
@@ -15,8 +23,8 @@ export component ItemsRepeaterExample inherits Window {
 
     in property <[SampleItem]> items;
     in property <[string]> keys;
-    in property <[ItemsRepeaterSize]> sizes;
-    in property <[ItemsRepeaterPlacement]> custom-placements;
+    in property <[LayoutSize]> sizes;
+    in property <[LayoutPlacement]> custom-placements;
     in property <color> accent: Palette.accent-background;
     callback load-sample(bool);
     callback add-item();

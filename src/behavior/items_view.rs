@@ -1,11 +1,21 @@
 use std::collections::HashSet;
 
-use slint::{Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global, Model, ModelRc, SharedString, VecModel};
 
 use crate::{
-    ItemsRepeaterPlacement, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation,
-    ItemsViewSelectionAction, ItemsViewSelectionMode,
+    ItemsRepeaterBehavior, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation,
+    ItemsViewSelectionAction, ItemsViewSelectionMode, LayoutPlacement,
 };
+
+/// Installs the default ItemsView and repeater behaviors for a component.
+pub fn install_for<T: ComponentHandle>(component: &T)
+where
+    for<'a> ItemsRepeaterBehavior<'a>: Global<'a, T>,
+    for<'a> ItemsViewBehavior<'a>: Global<'a, T>,
+{
+    crate::items_repeater::install(component.global::<ItemsRepeaterBehavior>());
+    install(component.global::<ItemsViewBehavior>());
+}
 
 pub fn install(behavior: ItemsViewBehavior<'_>) {
     behavior.on_keys(|items| {
@@ -127,7 +137,7 @@ fn selection(
 
 fn navigation_target(
     items: ModelRc<ItemsViewItem>,
-    placements: ModelRc<ItemsRepeaterPlacement>,
+    placements: ModelRc<LayoutPlacement>,
     current: i32,
     direction: ItemsViewNavigation,
     x: f32,
@@ -146,7 +156,7 @@ fn navigation_target(
         })
     };
     if direction == ViewportPoint {
-        let distance = |rect: &ItemsRepeaterPlacement| {
+        let distance = |rect: &LayoutPlacement| {
             let dx = x - x.clamp(rect.x, rect.x + rect.width);
             let dy = y - y.clamp(rect.y, rect.y + rect.height);
             dx * dx + dy * dy
@@ -171,7 +181,7 @@ fn navigation_target(
     } else {
         1.0
     };
-    let axes = |rect: &ItemsRepeaterPlacement| {
+    let axes = |rect: &LayoutPlacement| {
         if vertical {
             (rect.y + rect.height / 2.0, rect.x, rect.width)
         } else {
@@ -296,7 +306,7 @@ mod tests {
             [200.0, 100.0, 0.0]
                 .into_iter()
                 .enumerate()
-                .map(|(index, x)| ItemsRepeaterPlacement {
+                .map(|(index, x)| LayoutPlacement {
                     index: index as i32,
                     x,
                     width: 96.0,

@@ -1,7 +1,7 @@
 import { Border, BorderInsets } from "border.slint";
-import { ItemsRepeaterGeometry, ItemsRepeaterPlacement, ItemsRepeaterSize } from "../collections/items_repeater.slint";
+import { LayoutGeometry, LayoutPlacement, LayoutSize } from "layout_geometry.slint";
 
-export struct StackPanelChild { size: ItemsRepeaterSize, collapsed: bool }
+export struct StackPanelChild { size: LayoutSize, collapsed: bool }
 export enum StackPanelSnapAlignment { near, center, far }
 export struct StackPanelSnapPoints {
     available: bool,
@@ -12,13 +12,13 @@ export struct StackPanelSnapPoints {
 }
 export struct StackPanelOptions {
     orientation: Orientation,
-    available: ItemsRepeaterSize,
+    available: LayoutSize,
     spacing: length,
     rtl: bool,
 }
 
 export global StackPanelBehavior {
-    pure callback layout([StackPanelChild], StackPanelOptions) -> ItemsRepeaterGeometry;
+    pure callback layout([StackPanelChild], StackPanelOptions) -> LayoutGeometry;
     pure callback snap-points([StackPanelChild], Orientation, bool, BorderInsets, StackPanelSnapAlignment) -> StackPanelSnapPoints;
     pure callback snap-key([StackPanelChild], Orientation, bool, BorderInsets) -> string;
 }
@@ -29,15 +29,15 @@ export component StackPanel inherits Border {
     in property <length> spacing;
     in property <bool> are-scroll-snap-points-regular;
     in property <BorderInsets> snap-margin;
-    out property <[ItemsRepeaterPlacement]> placements: root.arrangement.placements;
+    out property <[LayoutPlacement]> placements: root.arrangement.placements;
     callback snap-points-changed(Orientation);
 
-    private property <ItemsRepeaterGeometry> desired: StackPanelBehavior.layout(root.items, {
+    private property <LayoutGeometry> desired: StackPanelBehavior.layout(root.items, {
         orientation: root.orientation,
         available: { width: -1px, height: -1px },
         spacing: root.spacing,
     });
-    private property <ItemsRepeaterGeometry> arrangement: StackPanelBehavior.layout(root.items, {
+    private property <LayoutGeometry> arrangement: StackPanelBehavior.layout(root.items, {
         orientation: root.orientation,
         available: { width: root.content-width, height: root.content-height },
         spacing: root.spacing,

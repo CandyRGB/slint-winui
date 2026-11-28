@@ -11,8 +11,8 @@ use std::rc::Rc;
 use slint::{Color, ComponentHandle, Image, Model, ModelRc, VecModel};
 
 slint::slint! {
-    import { GalleryPhoto, ItemsViewExample, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow } from "ui/items_view.slint";
-    export { ItemsViewExample, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
+    import { GalleryPhoto, ItemsViewExample, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior, LayoutGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, LayoutPlacement, LayoutSize, ItemsRepeaterStretch, ItemsRepeaterWindow } from "ui/items_view.slint";
+    export { ItemsViewExample, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior, LayoutGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, LayoutPlacement, LayoutSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
 }
 
 fn load_photos(ui: &ItemsViewExample, samples: &[Image], count: usize) {
@@ -22,7 +22,7 @@ fn load_photos(ui: &ItemsViewExample, samples: &[Image], count: usize) {
     for index in 0..count {
         let image = samples[index % samples.len()].clone();
         let size = image.size();
-        sizes.push(ItemsRepeaterSize {
+        sizes.push(LayoutSize {
             width: if size.width == 0 {
                 136.0 + (index % 5) as f32 * 22.0
             } else {
@@ -58,8 +58,7 @@ fn load_photos(ui: &ItemsViewExample, samples: &[Image], count: usize) {
 
 fn main() -> Result<(), slint::PlatformError> {
     let ui = ItemsViewExample::new()?;
-    items_view::install(ui.global::<ItemsViewBehavior>());
-    items_repeater::install(ui.global::<ItemsRepeaterBehavior>());
+    items_view::install_for(&ui);
     if let Ok(colors) = slint_winui::platform::accent::light_accent_text_colors() {
         let [red, green, blue] = colors.tertiary;
         ui.set_accent(Color::from_rgb_u8(red, green, blue));

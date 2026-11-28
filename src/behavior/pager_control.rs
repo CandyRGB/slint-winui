@@ -1,6 +1,30 @@
-use slint::{Model, ModelRc, VecModel};
+use slint::platform::{Key, WindowEvent};
+use slint::{ComponentHandle, Global, Model, ModelRc, VecModel};
 
-use crate::{ComboBoxItem, PagerControlBehavior};
+use crate::{ComboBoxBehavior, ComboBoxItem, NumberBoxMath, PagerControlBehavior};
+
+/// Installs the default PagerControl behaviors and Tab traversal for a component.
+pub fn install_for<T: ComponentHandle + 'static>(component: &T)
+where
+    for<'a> ComboBoxBehavior<'a>: Global<'a, T>,
+    for<'a> NumberBoxMath<'a>: Global<'a, T>,
+    for<'a> PagerControlBehavior<'a>: Global<'a, T>,
+{
+    crate::combo_box::install(component.global::<ComboBoxBehavior>());
+    crate::number_box::install(component.global::<NumberBoxMath>());
+    install(component.global::<PagerControlBehavior>());
+    let weak = component.as_weak();
+    component
+        .global::<PagerControlBehavior>()
+        .on_traverse_focus(move |forward| {
+            if let Some(component) = weak.upgrade() {
+                let key = if forward { Key::Tab } else { Key::Backtab };
+                component
+                    .window()
+                    .dispatch_event(WindowEvent::KeyPressed { text: key.into() });
+            }
+        });
+}
 
 pub fn install(behavior: PagerControlBehavior<'_>) {
     behavior.on_panel_items(|count, selected, show_edges| {

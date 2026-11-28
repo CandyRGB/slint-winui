@@ -1,6 +1,6 @@
 import { Palette } from "std-widgets.slint";
 import { ItemsView, ItemsViewItem, ItemsViewSelectionMode } from "items_view.slint";
-import { ItemsRepeaterPlacement, ItemsRepeaterSize } from "items_repeater.slint";
+import { LayoutPlacement, LayoutSize } from "../layout/layout_geometry.slint";
 import { ListViewItem } from "list_view_item.slint";
 
 export struct ListViewEntry {
@@ -16,10 +16,10 @@ export struct ListViewHeaderPosition { index: int, y: length }
 
 export global ListViewBehavior {
     pure callback source([ListViewEntry]) -> [ItemsViewItem];
-    pure callback sizes([ListViewEntry], length, length, length) -> [ItemsRepeaterSize];
+    pure callback sizes([ListViewEntry], length, length, length) -> [LayoutSize];
     pure callback groups([ListViewEntry]) -> [int];
-    pure callback sticky-header([ItemsRepeaterPlacement], [int], length, length) -> ListViewHeaderPosition;
-    pure callback insertion([ItemsRepeaterPlacement], length) -> int;
+    pure callback sticky-header([LayoutPlacement], [int], length, length) -> ListViewHeaderPosition;
+    pure callback insertion([LayoutPlacement], length) -> int;
     pure callback reorder([ListViewEntry], [string], int) -> [ListViewEntry];
 }
 
@@ -192,7 +192,7 @@ export component ListView inherits ItemsView {
 
     if root.insertion-index >= 0 && root.placements.length > 0: Rectangle {
         z: 1;
-        private property <ItemsRepeaterPlacement> item: root.placements[min(root.insertion-index, root.placements.length - 1)];
+        private property <LayoutPlacement> item: root.placements[min(root.insertion-index, root.placements.length - 1)];
         x: item.x + 4px;
         y: max(0px, item.y + (root.insertion-index >= root.placements.length ? item.height : 0px) - 2px);
         width: max(0px, item.width - 8px);

@@ -1,7 +1,9 @@
 import { Palette, ScrollView } from "std-widgets.slint";
-import { AutoSuggestion, AutoSuggestBox, AutoSuggestTextChangeReason } from "../text/auto_suggest_box.slint";
+import { AutoSuggestBox } from "../text/auto_suggest_box.slint";
+import { SearchSuggestion, SearchTextChangeReason } from "../text/search_suggestion.slint";
 import { FlyoutPlacement, FlyoutRect, FlyoutLayout } from "../dialogs-flyouts/flyout_layout.slint";
-import { InfoBadge, InfoBadgeContent } from "../status-info/info_badge.slint";
+import { BadgeContent } from "../status-info/badge_content.slint";
+import { InfoBadge } from "../status-info/info_badge.slint";
 import { ToolTipSurface } from "../status-info/tool_tip.slint";
 
 export enum NavigationViewPaneDisplayMode { auto, left, left-compact, left-minimal, top }
@@ -16,7 +18,7 @@ export struct NavigationViewItem {
     kind: NavigationViewItemKind,
     disabled: bool,
     suppress-selection: bool,
-    badge: InfoBadgeContent,
+    badge: BadgeContent,
 }
 
 export struct NavigationViewRow {
@@ -72,7 +74,7 @@ export global NavigationViewBehavior {
 }
 
 component NavigationItemBadge inherits InfoBadge {
-    in property <InfoBadgeContent> data;
+    in property <BadgeContent> data;
     visible: root.data.visible;
     value: root.data.value;
     icon-source: root.data.icon-source;
@@ -487,10 +489,10 @@ export component NavigationView inherits Rectangle {
     in property <bool> is-search-visible;
     in-out property <string> search-text;
     in property <string> search-placeholder: "Search";
-    in property <[AutoSuggestion]> search-suggestions;
-    callback search-text-changed(string, AutoSuggestTextChangeReason);
-    callback search-suggestion-chosen(AutoSuggestion);
-    callback search-submitted(string, bool, AutoSuggestion);
+    in property <[SearchSuggestion]> search-suggestions;
+    callback search-text-changed(string, SearchTextChangeReason);
+    callback search-suggestion-chosen(SearchSuggestion);
+    callback search-submitted(string, bool, SearchSuggestion);
     in property <bool> rtl;
     in property <length> compact-mode-threshold-width: 641px;
     in property <length> expanded-mode-threshold-width: 1008px;

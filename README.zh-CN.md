@@ -78,7 +78,7 @@ slint = "=1.18.1"
 
 [build-dependencies]
 slint-build = "=1.18.1"
-slint-winui = { version = "0.1.2", default-features = false }
+slint-winui = { version = "0.2.0", default-features = false }
 ```
 
 在应用根目录创建 `build.rs`。
@@ -150,9 +150,15 @@ fn main() -> Result<(), slint::PlatformError> {
 
 接入纯 Slint 控件时，保留库别名配置和 `slint::include_modules!()`，省略 `write_behavior_modules`、引入生成文件的 `include!` 和适配器的 `install` 调用。接入其他带适配器的控件时，可以从对应示例查看模块名、需要导出的类型和注册方式。[Rust 行为模块](src/behavior/) · [示例入口](examples/)
 
+接入 `ItemsView`、`ListView` 或 `PagerControl` 时，把控件自己的模块名传给 `write_behavior_modules`，再对根组件调用一次该模块的 `install_for(&ui)`，即可同时安装所需的默认行为。Slint 类型继续按示例导出。
+
+从 0.2 起，集合与布局接口使用 `LayoutSize`、`LayoutPlacement`、`LayoutGeometry`，徽标使用 `BadgeTone` 和 `BadgeContent`，搜索使用 `SearchSuggestion` 和 `SearchTextChangeReason`。请从 `@winui` 导入这些类型，并同步更新 Rust 类型导出。
+
+需要在弹窗卡片上方显示控件时，可用 `ContentDialogPopup` 的 `foreground << ...` 插槽。将弹窗宽高绑定到宿主窗口后，通过 `show()` 打开。需要自定义验证和关闭行为时，处理 `button-requested` 回调。前景位置和显隐由调用方控制，卡片尺寸由表单内容决定。
+
 系统日历、密码显示策略和原生富文本等功能依赖 Windows。使用这些功能时，也要在应用的运行时 `[dependencies]` 中加入 `slint-winui` 并启用 `windows-platform`。具体依赖和窗口句柄的接入方式可参照示例。[CalendarView](examples/calendar_view.rs) · [PasswordBox](examples/password_box.rs) · [RichEditBox](examples/rich_edit_box.rs)
 
-`WindowTitleBar` 排列标题、应用图标以及可选的返回和导航按钮。使用 Windows 原生窗口按钮时，先创建带系统边框的窗口，再在窗口所属的 UI 线程用 HWND 调用 `platform::title_bar::attach`。标题栏高度和 `interactive-width` 均以逻辑像素传入。标题区保持透明，以显示系统按钮。最大化时用 `maximized_inset` 补偿布局，按钮显示状态变化后用 `set_left_client_width` 更新点击区域。运行 `cargo run --example window_title_bar` 可体验示例。[标题栏示例](examples/window_title_bar.rs)
+`WindowTitleBar` 排列标题、应用图标以及可选的返回和导航按钮。接入 Windows 原生标题栏时，引入 `window_title_bar` 行为模块，导出 `WindowTitleBarBehavior`，并为窗口的标题栏启用 `sync-native-hit-test`。窗口创建后，在所属 UI 线程用该行为、带系统边框的窗口 HWND 和逻辑像素高度调用 `window_title_bar::attach`，按钮显隐时会自动同步点击区域。标题区保持透明以显示系统按钮，最大化时用 `maximized_inset` 补偿布局。运行 `cargo run --example window_title_bar` 可体验示例。[标题栏示例](examples/window_title_bar.rs)
 
 ## 测试和示例资源
 

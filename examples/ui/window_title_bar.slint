@@ -1,5 +1,6 @@
 import { Palette } from "std-widgets.slint";
 import { Button, WindowTitleBar } from "../../ui/lib.slint";
+export { WindowTitleBarBehavior } from "../../ui/lib.slint";
 
 export component WindowTitleBarExample inherits Window {
     title: "WindowTitleBar";
@@ -11,10 +12,8 @@ export component WindowTitleBarExample inherits Window {
     in property <bool> caption-extended;
     in property <length> maximized-caption-inset;
     out property <length> caption-height: caption.preferred-row-height;
-    out property <length> caption-controls-width: caption.interactive-width;
     out property <color> caption-background: Palette.background;
     out property <color> caption-foreground: Palette.foreground;
-    callback caption-controls-changed();
     callback caption-colors-changed();
     private property <length> caption-top: root.caption-extended && root.maximized
         ? root.maximized-caption-inset : 0px;
@@ -24,7 +23,6 @@ export component WindowTitleBarExample inherits Window {
     private property <bool> pane-open: true;
     private property <string> last-action: "Select an action in the title bar.";
 
-    changed caption-controls-width => { root.caption-controls-changed(); }
     changed caption-background => { root.caption-colors-changed(); }
     changed caption-foreground => { root.caption-colors-changed(); }
 
@@ -53,6 +51,7 @@ export component WindowTitleBarExample inherits Window {
         width: parent.width;
         height: root.caption-height;
         visible: root.caption-extended;
+        sync-native-hit-test: true;
         title: root.title;
         show-back-button: root.show-back;
         show-pane-toggle-button: true;

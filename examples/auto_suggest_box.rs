@@ -2,8 +2,8 @@ use slint::{ModelRc, Timer, VecModel};
 use std::time::Duration;
 
 slint::slint! {
-    import { AutoSuggestBoxExample, AutoSuggestion } from "ui/auto_suggest_box.slint";
-    export { AutoSuggestBoxExample, AutoSuggestion }
+    import { AutoSuggestBoxExample, SearchSuggestion } from "ui/auto_suggest_box.slint";
+    export { AutoSuggestBoxExample, SearchSuggestion }
 }
 
 const CITIES: &[(&str, &str, &str)] = &[
@@ -47,7 +47,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let rows: Vec<_> = CITIES
                 .iter()
                 .filter(|(_, _, city)| !query.is_empty() && city.to_lowercase().starts_with(&query))
-                .map(|(id, label, city)| AutoSuggestion {
+                .map(|(id, label, city)| SearchSuggestion {
                     id: (*id).into(),
                     label: (*label).into(),
                     suggested_text: (*city).into(),

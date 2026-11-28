@@ -8,8 +8,8 @@ mod list_view;
 use slint::{Color, ComponentHandle, ModelRc, VecModel};
 
 slint::slint! {
-    import { ListViewExample, ListViewBehavior, ListViewEntry, ListViewHeaderPosition, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow } from "ui/list_view.slint";
-    export { ListViewExample, ListViewBehavior, ListViewEntry, ListViewHeaderPosition, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior, ItemsRepeaterGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, ItemsRepeaterPlacement, ItemsRepeaterSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
+    import { ListViewExample, ListViewBehavior, ListViewEntry, ListViewHeaderPosition, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior, LayoutGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, LayoutPlacement, LayoutSize, ItemsRepeaterStretch, ItemsRepeaterWindow } from "ui/list_view.slint";
+    export { ListViewExample, ListViewBehavior, ListViewEntry, ListViewHeaderPosition, ItemsViewBehavior, ItemsViewItem, ItemsViewNavigation, ItemsViewSelectionAction, ItemsViewSelectionMode, ItemsRepeaterBehavior, LayoutGeometry, ItemsRepeaterJustification, ItemsRepeaterLayout, ItemsRepeaterLayoutOptions, LayoutPlacement, LayoutSize, ItemsRepeaterStretch, ItemsRepeaterWindow }
 }
 
 fn contacts(grouped: bool, large: bool) -> ModelRc<ListViewEntry> {
@@ -54,9 +54,7 @@ fn contacts(grouped: bool, large: bool) -> ModelRc<ListViewEntry> {
 
 fn main() -> Result<(), slint::PlatformError> {
     let ui = ListViewExample::new()?;
-    items_repeater::install(ui.global::<ItemsRepeaterBehavior>());
-    items_view::install(ui.global::<ItemsViewBehavior>());
-    list_view::install(ui.global::<ListViewBehavior>());
+    list_view::install_for(&ui);
     if let Ok(colors) = slint_winui::platform::accent::light_accent_text_colors() {
         let [r, g, b] = colors.tertiary;
         ui.set_accent(Color::from_rgb_u8(r, g, b));

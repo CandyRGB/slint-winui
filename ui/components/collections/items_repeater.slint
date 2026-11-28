@@ -1,13 +1,4 @@
-export struct ItemsRepeaterSize { width: length, height: length }
-
-export struct ItemsRepeaterPlacement {
-    index: int,
-    key: string,
-    x: length,
-    y: length,
-    width: length,
-    height: length,
-}
+import { LayoutSize, LayoutPlacement, LayoutGeometry } from "../layout/layout_geometry.slint";
 
 export enum ItemsRepeaterLayout { stack, uniform-grid, flow, custom, lined-flow }
 export enum ItemsRepeaterJustification { start, center, end, space-around, space-between, space-evenly }
@@ -17,9 +8,9 @@ export struct ItemsRepeaterLayoutOptions {
     kind: ItemsRepeaterLayout,
     orientation: Orientation,
     rtl: bool,
-    viewport: ItemsRepeaterSize,
-    item-size: ItemsRepeaterSize,
-    spacing: ItemsRepeaterSize,
+    viewport: LayoutSize,
+    item-size: LayoutSize,
+    spacing: LayoutSize,
     max-items-per-line: int,
     justification: ItemsRepeaterJustification,
     stretch: ItemsRepeaterStretch,
@@ -35,17 +26,11 @@ export struct ItemsRepeaterWindow {
     virtualizing: bool,
 }
 
-export struct ItemsRepeaterGeometry {
-    placements: [ItemsRepeaterPlacement],
-    width: length,
-    height: length,
-}
-
 export global ItemsRepeaterBehavior {
     in property <bool> ready;
-    pure callback arrange(int, [string], [ItemsRepeaterSize], [ItemsRepeaterPlacement], ItemsRepeaterLayoutOptions) -> ItemsRepeaterGeometry;
-    pure callback visible(ItemsRepeaterGeometry, ItemsRepeaterWindow) -> [ItemsRepeaterPlacement];
-    callback update([ItemsRepeaterPlacement], [ItemsRepeaterPlacement]) -> [ItemsRepeaterPlacement];
+    pure callback arrange(int, [string], [LayoutSize], [LayoutPlacement], ItemsRepeaterLayoutOptions) -> LayoutGeometry;
+    pure callback visible(LayoutGeometry, ItemsRepeaterWindow) -> [LayoutPlacement];
+    callback update([LayoutPlacement], [LayoutPlacement]) -> [LayoutPlacement];
 }
 
 export component ItemsRepeater inherits Rectangle {
@@ -62,8 +47,8 @@ export component ItemsRepeater inherits Rectangle {
     in property <length> item-height: 64px;
     in property <length> column-spacing;
     in property <length> row-spacing;
-    in property <[ItemsRepeaterSize]> item-sizes;
-    in property <[ItemsRepeaterPlacement]> custom-placements;
+    in property <[LayoutSize]> item-sizes;
+    in property <[LayoutPlacement]> custom-placements;
     in property <int> max-items-per-line: -1;
     in property <ItemsRepeaterJustification> justification: ItemsRepeaterJustification.start;
     in property <ItemsRepeaterStretch> stretch: ItemsRepeaterStretch.none;
@@ -71,14 +56,14 @@ export component ItemsRepeater inherits Rectangle {
     in property <float> horizontal-cache-length: 2;
     in property <float> vertical-cache-length: 2;
 
-    out property <[ItemsRepeaterPlacement]> realized;
-    out property <[ItemsRepeaterPlacement]> placements: geometry.placements;
+    out property <[LayoutPlacement]> realized;
+    out property <[LayoutPlacement]> placements: geometry.placements;
     out property <length> extent-width: geometry.width;
     out property <length> extent-height: geometry.height;
 
     callback scroll-requested(length, length);
 
-    private property <ItemsRepeaterGeometry> geometry: ItemsRepeaterBehavior.ready
+    private property <LayoutGeometry> geometry: ItemsRepeaterBehavior.ready
         ? ItemsRepeaterBehavior.arrange(root.item-count, root.item-keys, root.item-sizes, root.custom-placements, {
             kind: root.layout,
             orientation: root.orientation,
@@ -91,7 +76,7 @@ export component ItemsRepeater inherits Rectangle {
             stretch: root.stretch,
         }) : { placements: [], width: 0px, height: 0px };
 
-    private property <[ItemsRepeaterPlacement]> wanted: ItemsRepeaterBehavior.ready
+    private property <[LayoutPlacement]> wanted: ItemsRepeaterBehavior.ready
         ? ItemsRepeaterBehavior.visible(geometry, {
             x: root.scroll-x,
             y: root.scroll-y,
@@ -113,7 +98,7 @@ export component ItemsRepeater inherits Rectangle {
         root.realized = ItemsRepeaterBehavior.update(root.realized, root.wanted);
     }
 
-    public pure function placement(index: int) -> ItemsRepeaterPlacement {
+    public pure function placement(index: int) -> LayoutPlacement {
         return index >= 0 && index < geometry.placements.length
             ? geometry.placements[index] : { index: -1, key: "", x: 0px, y: 0px, width: 0px, height: 0px };
     }

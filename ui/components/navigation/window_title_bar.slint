@@ -1,6 +1,18 @@
 import { Palette } from "std-widgets.slint";
 import { Button, ButtonStyle } from "../basic-input/button.slint";
 
+export global WindowTitleBarBehavior {
+    in-out property <length> interactive-width;
+    callback interactive-width-changed(length);
+
+    public function report-interactive-width(width: length) {
+        if (self.interactive-width != width) {
+            self.interactive-width = width;
+            self.interactive-width-changed(width);
+        }
+    }
+}
+
 component TitleBarButton inherits Rectangle {
     in property <image> glyph;
     in property <string> accessible-name;
@@ -41,6 +53,8 @@ export component WindowTitleBar inherits Rectangle {
     in property <string> back-button-label: @tr("Back");
     in property <string> open-pane-label: @tr("Open navigation");
     in property <string> close-pane-label: @tr("Close navigation");
+    // Enable on the one title bar connected to the native caption for this window.
+    in property <bool> sync-native-hit-test;
     // Extra room required by the native buttons to the right of the title.
     in property <length> right-inset: 192px;
     out property <length> preferred-row-height: 40px;
@@ -55,6 +69,16 @@ export component WindowTitleBar inherits Rectangle {
     private property <length> icon-x: root.interactive-width + (root.interactive-width > 0px ? 4px : 12px);
     private property <length> title-x: root.icon-x + (root.has-icon ? 30px : 0px);
     preferred-height: root.preferred-row-height;
+
+    init => { root.report-interactive-width(); }
+    changed interactive-width => { root.report-interactive-width(); }
+    changed sync-native-hit-test => { root.report-interactive-width(); }
+
+    function report-interactive-width() {
+        if (root.sync-native-hit-test) {
+            WindowTitleBarBehavior.report-interactive-width(root.interactive-width);
+        }
+    }
 
     if root.show-back-button: TitleBarButton {
         x: 4px;

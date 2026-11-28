@@ -1,7 +1,7 @@
 use slint::{Model, ModelRc, VecModel, language::Orientation};
 
 use crate::{
-    ItemsRepeaterGeometry, ItemsRepeaterPlacement, VariableSizedWrapGridOptions, WrapGridAlignment,
+    LayoutGeometry, LayoutPlacement, VariableSizedWrapGridOptions, WrapGridAlignment,
     WrapLayoutBehavior, WrapLayoutChild, WrapPanelItemsStretch, WrapPanelOptions,
 };
 
@@ -27,10 +27,10 @@ impl Axes {
         across: f32,
         length: f32,
         breadth: f32,
-    ) -> ItemsRepeaterPlacement {
+    ) -> LayoutPlacement {
         let (x, y) = self.split(along, across);
         let (width, height) = self.split(length, breadth);
-        ItemsRepeaterPlacement {
+        LayoutPlacement {
             index: index as i32,
             x,
             y,
@@ -53,9 +53,9 @@ fn children(model: ModelRc<WrapLayoutChild>) -> Vec<WrapLayoutChild> {
         .collect()
 }
 
-fn empty_placements(count: usize) -> Vec<ItemsRepeaterPlacement> {
+fn empty_placements(count: usize) -> Vec<LayoutPlacement> {
     (0..count)
-        .map(|index| ItemsRepeaterPlacement {
+        .map(|index| LayoutPlacement {
             index: index as i32,
             ..Default::default()
         })
@@ -63,11 +63,11 @@ fn empty_placements(count: usize) -> Vec<ItemsRepeaterPlacement> {
 }
 
 fn geometry(
-    mut placements: Vec<ItemsRepeaterPlacement>,
+    mut placements: Vec<LayoutPlacement>,
     width: f32,
     height: f32,
     mirror: Option<f32>,
-) -> ItemsRepeaterGeometry {
+) -> LayoutGeometry {
     if let Some(origin) = mirror {
         for item in &mut placements {
             if item.width > 0.0 || item.height > 0.0 {
@@ -75,7 +75,7 @@ fn geometry(
             }
         }
     }
-    ItemsRepeaterGeometry {
+    LayoutGeometry {
         placements: ModelRc::new(VecModel::from(placements)),
         width,
         height,
@@ -98,7 +98,7 @@ fn even(size: f32) -> f32 {
     (size / 2.0 + 0.5).floor() * 2.0
 }
 
-fn wrap_panel(model: ModelRc<WrapLayoutChild>, options: WrapPanelOptions) -> ItemsRepeaterGeometry {
+fn wrap_panel(model: ModelRc<WrapLayoutChild>, options: WrapPanelOptions) -> LayoutGeometry {
     let items = children(model);
     let mut placements = empty_placements(items.len());
     let axes = Axes {
@@ -121,7 +121,7 @@ fn wrap_panel(model: ModelRc<WrapLayoutChild>, options: WrapPanelOptions) -> Ite
     let mut used_along: f32 = 0.0;
     let mut row = Vec::new();
 
-    let place_row = |placements: &mut [ItemsRepeaterPlacement], row: &[(usize, f32, f32)], y, h| {
+    let place_row = |placements: &mut [LayoutPlacement], row: &[(usize, f32, f32)], y, h| {
         for &(index, x, w) in row {
             placements[index] = axes.placement(index, x, y, w, h);
         }
@@ -271,10 +271,10 @@ fn align(
 fn variable_grid(
     model: ModelRc<WrapLayoutChild>,
     options: VariableSizedWrapGridOptions,
-) -> ItemsRepeaterGeometry {
+) -> LayoutGeometry {
     let items = children(model);
     let Some(first) = items.first() else {
-        return ItemsRepeaterGeometry::default();
+        return LayoutGeometry::default();
     };
     let axes = Axes {
         horizontal: options.orientation == Orientation::Horizontal,
@@ -365,18 +365,18 @@ fn variable_grid(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ItemsRepeaterSize, WrapPanelPadding};
+    use crate::{LayoutSize, WrapPanelPadding};
 
     fn child(width: f32, height: f32, row_span: i32, column_span: i32) -> WrapLayoutChild {
         WrapLayoutChild {
-            size: ItemsRepeaterSize { width, height },
+            size: LayoutSize { width, height },
             row_span,
             column_span,
             collapsed: false,
         }
     }
 
-    fn rectangles(geometry: &ItemsRepeaterGeometry) -> Vec<(f32, f32, f32, f32)> {
+    fn rectangles(geometry: &LayoutGeometry) -> Vec<(f32, f32, f32, f32)> {
         geometry
             .placements
             .iter()
@@ -387,7 +387,7 @@ mod tests {
     #[test]
     fn stretch_uses_the_last_source_item_and_each_row_shares_its_cross_size() {
         let options = WrapPanelOptions {
-            available: ItemsRepeaterSize {
+            available: LayoutSize {
                 width: 100.0,
                 height: 140.0,
             },
@@ -443,12 +443,12 @@ mod tests {
             child(80.0, 80.0, 2, 2),
         ]));
         let mut options = VariableSizedWrapGridOptions {
-            available: ItemsRepeaterSize {
+            available: LayoutSize {
                 width: 400.0,
                 height: -1.0,
             },
             orientation: Orientation::Vertical,
-            cell: ItemsRepeaterSize {
+            cell: LayoutSize {
                 width: 44.0,
                 height: 44.0,
             },
@@ -484,12 +484,12 @@ mod tests {
             child(24.0, 20.0, 1, 1),
         ]));
         let options = VariableSizedWrapGridOptions {
-            available: ItemsRepeaterSize {
+            available: LayoutSize {
                 width: 72.0,
                 height: 60.0,
             },
             orientation: Orientation::Horizontal,
-            cell: ItemsRepeaterSize {
+            cell: LayoutSize {
                 width: -1.0,
                 height: -1.0,
             },

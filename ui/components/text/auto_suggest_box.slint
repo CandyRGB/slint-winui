@@ -1,13 +1,6 @@
 import { Palette, ScrollView } from "std-widgets.slint";
+import { SearchSuggestion, SearchTextChangeReason } from "search_suggestion.slint";
 import { ScrollingTextInput, TextBoxField } from "text_box_field.slint";
-
-export struct AutoSuggestion {
-    id: string,
-    label: string,
-    suggested-text: string,
-}
-
-export enum AutoSuggestTextChangeReason { programmatic-change, user-input, suggestion-chosen }
 
 component AutoSuggestButton inherits Rectangle {
     in property <image> icon;
@@ -92,7 +85,7 @@ component AutoSuggestRow inherits Rectangle {
 
 export component AutoSuggestBox inherits Rectangle {
     in-out property <string> text;
-    in property <[AutoSuggestion]> suggestions;
+    in property <[SearchSuggestion]> suggestions;
     in property <string> header;
     in property <string> placeholder-text;
     in property <string> description;
@@ -106,9 +99,9 @@ export component AutoSuggestBox inherits Rectangle {
         && root.open-requested && root.suggestion-count > 0 && root.list-height > 4px;
     out property <int> text-revision;
 
-    callback text-changed(text: string, reason: AutoSuggestTextChangeReason, revision: int);
-    callback suggestion-chosen(AutoSuggestion);
-    callback query-submitted(query: string, has-suggestion: bool, suggestion: AutoSuggestion);
+    callback text-changed(text: string, reason: SearchTextChangeReason, revision: int);
+    callback suggestion-chosen(SearchSuggestion);
+    callback query-submitted(query: string, has-suggestion: bool, suggestion: SearchSuggestion);
 
     private property <bool> dark: Palette.color-scheme == ColorScheme.dark;
     private property <color> text-color: root.enabled ? Palette.foreground : Palette.foreground.with-alpha(0.36);
@@ -116,7 +109,7 @@ export component AutoSuggestBox inherits Rectangle {
     private property <string> typed-text;
     private property <string> published-text;
     private property <int> highlighted: -1;
-    private property <AutoSuggestion> selected;
+    private property <SearchSuggestion> selected;
     private property <int> suggestion-count: root.suggestions.length;
     private property <length> content-height: 4px + root.suggestion-count * 36px;
     private property <length> desired-list-height: root.maximum-suggestion-list-height < 0px ? root.content-height
@@ -146,7 +139,7 @@ export component AutoSuggestBox inherits Rectangle {
         if (root.text != root.published-text) {
             root.typed-text = root.text;
             root.clear-selection();
-            root.publish-text(root.text, AutoSuggestTextChangeReason.programmatic-change);
+            root.publish-text(root.text, SearchTextChangeReason.programmatic-change);
         }
     }
     changed suggestions => { root.validate-selection(); }
@@ -185,7 +178,7 @@ export component AutoSuggestBox inherits Rectangle {
         }
     }
 
-    function publish-text(value: string, reason: AutoSuggestTextChangeReason) {
+    function publish-text(value: string, reason: SearchTextChangeReason) {
         if (value != root.published-text) {
             root.published-text = value;
             if (root.text != root.published-text) {
@@ -200,12 +193,12 @@ export component AutoSuggestBox inherits Rectangle {
         root.clear-selection();
         root.typed-text = value;
         root.open-requested = true;
-        root.publish-text(value, AutoSuggestTextChangeReason.user-input);
+        root.publish-text(value, SearchTextChangeReason.user-input);
     }
 
     function restore-typed-text() {
         root.clear-selection();
-        root.publish-text(root.typed-text, AutoSuggestTextChangeReason.programmatic-change);
+        root.publish-text(root.typed-text, SearchTextChangeReason.programmatic-change);
     }
 
     function choose(index: int) {
@@ -213,11 +206,11 @@ export component AutoSuggestBox inherits Rectangle {
         root.selected = root.suggestions[index];
         if (root.update-text-on-select) {
             root.publish-text(root.selected.suggested-text == "" ? root.selected.label : root.selected.suggested-text,
-                AutoSuggestTextChangeReason.suggestion-chosen);
+                SearchTextChangeReason.suggestion-chosen);
         }
         root.suggestion-chosen(root.selected);
         if (root.text != root.published-text) {
-            root.publish-text(root.text, AutoSuggestTextChangeReason.programmatic-change);
+            root.publish-text(root.text, SearchTextChangeReason.programmatic-change);
         }
         editor.select-all();
         editor.clear-selection();
@@ -245,7 +238,7 @@ export component AutoSuggestBox inherits Rectangle {
         }
     }
 
-    function submit(has-suggestion: bool, suggestion: AutoSuggestion) {
+    function submit(has-suggestion: bool, suggestion: SearchSuggestion) {
         if (root.enabled) {
             root.query-submitted(root.text, has-suggestion, suggestion);
             root.typed-text = root.text;

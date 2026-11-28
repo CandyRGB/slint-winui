@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 use slint::{Model, ModelRc, SharedString, VecModel, language::Orientation};
 
 use crate::{
-    BorderInsets, ItemsRepeaterGeometry, ItemsRepeaterPlacement, StackPanelBehavior,
+    BorderInsets, LayoutGeometry, LayoutPlacement, StackPanelBehavior,
     StackPanelChild, StackPanelOptions, StackPanelSnapAlignment, StackPanelSnapPoints,
 };
 
@@ -59,7 +59,7 @@ fn children(model: &ModelRc<StackPanelChild>) -> impl Iterator<Item = StackPanel
     })
 }
 
-fn layout(model: ModelRc<StackPanelChild>, options: StackPanelOptions) -> ItemsRepeaterGeometry {
+fn layout(model: ModelRc<StackPanelChild>, options: StackPanelOptions) -> LayoutGeometry {
     let axes = Axes(options.orientation);
     let (available_main, available_cross) =
         axes.split(options.available.width, options.available.height);
@@ -71,7 +71,7 @@ fn layout(model: ModelRc<StackPanelChild>, options: StackPanelOptions) -> ItemsR
     let mut slots = Vec::with_capacity(model.row_count());
 
     for (index, child) in children(&model).enumerate() {
-        let mut slot = ItemsRepeaterPlacement {
+        let mut slot = LayoutPlacement {
             index: index as i32,
             ..Default::default()
         };
@@ -108,7 +108,7 @@ fn layout(model: ModelRc<StackPanelChild>, options: StackPanelOptions) -> ItemsR
             }
         }
     }
-    ItemsRepeaterGeometry {
+    LayoutGeometry {
         placements: ModelRc::new(VecModel::from(slots)),
         width,
         height,
@@ -184,13 +184,13 @@ fn snap_key(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ItemsRepeaterSize;
+    use crate::LayoutSize;
     use Orientation::{Horizontal, Vertical};
     use StackPanelSnapAlignment::{Center, Far, Near};
 
     fn child(width: f32, height: f32, collapsed: bool) -> StackPanelChild {
         StackPanelChild {
-            size: ItemsRepeaterSize { width, height },
+            size: LayoutSize { width, height },
             collapsed,
         }
     }
@@ -211,7 +211,7 @@ mod tests {
             items,
             StackPanelOptions {
                 orientation: Vertical,
-                available: ItemsRepeaterSize {
+                available: LayoutSize {
                     width: 64.0,
                     height: 80.0,
                 },
